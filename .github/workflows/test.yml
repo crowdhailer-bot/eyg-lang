@@ -2,7 +2,6 @@ name: test
 
 on:
   push:
-    branches:
   pull_request:
 
 permissions:
@@ -11,7 +10,9 @@ permissions:
 env:
   POSTGRES_PASSWORD: banana-penguin-truck
   SECRET_KEY_BASE: word-button-noodle
-  EYG_CLI_VERSION: gleam_cli-v0.0.1
+  # Pinned to the latest published CLI release. Update when a new stable
+  # release is published.
+  EYG_RELEASED_CLI_VERSION: gleam_cli-v0.0.2
 
 jobs:
   test-beam:
@@ -140,22 +141,36 @@ jobs:
       - run: gleam format --check src test
         working-directory: packages/${{matrix.package}}
   test-eyg-packages:
+    name: test-eyg-packages (${{ matrix.cli }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cli: ["source", "released"]
     steps:
       - uses: actions/checkout@v4
-      - name: Install the eyg CLI
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28.4"
+          gleam-version: "1.15.3"
+      - name: Build the eyg CLI from HEAD
+        if: matrix.cli == 'source'
         run: |
-          mkdir -p "$RUNNER_TEMP/bin"
-          curl -fsSL \
-            -o "$RUNNER_TEMP/bin/eyg-linux-x64" \
-            "https://github.com/CrowdHailer/eyg-lang/releases/download/${EYG_CLI_VERSION}/eyg-linux-x64"
-          curl -fsSL \
-            -o "$RUNNER_TEMP/SHA256SUMS" \
-            "https://github.com/CrowdHailer/eyg-lang/releases/download/${EYG_CLI_VERSION}/SHA256SUMS"
-          cd "$RUNNER_TEMP/bin"
-          sha256sum --check --ignore-missing "$RUNNER_TEMP/SHA256SUMS"
-          mv eyg-linux-x64 eyg
-          chmod +x eyg
+          ./bin/compile "" "$RUNNER_TEMP/bin/eyg"
+          chmod +x "$RUNNER_TEMP/bin/eyg"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+        working-directory: packages/gleam_cli
+      - name: Install the pinned released eyg CLI
+        if: matrix.cli == 'released'
+        run: |
+          PATH="$HOME/.local/bin:$PATH" ./install.sh "$EYG_RELEASED_CLI_VERSION"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Show selected eyg CLI
+        run: |
+          command -v eyg
+          eyg --version
       - name: Run EYG package tests
         run: eyg script entry.eyg
