@@ -2,11 +2,19 @@ name: release
 
 on:
   push:
+    branches:
+      - "**"
     tags:
-      - "gleam_cli-*"
+      - "gleam_cli-v*"
 
 permissions:
   contents: write
+
+# Branch builds all update the single moving nightly tag and release, so
+# serialize them. Stable tag releases use their own ref as the group.
+concurrency:
+  group: ${{ github.ref_type == 'branch' && 'nightly-cli' || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -26,6 +34,8 @@ jobs:
 
       - name: Build binaries and checksums
         run: |
+          rm -rf dist
+          mkdir -p dist
           ./bin/compile bun-linux-x64    ./dist/eyg-linux-x64
           ./bin/compile bun-linux-arm64  ./dist/eyg-linux-arm64
           ./bin/compile bun-darwin-x64   ./dist/eyg-macos-x64
@@ -34,11 +44,45 @@ jobs:
           cd dist && sha256sum eyg-* > SHA256SUMS
 
       - name: Extract version
+        if: github.ref_type == 'tag'
         id: version
         run: echo "version=${GITHUB_REF_NAME#gleam_cli-}" >> "$GITHUB_OUTPUT"
 
       - name: Create release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           name: "Gleam CLI ${{ steps.version.outputs.version }}"
           files: packages/gleam_cli/dist/*
+
+      - name: Move nightly tag to this commit
+        if: github.ref_type == 'branch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f gleam_cli-nightly "$GITHUB_SHA"
+          git push --force origin refs/tags/gleam_cli-nightly
+
+      - name: Publish nightly release
+        if: github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="gleam_cli-nightly"
+          notes="Nightly CLI build for ${GITHUB_SHA} from ${GITHUB_REF_NAME}."
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" \
+              --title "Gleam CLI nightly" \
+              --notes "$notes" \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          else
+            gh release create "$tag" \
+              --title "Gleam CLI nightly" \
+              --notes "$notes" \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          fi
+
+          gh release upload "$tag" dist/* --clobber
