@@ -277,8 +277,25 @@ pub fn can_save_provider(state: State(host)) {
 // cache state doesn't update during the eval but needs to resume later if everything fetched at the beginning
 
 fn current_context(state: State(host)) {
+  workspace(state)
+}
+
+/// The workspace as it stands: the environment, the modules already fetched
+/// and the next task number.
+///
+/// An application embedding overlay usually has another way to run a program
+/// as well — a shell, a button — and those runs share the environment, the
+/// cache and the numbering with the agent's. Take the workspace, run in it,
+/// and put back what it became.
+pub fn workspace(state: State(host)) -> tools.Context(host) {
   let State(environment:, cache:, counter:, ..) = state
   tools.Context(environment:, cache:, counter:, effects: [])
+}
+
+/// Put back a workspace something else has finished running in.
+pub fn restore(state: State(host), ctx: tools.Context(host)) -> State(host) {
+  let tools.Context(environment:, cache:, counter:, effects: _) = ctx
+  State(..state, environment:, cache:, counter:)
 }
 
 fn resolve_calls(return, state: State(host)) {

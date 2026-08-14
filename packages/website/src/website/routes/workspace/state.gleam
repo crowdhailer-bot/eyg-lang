@@ -287,7 +287,9 @@ pub fn update(state: State, message) -> #(State, List(system.Effect(Message))) {
     Ignore -> #(state, [])
     EffectHandled(task_id: tid, value:) ->
       case state.mode {
-        RunningShell(_occured, Handling(task_id:, env:, k:)) if tid == task_id -> {
+        RunningShell(_occured, Handling(task_id:, env:, k:))
+          if tid == task_id
+        -> {
           let output =
             block.resume(value, env, k)
             |> loop(state)

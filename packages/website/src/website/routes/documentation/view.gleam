@@ -518,7 +518,8 @@ pub fn render_example(
         render_manipulating(input, picker_message, input_message)
       state.Manipulating(..) -> render_default(buffer, cache)
       state.ReadingFromClipboard(..) -> render_default(buffer, cache)
-      state.Running(id: focused, run:) if focused == id -> render_run(run, cache)
+      state.Running(id: focused, run:) if focused == id ->
+        render_run(run, cache)
       state.Running(..) -> render_default(buffer, cache)
       state.UnFocused -> render_default(buffer, cache)
     },

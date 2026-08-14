@@ -46,7 +46,7 @@ fn loaded() {
 }
 
 fn workspace(puzzle) {
-  let context.Context(readme:, scope:) = loaded()
+  let context.Context(readme:, scope:, ..) = loaded()
   let host =
     platform.Host(game: game.new(puzzle), origin: origin.https("hashi.test"))
   tools.Context(
@@ -77,7 +77,7 @@ fn printed(ctx, code) {
 }
 
 pub fn the_context_says_what_it_is_for_test() {
-  let context.Context(readme:, scope:) = loaded()
+  let context.Context(readme:, scope:, ..) = loaded()
   assert string.starts_with(readme, "# Hashiwokakero")
   // the readme is honest about there being no network here
   assert string.contains(readme, "no network here")

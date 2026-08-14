@@ -9,6 +9,9 @@
 //// So it is read here and now, with no network and no waiting, which is what
 //// lets a page whose harness has no `Fetch` have a library at all.
 
+import eyg/analysis/inference/levels_j/contextual as infer
+import eyg/analysis/type_/binding
+import eyg/analysis/type_/isomorphic as t
 import eyg/interpreter/expression
 import eyg/interpreter/simple_debug
 import eyg/interpreter/state as istate
@@ -29,6 +32,9 @@ pub type Context {
     /// Every field of the module, bound by name, ready to be the scope a
     /// program starts in.
     scope: List(#(String, istate.Value(Meta))),
+    /// The type of each of those, so the shell can check a program written
+    /// against them before it runs.
+    types: List(#(String, binding.Poly)),
   )
 }
 
@@ -55,5 +61,30 @@ pub fn load(source: String) -> Result(Context, String) {
     Ok(_) -> Error("the context module's readme is not a string")
     Error(Nil) -> Error("the context module has no readme")
   })
-  Ok(Context(readme:, scope: dict.to_list(fields)))
+  Ok(Context(readme:, scope: dict.to_list(fields), types: types(tree)))
+}
+
+/// The type of each field of the module.
+///
+/// The module is a record, so inferring it once gives a row of every name in
+/// it with its type. Splitting that row back into a list is a scope the type
+/// checker can work in, which is how the shell can say a program is wrong
+/// before it runs.
+fn types(tree) -> List(#(String, binding.Poly)) {
+  let analysis =
+    infer.check(
+      infer.pure(),
+      ir.map_annotation(tree, fn(_) { [] }) |> ir.clear_annotation,
+    )
+  case infer.poly_type(analysis) {
+    t.Record(rows) -> row_list(rows)
+    _ -> []
+  }
+}
+
+fn row_list(rows) {
+  case rows {
+    t.RowExtend(label, field, rest) -> [#(label, field), ..row_list(rest)]
+    _ -> []
+  }
 }

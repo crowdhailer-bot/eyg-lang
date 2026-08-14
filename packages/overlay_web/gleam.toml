@@ -20,7 +20,10 @@ multiformats = ">= 4.0.0 and < 5.0.0"
 oas_generator_utils = ">= 1.1.0 and < 2.0.0"
 ogre = ">= 1.1.0 and < 2.0.0"
 overlay_llm = ">= 0.2.0 and < 1.0.0"
+# pamphlet = ">= 1.0.0 and < 2.0.0"
+pamphlet = { git = "https://github.com/crowdhailer/pamphlet", ref = "406b460" }
 pal = { path = "../pal" }
+splitter = ">= 1.2.0 and < 2.0.0"
 spotless = ">= 7.0.0 and < 8.0.0"
 touch_grass = ">= 0.2.11 and < 1.0.0"
 
