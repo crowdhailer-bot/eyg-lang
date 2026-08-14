@@ -1,0 +1,107 @@
+let {assert} = import "../aok/index.eyg"
+let hub = import "./index.eyg"
+let list = @standard.list
+let string = @standard.string
+let to_string = @standard.integer.to_string
+
+// Answer the Fetch effect from the test, so nothing here touches the network.
+let serve = (answer, run) -> {
+  handle Fetch((request, resume) -> { resume(answer(request)) }, run)
+}
+
+let response = (status, body) -> {
+  Ok({status, headers: [], body: !string_to_binary(body)})
+}
+
+// The hub keeps a release as a JSON payload inside a JSON entry, so the quotes
+// of the payload are escaped once.
+let payload = (package, version, module) -> {
+  string.concat([
+    "{\"type\":\"release\",\"signatory\":{\"/\":\"sigA\"},\"content\":{\"module\":{\"/\":\"",
+    module,
+    "\"},\"package\":\"",
+    package,
+    "\",\"version\":",
+    to_string(version),
+    "}}"
+  ])
+}
+
+let entry = (cursor, package, version, module) -> {
+  string.concat([
+    "{\"entity\":{\"/\":\"chain1\"},\"cid\":{\"/\":\"cid",
+    to_string(cursor),
+    "\"},\"sequence\":",
+    to_string(cursor),
+    ",\"payload\":\"",
+    !string_replace(payload(package, version, module), "\"", "\\\""),
+    "\"}"
+  ])
+}
+
+let ledger = (entries) -> {
+  string.concat(["{\"entries\":[", string.join(entries, ","), "]}"])
+}
+
+let published = ledger([
+  entry(1, "alpha", 1, "bafyalpha1"),
+  entry(2, "beta", 1, "bafybeta1"),
+  entry(3, "alpha", 2, "bafyalpha2")
+])
+
+let names = (rows) -> { list.map(rows, ({package}) -> { package }) }
+
+[
+  {name: "hub search matches part of a name, either case",
+   test: (_) -> {
+     let found = serve((_) -> { response(200, published) }, (_) -> {
+       hub.search({text: "LPH"})
+     })
+     assert.equal(names(assert.ok(found)), ["alpha"])
+   }},
+
+  {name: "hub search finds nothing for an unknown name",
+   test: (_) -> {
+     let found = serve((_) -> { response(200, published) }, (_) -> {
+       hub.search({text: "gamma"})
+     })
+     assert.equal(assert.ok(found), [])
+   }},
+
+  {name: "hub table builds a page with the headings and rows",
+   test: (_) -> {
+     let page = hub.table({
+       title: "Packages",
+       headings: ["package", "version"],
+       rows: [["alpha", "2"], ["beta", "1"]]
+     })
+     let has = (text) -> {
+       match !string_split_once(page, text) {
+         Ok(_) -> { True({}) }
+         Error(_) -> { False({}) }
+       }
+     }
+     let _ = assert.true(!string_starts_with(page, "<!doctype html>"))
+     let _ = assert.true(has("<h1>Packages</h1>"))
+     let _ = assert.true(has("<th>package</th><th>version</th>"))
+     let _ = assert.true(has("<tr><td>alpha</td><td>2</td></tr>"))
+     assert.true(has("<tr><td>beta</td><td>1</td></tr>"))
+   }},
+
+  {name: "hub describes every field it exposes",
+   test: (_) -> {
+     let described = list.map(hub.skills, ({name}) -> { name })
+     assert.equal(described, [
+       "packages",
+       "releases",
+       "search",
+       "history",
+       "table"
+     ])
+   }},
+
+  {name: "hub readme opens with the workspace name",
+   test: (_) -> {
+     assert.true(!string_starts_with(hub.readme, "# The EYG hub"))
+   }}
+]

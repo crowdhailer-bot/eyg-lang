@@ -1,0 +1,209 @@
+// The DNSimple workspace.
+//
+// An overlay context: a readme for the agent and the functions the readme
+// describes. Every call is the Spotless effect naming the dnsimple service,
+// the platform attaches the account token, so nothing in here handles
+// credentials.
+
+let concat = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.string.concat
+let to_string = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.integer.to_string
+
+// Reading JSON is the published package, pinned so a release of this
+// module always reads it the same way.
+let {decode} = @json:2:baguqeeradd5eqagcv44aj2kj6xihc7izwsd5pucj52ln6mvfdn66wiu2267q
+
+
+// Send a read only operation and decode the body.
+let get = (path, decoder) -> {
+  let operation = {
+    method: GET({}),
+    path,
+    query: None({}),
+    headers: [{key: "accept", value: "application/json"}],
+    body: !string_to_binary("")
+  }
+  match perform Spotless({service: "dnsimple", request: operation}) {
+    Ok({status, body}) -> {
+      match !int_compare(status, 299) {
+        Gt(_) -> {
+          Error(concat([
+            "DNSimple returned HTTP ",
+            to_string(status),
+            " for ",
+            path,
+          ]))
+        }
+        | (_) -> { decode.parse_bytes(body, decoder) }
+      }
+    }
+    Error(reason) -> { Error(reason) }
+  }
+}
+
+let account_path = (account, rest) -> {
+  concat(["/v2/", to_string(account), rest])
+}
+
+// The account the token belongs to. Every other path needs this id.
+let whoami = (_) -> {
+  get(
+    "/v2/whoami",
+    decode.object(decode.field("data", decode.object(
+      decode.field("account", decode.object(
+        decode.field("id", decode.integer)
+      ))
+    )))
+  )
+}
+
+let domain = decode.object((parsed) -> {
+  {
+    id: decode.field("id", decode.integer)(parsed),
+    name: decode.field("name", decode.string)(parsed)
+  }
+})
+
+// Every domain in an account.
+let domains = (account) -> {
+  get(
+    account_path(account, "/domains"),
+    decode.object(decode.field("data", decode.list(domain)))
+  )
+}
+
+let record = decode.object((parsed) -> {
+  {
+    id: decode.field("id", decode.integer)(parsed),
+    name: decode.field("name", decode.string)(parsed),
+    type: decode.field("type", decode.string)(parsed),
+    content: decode.field("content", decode.string)(parsed),
+    ttl: decode.field("ttl", decode.integer)(parsed)
+  }
+})
+
+// The DNS records of one zone. The zone name is the domain name.
+let records = ({account, zone}) -> {
+  get(
+    account_path(account, concat(["/zones/", zone, "/records"])),
+    decode.object(decode.field("data", decode.list(record)))
+  )
+}
+
+let readme = "# DNSimple
+
+You are working in the DNSimple workspace. It reads the domains and DNS records
+of the account whoever started this session has connected.
+
+The module you are given has these fields.
+
+- `readme` this text.
+- `skills` a list of `{name, description}`, one for every function below.
+- `whoami` `({}) -> Result(Integer, String)`
+- `domains` `(account) -> Result(List({id, name}), String)`
+- `records` `({account, zone}) -> Result(List({id, name, type, content, ttl}), String)`
+
+There are no other fields, do not guess any.
+
+Every call needs the account id, read it once and keep it.
+
+```eyg
+({whoami, domains}) -> {
+  match whoami({}) {
+    Ok(account) -> {
+      match domains(account) {
+        Ok(found) -> { found }
+        Error(reason) -> { perform Abort(reason) }
+      }
+    }
+    Error(reason) -> { perform Abort(reason) }
+  }
+}
+```
+
+Print what the user asked for, printed output comes back with the result.
+
+```eyg
+({whoami, records}) -> {
+  let list = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.list
+  match whoami({}) {
+    Ok(account) -> {
+      match records({account, zone: \"example.com\"}) {
+        Ok(found) -> {
+          list.map(found, ({name, type, content}) -> {
+            perform Print(!string_append(
+              !string_append(type, \" \"),
+              !string_append(name, !string_append(\" \", content)),
+            ))
+          })
+        }
+        Error(reason) -> { perform Abort(reason) }
+      }
+    }
+    Error(reason) -> { perform Abort(reason) }
+  }
+}
+```
+
+The first call opens a window for the person to approve the connection to
+DNSimple. There is nothing to do about that, it happens once a session.
+
+## Showing an answer
+
+Write a file and open it when a table is easier to read than a list of lines.
+Files under `/tmp` are for this session, `/home/default` is kept.
+
+```eyg
+({whoami, domains}) -> {
+  let list = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.list
+  let string = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.string
+  match whoami({}) {
+    Ok(account) -> {
+      match domains(account) {
+        Ok(found) -> {
+          let rows = list.map(found, ({name}) -> {
+            string.concat([\"| \", name, \" |\\n\"])
+          })
+          let page = string.concat([
+            \"# Domains\\n\\n| domain |\\n| --- |\\n\",
+            string.concat(rows),
+          ])
+          let _ = perform WriteFile({
+            path: \"/tmp/domains.md\",
+            contents: !string_to_binary(page),
+          })
+          perform OpenWindow({
+            path: \"/tmp/domains.md\",
+            x: 40, y: 40, width: 420, height: 480,
+          })
+        }
+        Error(reason) -> { perform Abort(reason) }
+      }
+    }
+    Error(reason) -> { perform Abort(reason) }
+  }
+}
+```
+"
+
+let skills = [
+  {
+    name: "whoami",
+    description: "whoami({}) -> Result(Integer, String). The account id every other call needs."
+  },
+  {
+    name: "domains",
+    description: "domains(account) -> Result(List({id, name}), String). Every domain in the account."
+  },
+  {
+    name: "records",
+    description: "records({account, zone}) -> Result(List({id, name, type, content, ttl}), String). The DNS records of one zone, the zone is the domain name."
+  },
+]
+
+{
+  readme,
+  skills,
+  whoami,
+  domains,
+  records
+}

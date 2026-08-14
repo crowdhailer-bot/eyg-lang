@@ -1,0 +1,191 @@
+// A context that knows what the hub has of it.
+//
+// Reading the hub, signing and publishing are all the ledger package. This is
+// the readme that explains them to an agent, and the one thing the context
+// adds: which package it is.
+
+// Everything to do with the hub's data is the published package.
+let hub = @ledger:2:baguqeeragbnpxxmpvxfcteqaxyl24jy6ahbj4woat55begigh5tduvmgadsa
+
+let name = "publishing"
+
+let releases = hub.releases
+let signatories = hub.signatories
+let publishers = hub.publishers
+let owner = hub.owner
+let entry = hub.entry
+let next = hub.next
+let publish = hub.publish
+
+// This context, as the hub has it. `version` is what a new release follows.
+let self = (_) -> { hub.latest({package: name}) }
+
+let skills = [
+  {
+    name: "self",
+    description: "self({}) -> Result({package, version, module, published}, String). This context as the hub has it, version 0 and published False means it has never been released."
+  },
+  {
+    name: "releases",
+    description: "releases({}) -> Result(List({package, version, module, signatory}), String). Every release, with the signatory that published it."
+  },
+  {
+    name: "signatories",
+    description: "signatories({}) -> Result(List({signatory, key, event}), String). Every signatory the hub knows and its key events."
+  },
+  {
+    name: "next",
+    description: "next({chain}) -> Result({sequence, previous}, String). What a new entry in a chain must carry. The chain is per publisher, not per package."
+  },
+  {
+    name: "publish",
+    description: "publish({key, key_id, signatory, chain, package, module}) -> Result(String, String). Signs a release and submits it. `key` is from CreateKey, `key_id` its base32 id."
+  },
+  {
+    name: "owner",
+    description: "owner({package}) -> Result(Option({package, signatory}), String). The signatory the hub says owns a name, None if no owner has been granted."
+  },
+  {
+    name: "entry",
+    description: "entry({sequence, previous, key, package, version, module, signatory}) -> String. The exact bytes a signatory signs to publish a release. `previous` is Some(cid) or None({})."
+  },
+  {
+    name: "publishers",
+    description: "publishers({package}) -> Result(List(String), String). The signatories that have released under a package name."
+  }
+]
+
+let readme = "# Publishing on the EYG hub
+
+You are working in a context that knows about itself. It is the `publishing`
+package, and it can tell you what the hub has of it and who is allowed to change
+that.
+
+The module you are given has these fields.
+
+- `readme` this text.
+- `skills` a list of `{name, description}`.
+- `self` `({}) -> Result({package, version, module, published}, String)`
+- `releases` `({}) -> Result(List({package, version, module, signatory}), String)`
+- `signatories` `({}) -> Result(List({signatory, key, event}), String)`
+- `publishers` `({package}) -> Result(List(String), String)`
+- `owner` `({package}) -> Result(Option({package, signatory}), String)`
+- `next` `({chain}) -> Result({sequence, previous}, String)`
+- `publish` `({key, key_id, signatory, chain, package, module}) -> Result(String, String)`
+
+There are no other fields, do not guess any.
+
+## What can be inspected
+
+The hub keeps two public ledgers and both can be read without any credentials.
+
+- `/packages/pull` is every release, and every entry names the signatory that
+  made it. `releases` and `publishers` read this one.
+- `/signatories/pull` is every signatory and the keys added to or removed from
+  it. `signatories` reads this one.
+
+So \"who has published under this name\" is answerable, and so is \"who is allowed
+to\", they are different questions and have different answers. `publishers` is
+history, `owner` is permission. A name with no owner granted answers `None({})`,
+which means nobody may publish it yet, not that anybody may.
+
+```eyg
+({self, publishers}) -> {
+  match self({}) {
+    Ok(me) -> {
+      match publishers({package: me.package}) {
+        Ok(who) -> { {me, who} }
+        Error(reason) -> { perform Abort(reason) }
+      }
+    }
+    Error(reason) -> { perform Abort(reason) }
+  }
+}
+```
+
+## Publishing a new version
+
+Most of the way there. A key can be made here with `CreateKey`, `entry` builds
+the exact bytes a release is signed over, and `Sign` signs them.
+
+```eyg
+({entry}) -> {
+  match perform CreateKey(Eddsa({})) {
+    Ok(key) -> {
+      let bytes = entry({
+        sequence: 1,
+        previous: None({}),
+        key: \\\"the base32 key id\\\",
+        package: \\\"example\\\",
+        version: 1,
+        module: \\\"bafy...\\\",
+        signatory: \\\"baguqeera...\\\"
+      })
+      perform Sign({key, data: !string_to_binary(bytes)})
+    }
+    Error(reason) -> { perform Abort(reason) }
+  }
+}
+```
+
+`publish` does all of it: `next` reads the chain for the sequence and previous,
+`entry` builds the bytes, `Sign` signs them and the signed entry is posted.
+
+```eyg
+({publish}) -> {
+  match perform CreateKey(Eddsa({})) {
+    Ok(key) -> {
+      publish({
+        key,
+        key_id: \\\"the base32 id the signatory registered\\\",
+        signatory: \\\"baguqeera...\\\",
+        chain: \\\"baguqeera...\\\",
+        package: \\\"example\\\",
+        module: \\\"bafy...\\\"
+      })
+    }
+    Error(reason) -> { perform Abort(reason) }
+  }
+}
+```
+
+The hub only takes it if `owner` names the signatory publishing it, so check
+that first and tell the user to ask for the name rather than watching a 403.
+A key made here is new, it is not the one a signatory registered, so publishing
+with it fails until the key has been added to that signatory.
+
+```sh
+# once, to create a signatory and register its key
+eyg signatory initial personal
+
+# every release
+eyg publish publishing path/to/index.eyg
+```
+
+The version is decided by the hub, it is the next one after the last. Read
+`self` first to see what that will be.
+
+Before a signatory can publish under a name, an administrator grants it:
+
+```sh
+# on the hub
+gleam run -m hub/dev/grant_owner <package> <signatory>
+```
+
+Tell the user this plainly if they ask to publish. Do not write a script that
+tries, a signature over the wrong bytes is still not a release, and pretending
+otherwise wastes their time.
+"
+
+{
+  readme,
+  skills,
+  self,
+  releases,
+  signatories,
+  publishers,
+  owner,
+  entry,
+  next,
+  publish
+}

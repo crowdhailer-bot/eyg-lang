@@ -1,0 +1,113 @@
+let {assert} = import "../aok/index.eyg"
+let dnsimple = import "./index.eyg"
+
+// Answer the Spotless effect from a table of path to response, so a test says
+// what the API returned without any network.
+let serve = (answer, run) -> {
+  handle Spotless(({service, request}, resume) -> {
+    let _ = assert.equal_string(service, "dnsimple")
+    resume(answer(request))
+  }, run)
+}
+
+let json_response = (status, body) -> {
+  Ok({status, headers: [], body: !string_to_binary(body)})
+}
+
+let whoami_body = "{\"data\":{\"user\":null,\"account\":{\"id\":7,\"email\":\"a@example.com\"}}}"
+
+let domains_body = "{\"data\":[
+  {\"id\":1,\"name\":\"example.com\",\"state\":\"registered\"},
+  {\"id\":2,\"name\":\"example.org\",\"state\":\"registered\"}
+]}"
+
+let records_body = "{\"data\":[
+  {\"id\":11,\"zone_id\":\"example.com\",\"name\":\"\",\"content\":\"1.2.3.4\",\"ttl\":600,\"type\":\"A\"},
+  {\"id\":12,\"zone_id\":\"example.com\",\"name\":\"www\",\"content\":\"example.com\",\"ttl\":600,\"type\":\"CNAME\"}
+]}"
+
+[
+  {name: "dnsimple whoami reads the account id",
+   test: (_) -> {
+     let found = serve((_) -> { json_response(200, whoami_body) }, (_) -> {
+       dnsimple.whoami({})
+     })
+     assert.equal(assert.ok(found), 7)
+   }},
+
+  {name: "dnsimple whoami asks for /v2/whoami",
+   test: (_) -> {
+     let found = serve(({path}) -> {
+       json_response(200, !string_append(
+         "{\"data\":{\"account\":{\"id\":",
+         !string_append(
+           match !equal(path, "/v2/whoami") { True(_) -> { "1" } False(_) -> { "0" } },
+           "}}}"
+         )
+       ))
+     }, (_) -> { dnsimple.whoami({}) })
+     assert.equal(assert.ok(found), 1)
+   }},
+
+  {name: "dnsimple domains lists the names in an account",
+   test: (_) -> {
+     let found = serve((_) -> { json_response(200, domains_body) }, (_) -> {
+       dnsimple.domains(7)
+     })
+     let names = @standard.list.map(assert.ok(found), ({name}) -> { name })
+     assert.equal(names, ["example.com", "example.org"])
+   }},
+
+  {name: "dnsimple domains asks for the account path",
+   test: (_) -> {
+     let found = serve(({path}) -> {
+       match !equal(path, "/v2/7/domains") {
+         True(_) -> { json_response(200, domains_body) }
+         False(_) -> { json_response(404, "{}") }
+       }
+     }, (_) -> { dnsimple.domains(7) })
+     assert.equal(@standard.list.length(assert.ok(found)), 2)
+   }},
+
+  {name: "dnsimple records reads the rows of a zone",
+   test: (_) -> {
+     let found = serve(({path}) -> {
+       match !equal(path, "/v2/7/zones/example.com/records") {
+         True(_) -> { json_response(200, records_body) }
+         False(_) -> { json_response(404, "{}") }
+       }
+     }, (_) -> { dnsimple.records({account: 7, zone: "example.com"}) })
+     let types = @standard.list.map(assert.ok(found), ({type}) -> { type })
+     assert.equal(types, ["A", "CNAME"])
+   }},
+
+  {name: "dnsimple reports a failed status with the path",
+   test: (_) -> {
+     let found = serve((_) -> { json_response(404, "{}") }, (_) -> {
+       dnsimple.domains(7)
+     })
+     assert.equal_string(
+       assert.error(found),
+       "DNSimple returned HTTP 404 for /v2/7/domains"
+     )
+   }},
+
+  {name: "dnsimple passes an effect failure through",
+   test: (_) -> {
+     let found = serve((_) -> { Error("not connected") }, (_) -> {
+       dnsimple.whoami({})
+     })
+     assert.equal_string(assert.error(found), "not connected")
+   }},
+
+  {name: "dnsimple describes every function it exposes",
+   test: (_) -> {
+     let names = @standard.list.map(dnsimple.skills, ({name}) -> { name })
+     assert.equal(names, ["whoami", "domains", "records"])
+   }},
+
+  {name: "dnsimple readme names the fields of the module",
+   test: (_) -> {
+     assert.true(!string_starts_with(dnsimple.readme, "# DNSimple"))
+   }}
+]

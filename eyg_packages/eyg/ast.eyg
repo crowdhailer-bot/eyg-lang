@@ -10,11 +10,13 @@
 
 let base64 = import "./base64.eyg"
 let dag_json = import "./dag_json.eyg"
-let json = import "../json/index.eyg.json"
+// Reading JSON is the published package, pinned so this module always
+// reads it the same way.
+let {decode} = @json:2:baguqeeradd5eqagcv44aj2kj6xihc7izwsd5pucj52ln6mvfdn66wiu2267q
 let list = @standard.list
 let result = @standard.result
 let string = @standard.string
-let d = json.decode
+let d = decode
 
 let node = (tag, fields) -> {
   dag_json.object([dag_json.field("0", dag_json.string(tag)), ..fields])
@@ -93,11 +95,11 @@ let source_decoder = !fix((self, parsed) -> {
 })
 
 let source_json_to_ast = (source) -> {
-  json.parse(source, source_decoder)
+  decode.parse(source, source_decoder)
 }
 
 let source_json_bytes_to_ast = (source) -> {
-  json.parse_bytes(source, source_decoder)
+  decode.parse_bytes(source, source_decoder)
 }
 
 let parse = !fix((self, nodes) -> {

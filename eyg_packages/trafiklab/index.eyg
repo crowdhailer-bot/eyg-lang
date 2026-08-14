@@ -1,0 +1,210 @@
+// Bus departures in Stockholm, from the SL Transport API.
+//
+// An overlay context: a readme for the agent and the functions the readme
+// describes. The API needs no key, so a session can answer "when is my bus"
+// with nothing set up first.
+
+let list = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.list
+let string = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.string
+let concat = string.concat
+let to_string = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.integer.to_string
+
+// Reading JSON is the published package, pinned so a release of this
+// module always reads it the same way.
+let {decode} = @json:2:baguqeeradd5eqagcv44aj2kj6xihc7izwsd5pucj52ln6mvfdn66wiu2267q
+
+
+let host = "transport.integration.sl.se"
+
+// Stops that were named in the Gleam version of these functions.
+let moa_martinsons_torg = 1251
+
+let eyvind_johnsons_gata = 1254
+
+let get = (path, query, decoder) -> {
+  let request = {
+    method: GET({}),
+    scheme: HTTPS({}),
+    host,
+    port: None({}),
+    path,
+    query,
+    headers: [],
+    body: !string_to_binary("")
+  }
+  match perform Fetch(request) {
+    Ok({status, body}) -> {
+      match !int_compare(status, 299) {
+        Gt(_) -> {
+          Error(concat(["SL returned HTTP ", to_string(status), " for ", path]))
+        }
+        | (_) -> { decode.parse_bytes(body, decoder) }
+      }
+    }
+    Error(reason) -> { Error(reason) }
+  }
+}
+
+let departure = decode.object((parsed) -> {
+  {
+    destination: decode.field("destination", decode.string)(parsed),
+    direction: decode.field("direction", decode.string)(parsed),
+    display: decode.field("display", decode.string)(parsed),
+    scheduled: decode.field("scheduled", decode.string)(parsed),
+    expected: decode.field("expected", decode.string)(parsed),
+    line: decode.field("line", decode.object(
+      decode.field("designation", decode.string)
+    ))(parsed),
+    transport: decode.field("line", decode.object(
+      decode.field("transport_mode", decode.string)
+    ))(parsed)
+  }
+})
+
+let board = decode.object(decode.field("departures", decode.list(departure)))
+
+let departures_path = (site) -> {
+  concat(["/v1/sites/", to_string(site), "/departures"])
+}
+
+// Everything leaving a stop within the next `forecast` minutes, soonest first.
+let departures = ({site, forecast}) -> {
+  get(
+    departures_path(site),
+    Some(concat(["forecast=", to_string(forecast)])),
+    board
+  )
+}
+
+// Only the buses. The API filters this itself so nothing else is fetched.
+let buses = ({site, forecast}) -> {
+  get(
+    departures_path(site),
+    Some(concat(["transport=BUS&forecast=", to_string(forecast)])),
+    board
+  )
+}
+
+let site = decode.object((parsed) -> {
+  {
+    id: decode.field("id", decode.integer)(parsed),
+    name: decode.field("name", decode.string)(parsed)
+  }
+})
+
+// Find a stop id by name. Every stop in the network is fetched, over a
+// megabyte, so use a known id when there is one.
+let sites = ({name}) -> {
+  let wanted = !string_lowercase(name)
+  match get("/v1/sites", Some("expand=false"), decode.list(site)) {
+    Ok(found) -> {
+      Ok(list.filter(({name}) -> {
+        !string_starts_with(!string_lowercase(name), wanted)
+      }, found))
+    }
+    Error(reason) -> { Error(reason) }
+  }
+}
+
+let readme = "# Buses in Stockholm
+
+You are working in the SL transport workspace. It answers when the next buses
+leave a stop, from the live SL Transport API. There is no API key and no
+connecting, the calls just work.
+
+The module you are given has these fields.
+
+- `readme` this text.
+- `skills` a list of `{name, description}`.
+- `buses` `({site, forecast}) -> Result(List(Departure), String)`
+- `departures` `({site, forecast}) -> Result(List(Departure), String)`, every mode not just buses.
+- `sites` `({name}) -> Result(List({id, name}), String)`
+- `moa_martinsons_torg` the site id `1251`.
+- `eyvind_johnsons_gata` the site id `1254`.
+
+There are no other fields, do not guess any.
+
+A `Departure` is `{destination, direction, display, scheduled, expected, line, transport}`.
+`display` is what a person wants to read, it is `\"Nu\"` or `\"3 min\"`.
+`line` is the number on the front of the bus, `scheduled` and `expected` are
+timestamps like `\"2026-08-13T15:29:00\"`.
+
+`forecast` is how many minutes ahead to look. 60 is a good default.
+
+## Do not import anything
+
+You need no packages. This module and the builtins are everything.
+Never write `@standard` or any other `@name`. A package reference has to carry
+its full hash, and one written from memory will not resolve.
+Use `!list_fold` to walk a list and `!string_append` to join text.
+
+```eyg
+({buses, moa_martinsons_torg}) -> {
+  match buses({site: moa_martinsons_torg, forecast: 60}) {
+    Ok(found) -> {
+      !list_fold(found, {}, ({line, destination, display}, _) -> {
+        let text = !string_append(line, !string_append(\" to \", !string_append(destination, !string_append(\" \", !string_append(display, \"\\n\")))))
+        perform Print(text)
+      })
+    }
+    Error(reason) -> { perform Abort(reason) }
+  }
+}
+```
+
+Anything you print comes back with the result, so print what the user asked for.
+
+## Showing the board
+
+A departure board is worth looking at rather than reading. Write it and open it
+small, in the corner, so it stays out of the way.
+
+```eyg
+({buses, moa_martinsons_torg}) -> {
+  match buses({site: moa_martinsons_torg, forecast: 60}) {
+    Ok(found) -> {
+      let rows = !list_fold(found, \"\", ({line, destination, display}, acc) -> {
+        !string_append(acc, !string_append(\"| \", !string_append(line, !string_append(\" | \", !string_append(destination, !string_append(\" | \", !string_append(display, \" |\\n\")))))))
+      })
+      let page = !string_append(\"# Next buses\\n\\n| line | to | when |\\n| --- | --- | --- |\\n\", rows)
+      let _ = perform WriteFile({path: \"/tmp/departures.md\", contents: !string_to_binary(page)})
+      perform OpenWindow({path: \"/tmp/departures.md\", x: 40, y: 40, width: 380, height: 340})
+    }
+    Error(reason) -> { perform Abort(reason) }
+  }
+}
+```
+"
+
+let skills = [
+  {
+    name: "buses",
+    description: "buses({site, forecast}) -> Result(List({destination, direction, display, scheduled, expected, line, transport}), String). Buses leaving a stop in the next forecast minutes."
+  },
+  {
+    name: "departures",
+    description: "departures({site, forecast}) -> Result(..., String). The same but every mode, not just buses."
+  },
+  {
+    name: "sites",
+    description: "sites({name}) -> Result(List({id, name}), String). Find a stop id by name, fetches the whole network."
+  },
+  {
+    name: "moa_martinsons_torg",
+    description: "The site id 1251, a bus terminal in Hammarby Sjostad."
+  },
+  {
+    name: "eyvind_johnsons_gata",
+    description: "The site id 1254, the next stop along."
+  }
+]
+
+{
+  readme,
+  skills,
+  departures,
+  buses,
+  sites,
+  moa_martinsons_torg,
+  eyvind_johnsons_gata
+}

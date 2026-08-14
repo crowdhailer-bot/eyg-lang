@@ -1,0 +1,167 @@
+// The EYG hub workspace.
+//
+// An overlay context for looking at what is published. Reading the hub is the
+// ledger package, this is the readme that explains it to an agent and the
+// presentation that turns a list of releases into something worth looking at.
+
+let list = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.list
+let string = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.string
+let concat = string.concat
+
+// Everything to do with the hub's data is the published package.
+let hub = @ledger:2:baguqeeragbnpxxmpvxfcteqaxyl24jy6ahbj4woat55begigh5tduvmgadsa
+
+let releases = hub.releases
+let packages = hub.packages
+let history = hub.history
+
+// The packages whose name contains the text, lowercased both sides.
+let search = ({text}) -> {
+  let wanted = !string_lowercase(text)
+  match packages({}) {
+    Ok(found) -> {
+      Ok(list.filter((row) -> {
+        match !string_split_once(!string_lowercase(row.package), wanted) {
+          Ok(_) -> { True({}) }
+          Error(_) -> { False({}) }
+        }
+      }, found))
+    }
+    Error(reason) -> { Error(reason) }
+  }
+}
+
+// Every release of one package, oldest first.
+let history = ({package}) -> {
+  match releases({}) {
+    Ok(found) -> {
+      Ok(list.filter((row) -> { !equal(row.package, package) }, found))
+    }
+    Error(reason) -> { Error(reason) }
+  }
+}
+
+// An HTML table of rows, each row a list of cells. Written as a file so it can
+// be opened in a window.
+let table = ({title, headings, rows}) -> {
+  let cells = (tag, values) -> {
+    concat(list.map(values, (value) -> {
+      concat(["<", tag, ">", value, "</", tag, ">"])
+    }))
+  }
+  concat([
+    "<!doctype html><meta charset=\"utf-8\"><title>", title, "</title>",
+    "<style>body{font:14px system-ui;margin:1rem}",
+    "table{border-collapse:collapse;width:100%}",
+    "th,td{text-align:left;padding:.3rem .5rem;border-bottom:1px solid #ddd}",
+    "th{background:#f4f4f4}</style>",
+    "<h1>", title, "</h1><table><thead><tr>", cells("th", headings),
+    "</tr></thead><tbody>",
+    concat(list.map(rows, (row) -> { concat(["<tr>", cells("td", row), "</tr>"]) })),
+    "</tbody></table>"
+  ])
+}
+
+let skills = [
+  {
+    name: "packages",
+    description: "packages({}) -> Result(List({package, version, module}), String). One row per package, the newest release of each."
+  },
+  {
+    name: "releases",
+    description: "releases({}) -> Result(List({package, version, module}), String). Every release the hub has, oldest first."
+  },
+  {
+    name: "search",
+    description: "search({text}) -> Result(List({package, version, module}), String). Packages whose name contains the text."
+  },
+  {
+    name: "history",
+    description: "history({package}) -> Result(List({package, version, module}), String). Every release of one package."
+  },
+  {
+    name: "table",
+    description: "table({title, headings, rows}) -> String. An HTML table, write it to a file and open a window on it."
+  }
+]
+
+let readme = "# The EYG hub
+
+You are working in the hub workspace. It reads what is published on eyg.run and
+shows it.
+
+The module you are given has these fields.
+
+- `readme` this text.
+- `skills` a list of `{name, description}`.
+- `packages` `({}) -> Result(List(Release), String)`, newest release of each.
+- `releases` `({}) -> Result(List(Release), String)`, every release, oldest first.
+- `search` `({text}) -> Result(List(Release), String)`.
+- `history` `({package}) -> Result(List(Release), String)`.
+- `table` `({title, headings, rows}) -> String`, builds HTML.
+
+There are no other fields, do not guess any.
+
+A `Release` is `{package, version, module}`. `module` is the content id of the
+released module, `version` is an integer counting from 1.
+
+Each call reads the whole ledger, so read once and filter the result rather
+than calling twice.
+
+```eyg
+({packages}) -> {
+  match packages({}) {
+    Ok(found) -> { found }
+    Error(reason) -> { perform Abort(reason) }
+  }
+}
+```
+
+## Showing results
+
+A list of packages is a table, and a table is worth looking at. Build the HTML,
+write it, and open a window on it. HTML files are rendered in a sandbox, so
+nothing in the page can reach the rest of the session.
+
+```eyg
+({packages, table}) -> {
+  let list = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.list
+  let integer = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.integer
+  match packages({}) {
+    Ok(found) -> {
+      let rows = list.map(found, ({package, version, module}) -> {
+        [package, integer.to_string(version), module]
+      })
+      let page = table({
+        title: \"Packages on eyg.run\",
+        headings: [\"package\", \"version\", \"module\"],
+        rows
+      })
+      let _ = perform WriteFile({
+        path: \"/tmp/packages.html\",
+        contents: !string_to_binary(page)
+      })
+      perform OpenWindow({
+        path: \"/tmp/packages.html\",
+        x: 40, y: 40, width: 640, height: 520
+      })
+    }
+    Error(reason) -> { perform Abort(reason) }
+  }
+}
+```
+
+Filter before building the table when the user asked something narrower, for
+example only packages with more than one release, or only names containing a
+word. `search` and `history` cover the common two.
+"
+
+{
+  readme,
+  skills,
+  packages,
+  releases,
+  search,
+  history,
+  table
+}

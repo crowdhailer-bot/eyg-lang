@@ -38,7 +38,7 @@ let replace_all = ({path, find, replace}) -> {
 
 let patch = replace_all
 
-let reverse = @standard.list.reverse
+let reverse = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.list.reverse
 
 let split_lines = (text) -> {
   let {head, tail} = !string_split(text, "\n")

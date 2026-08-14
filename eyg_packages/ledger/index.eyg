@@ -1,0 +1,369 @@
+// Everything to do with the data an EYG hub keeps.
+//
+// A hub holds two ledgers, one of releases and one of signatories, and a
+// record of who owns each package name. This reads them, builds the bytes of a
+// new release, signs it and submits it.
+//
+// `at` binds the functions to one hub. The fields beside it are the same
+// functions bound to eyg.run, which is the hub almost everything means.
+
+let list = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.list
+let string = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.string
+let integer = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.integer
+let concat = string.concat
+let to_string = integer.to_string
+
+// Reading JSON is the published package, pinned so a release of this module
+// always reads it the same way.
+let {decode} = @json:2:baguqeeradd5eqagcv44aj2kj6xihc7izwsd5pucj52ln6mvfdn66wiu2267q
+
+let base32 = import "./base32.eyg"
+
+// Both ledgers put the event as a JSON string inside the entry, so every entry
+// is read in two passes.
+let payloads = decode.object(decode.field("entries", decode.list(
+  decode.object((parsed) -> {
+    {
+      payload: decode.field("payload", decode.string)(parsed),
+      // the entity is the chain the entry belongs to, which is the id of the
+      // first entry in it. The signatory is inside the payload, they are not
+      // the same thing.
+      chain: decode.field("entity", decode.object(decode.field("/", decode.string)))(parsed),
+      cid: decode.field("cid", decode.object(decode.field("/", decode.string)))(parsed),
+      sequence: decode.field("sequence", decode.integer)(parsed)
+    }
+  })
+)))
+
+let release_of = decode.object((parsed) -> {
+  {
+    signatory: decode.field("signatory", decode.object(decode.field("/", decode.string)))(parsed),
+    release: decode.field("content", decode.object((content) -> {
+      {
+        package: decode.field("package", decode.string)(content),
+        version: decode.field("version", decode.integer)(content),
+        module: decode.field("module", decode.object(decode.field("/", decode.string)))(content)
+      }
+    }))(parsed)
+  }
+})
+
+let key_of = decode.object((parsed) -> {
+  {
+    key: decode.field("key", decode.string)(parsed),
+    event: decode.field("type", decode.string)(parsed)
+  }
+})
+
+let owner_of = decode.object((parsed) -> {
+  {
+    package: decode.field("package", decode.string)(parsed),
+    signatory: decode.field("entity_id", decode.string)(parsed)
+  }
+})
+
+// Read each entry's payload, dropping any this does not understand.
+//
+// Written out rather than with list.filter_map because decoding performs an
+// effect, and the standard library takes functions that perform none.
+let read_each = !fix((self, decode_entry, remaining, acc) -> {
+  match !list_pop(remaining) {
+    Ok({head, tail}) -> {
+      let {payload, chain, cid, sequence} = head
+      match decode.parse_bytes(!string_to_binary(payload), decode_entry) {
+        Ok(value) -> { self(decode_entry, tail, [{chain, cid, sequence, value}, ..acc]) }
+        Error(_) -> { self(decode_entry, tail, acc) }
+      }
+    }
+    Error(_) -> { list.reverse(acc) }
+  }
+})
+
+let escape = (text) -> {
+  let text = !string_replace(text, "\\", "\\\\")
+  !string_replace(text, "\"", "\\\"")
+}
+
+let link = (cid) -> { concat(["{\"/\":\"", escape(cid), "\"}"]) }
+
+// The bytes a signatory signs to publish a release.
+//
+// DAG-JSON sorts the keys of every object, which is why these are not in the
+// order the Gleam record declares them. Getting this wrong produces a
+// signature over the wrong bytes, which the hub rejects, so it is checked
+// against the output of the Gleam encoder in the tests.
+let entry = ({sequence, previous, key, package, version, module, signatory}) -> {
+  concat([
+    "{\"content\":{\"module\":",
+    link(module),
+    ",\"package\":\"",
+    escape(package),
+    "\",\"version\":",
+    to_string(version),
+    "},\"key\":\"",
+    escape(key),
+    "\",\"previous\":",
+    match previous {
+      Some(cid) -> { link(cid) }
+      None(_) -> { "null" }
+    },
+    ",\"sequence\":",
+    to_string(sequence),
+    ",\"signatory\":",
+    link(signatory),
+    ",\"type\":\"release\"}"
+  ])
+}
+
+// Every function bound to one hub.
+let at = ({scheme, host, port}) -> {
+  let request = (method, path, query, headers, body) -> {
+    {method, scheme, host, port, path, query, headers, body}
+  }
+
+  let get = (path, query, decoder) -> {
+    match perform Fetch(request(GET({}), path, query, [], !string_to_binary(""))) {
+      Ok({status, body}) -> {
+        match !int_compare(status, 299) {
+          Gt(_) -> {
+            Error(concat(["The hub returned HTTP ", to_string(status), " for ", path]))
+          }
+          | (_) -> { decode.parse_bytes(body, decoder) }
+        }
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  let read = (path, decode_entry) -> {
+    match get(path, Some("since=0&limit=1000"), payloads) {
+      Ok(entries) -> { Ok(read_each(decode_entry, entries, [])) }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // Every release the hub has published, oldest first.
+  let releases = (_) -> {
+    match read("/packages/pull", release_of) {
+      Ok(rows) -> { Ok(list.map(rows, ({chain, cid, sequence, value}) -> {
+        {
+          package: value.release.package,
+          version: value.release.version,
+          module: value.release.module,
+          signatory: value.signatory,
+          chain,
+          cid,
+          sequence
+        }
+      })) }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // Every signatory the hub knows, with the key events recorded against it.
+  let signatories = (_) -> {
+    match read("/signatories/pull", key_of) {
+      Ok(rows) -> { Ok(list.map(rows, ({chain, cid: _, sequence: _, value}) -> {
+        {signatory: chain, key: value.key, event: value.event}
+      })) }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // One row per package, keeping only the newest release of each.
+  let packages = (_) -> {
+    match releases({}) {
+      Ok(found) -> {
+        // keep the first appearance of each package in place, replacing the
+        // row when a newer version of it comes along
+        Ok(list.fold(found, [], (release, acc) -> {
+          match list.find((row) -> { !equal(row.package, release.package) }, acc) {
+            Ok(previous) -> {
+              match !int_compare(release.version, previous.version) {
+                Gt(_) -> {
+                  list.map(acc, (row) -> {
+                    match !equal(row.package, release.package) {
+                      True(_) -> { release }
+                      False(_) -> { row }
+                    }
+                  })
+                }
+                | (_) -> { acc }
+              }
+            }
+            Error(_) -> { list.append(acc, [release]) }
+          }
+        }))
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // Every release of one package, oldest first.
+  let history = ({package}) -> {
+    match releases({}) {
+      Ok(found) -> {
+        Ok(list.filter((row) -> { !equal(row.package, package) }, found))
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // The newest release of one package. `version` is 0 and `published` False
+  // for a name nobody has released under.
+  let latest = ({package}) -> {
+    match history({package}) {
+      Ok(rows) -> {
+        Ok(list.fold(rows, {package, version: 0, module: "", published: False({})},
+          (row, best) -> {
+            match !int_compare(row.version, best.version) {
+              Gt(_) -> {
+                {package, version: row.version, module: row.module, published: True({})}
+              }
+              | (_) -> { best }
+            }
+          }))
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // Who has published under a package name. Ownership is a different question,
+  // see `owner`.
+  let publishers = ({package}) -> {
+    match history({package}) {
+      Ok(mine) -> {
+        Ok(list.fold(mine, [], (row, acc) -> {
+          match list.find((seen) -> { !equal(seen, row.signatory) }, acc) {
+            Ok(_) -> { acc }
+            Error(_) -> { list.append(acc, [row.signatory]) }
+          }
+        }))
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // Who the hub says owns a package name. This is the permission question, and
+  // it is a different answer from who has published.
+  let owner = ({package}) -> {
+    let path = concat(["/packages/", package, "/owner"])
+    match perform Fetch(request(GET({}), path, None({}), [], !string_to_binary(""))) {
+      Ok({status, body}) -> {
+        match !int_compare(status, 299) {
+          Gt(_) -> {
+            match !equal(status, 404) {
+              // no owner has been granted for this name
+              True(_) -> { Ok(None({})) }
+              False(_) -> {
+                Error(concat(["The hub returned HTTP ", to_string(status), " for the owner of ", package]))
+              }
+            }
+          }
+          | (_) -> {
+            match decode.parse_bytes(body, owner_of) {
+              Ok(found) -> { Ok(Some(found)) }
+              Error(reason) -> { Error(reason) }
+            }
+          }
+        }
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // The sequence and previous a new entry in a chain must carry. The chain is
+  // per publisher, not per package, so a release follows whatever was
+  // published last by the same signatory chain.
+  let next = ({chain}) -> {
+    match releases({}) {
+      Ok(rows) -> {
+        let mine = list.filter((row) -> { !equal(row.chain, chain) }, rows)
+        Ok(list.fold(mine, {sequence: 1, previous: None({})}, (row, best) -> {
+          match !int_compare(row.sequence, !int_subtract(best.sequence, 1)) {
+            Gt(_) -> {
+              {sequence: !int_add(row.sequence, 1), previous: Some(row.cid)}
+            }
+            | (_) -> { best }
+          }
+        }))
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // Sign a release and submit it. The hub takes the entry bytes as the body
+  // and the signature over them in the authorization header.
+  let publish = ({key, key_id, signatory, chain, package, module}) -> {
+    match next({chain}) {
+      Ok({sequence, previous}) -> {
+        let bytes = entry({
+          sequence,
+          previous,
+          key: key_id,
+          package,
+          version: sequence,
+          module,
+          signatory
+        })
+        match perform Sign({key, data: !string_to_binary(bytes)}) {
+          Ok(signature) -> {
+            let headers = [
+              {key: "content-type", value: "application/json"},
+              {key: "authorization", value: concat(["Signature ", base32.encode(signature)])}
+            ]
+            let submit = request(POST({}), "/packages/submit", None({}), headers, !string_to_binary(bytes))
+            match perform Fetch(submit) {
+              Ok({status, body}) -> {
+                match !equal(status, 200) {
+                  True(_) -> {
+                    match !string_from_binary(body) {
+                      Ok(text) -> { Ok(text) }
+                      Error(_) -> { Error("The hub answered with something that is not text") }
+                    }
+                  }
+                  False(_) -> {
+                    let detail = match !string_from_binary(body) {
+                      Ok(text) -> { text }
+                      Error(_) -> { "" }
+                    }
+                    Error(concat(["The hub refused the release, HTTP ", to_string(status), " ", detail]))
+                  }
+                }
+              }
+              Error(reason) -> { Error(reason) }
+            }
+          }
+          Error(reason) -> { Error(reason) }
+        }
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  {releases, signatories, packages, history, latest, publishers, owner, next, publish}
+}
+
+// A hub reached over HTTPS on the default port, which every public hub is.
+let https = (host) -> { at({scheme: HTTPS({}), host, port: None({})}) }
+
+// A hub running on this machine.
+let http = ({host, port}) -> { at({scheme: HTTP({}), host, port: Some(port)}) }
+
+let eyg = https("eyg.run")
+
+{
+  at,
+  https,
+  http,
+  entry,
+  releases: eyg.releases,
+  signatories: eyg.signatories,
+  packages: eyg.packages,
+  history: eyg.history,
+  latest: eyg.latest,
+  publishers: eyg.publishers,
+  owner: eyg.owner,
+  next: eyg.next,
+  publish: eyg.publish
+}
