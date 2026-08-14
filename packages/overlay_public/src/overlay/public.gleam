@@ -4,6 +4,7 @@ import lustre
 import lustre/effect
 import ogre/origin
 import overlay/public/view
+import overlay/web/environment/browser
 import overlay/web/state
 import pal/system
 import plinth/browser/location
@@ -13,7 +14,7 @@ pub fn main() -> Nil {
   let app = lustre.application(do_init, do_update, view.render)
   let browser_origin = location.origin(window.location(window.self()))
   let assert Ok(origin) = origin.from_string(browser_origin)
-  let config = state.Config(origin:)
+  let config = state.Config(origin:, environment: browser.environment(origin))
   let assert Ok(_runtime) = lustre.start(app, "#app", config)
   Nil
 }

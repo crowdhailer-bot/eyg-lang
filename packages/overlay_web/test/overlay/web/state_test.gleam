@@ -10,7 +10,6 @@ import gleam/option.{None, Some}
 import gleam/string
 import multiformats/cid/v1
 import oas/generator/utils
-import ogre/origin
 import overlay/helpers.{init, new_reader, submit_first_prompt}
 import overlay/llm/chat
 import overlay/llm/tool
@@ -20,7 +19,7 @@ import overlay/web/tools
 import pal/system
 
 pub fn init_loads_provider_settings_test() {
-  let config = state.Config(origin: origin.https("eyg.test"))
+  let config = helpers.browser_config()
   let #(state, actions) = state.init(config)
   let assert [system.GetSessionStorageItem("overlay.llm.provider", _), _] =
     actions
@@ -28,7 +27,7 @@ pub fn init_loads_provider_settings_test() {
 }
 
 pub fn provider_setup_selects_new_llm_test() {
-  let config = state.Config(origin: origin.https("eyg.test"))
+  let config = helpers.browser_config()
   let #(state, _) = state.init(config)
   let #(state, actions) =
     state.update(
@@ -45,7 +44,7 @@ pub fn provider_setup_selects_new_llm_test() {
 }
 
 pub fn submit_without_provider_opens_settings_test() {
-  let config = state.Config(origin: origin.https("eyg.test"))
+  let config = helpers.browser_config()
   let #(state, _) = state.init(config)
   let #(state, _) =
     state.update(

@@ -17,7 +17,7 @@ import pamphlet
 import pamphlet/lustre
 import splitter
 
-pub fn render(model: state.State) {
+pub fn render(model: state.State(host)) {
   // let state = demo()
   let messages = view.messages(model)
   h.div([a.class("layout")], [

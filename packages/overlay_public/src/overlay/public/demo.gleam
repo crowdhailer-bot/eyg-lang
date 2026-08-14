@@ -3,10 +3,12 @@ import oas/generator/utils
 import ogre/origin
 import overlay/llm/chat
 import overlay/llm/tool
+import overlay/web/environment/browser
 import overlay/web/state
 
-fn config() -> state.Config {
-  state.Config(origin: origin.https("eyg.test"))
+fn config() -> state.Config(Nil) {
+  let origin = origin.https("eyg.test")
+  state.Config(origin:, environment: browser.environment(origin))
 }
 
 pub fn state() {

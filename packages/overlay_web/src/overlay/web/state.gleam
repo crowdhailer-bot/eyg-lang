@@ -1,9 +1,7 @@
 import castor
 import eyg/analysis/type_/binding/debug as t_debug
 import eyg/hub/cache
-import eyg/interpreter/simple_debug
 import eyg/interpreter/state as istate
-import eyg/interpreter/value as v
 import eyg/parser/parser as _
 import gleam/http/response.{Response}
 import gleam/int
@@ -17,19 +15,17 @@ import overlay/llm/chat
 import overlay/llm/provider
 import overlay/llm/provider/ollama
 import overlay/llm/tool
+import overlay/web/environment.{type Environment}
 import overlay/web/provider_setup
 import overlay/web/tools
 import pal/system
-import touch_grass/harness/browser as harness
-import touch_grass/http
-import touch_grass/interface
 
-pub type Config {
-  Config(origin: origin.Origin)
+pub type Config(host) {
+  Config(origin: origin.Origin, environment: Environment(host))
 }
 
 // The system prompt and tools are not part of the state as they are built from readme and always one tool
-pub type State {
+pub type State(host) {
   State(
     llm: provider.Llm,
     provider_setup: provider_setup.State,
@@ -38,6 +34,7 @@ pub type State {
     input: String,
     input_error: Option(String),
     origin: origin.Origin,
+    environment: Environment(host),
     cache: cache.Cache(tools.Meta),
     counter: Int,
     expanded: set.Set(Int),
@@ -55,8 +52,8 @@ pub type AgentStatus {
   Executing(calls: List(#(String, tools.Call)))
 }
 
-pub fn new(config: Config) -> State {
-  let Config(origin:) = config
+pub fn new(config: Config(host)) -> State(host) {
+  let Config(origin:, environment:) = config
   let llm =
     provider.Llm(
       provider: provider.Ollama(ollama.Config(origin:, api_key: None)),
@@ -71,6 +68,7 @@ pub fn new(config: Config) -> State {
     input: "",
     input_error: None,
     origin: origin,
+    environment:,
     cache:,
     counter: 0,
     expanded: set.new(),
@@ -91,7 +89,7 @@ pub type Effect(t) {
   Done(t)
 }
 
-fn flush(state: State) {
+fn flush(state: State(host)) {
   let State(cache:, ..) = state
   let #(cache, effects) = cache.flush(cache)
   let effects =
@@ -127,9 +125,9 @@ pub type Message {
 }
 
 pub fn update(
-  state: State,
+  state: State(host),
   message: Message,
-) -> #(State, List(system.Effect(Message))) {
+) -> #(State(host), List(system.Effect(Message))) {
   case message {
     ProviderSetupMessage(message) -> {
       let can_save = case state.status {
@@ -269,7 +267,7 @@ pub fn update(
   }
 }
 
-pub fn can_save_provider(state: State) {
+pub fn can_save_provider(state: State(host)) {
   case state.provider_setup.restoring, state.status {
     False, Waiting -> True
     _, _ -> False
@@ -278,15 +276,15 @@ pub fn can_save_provider(state: State) {
 
 // cache state doesn't update during the eval but needs to resume later if everything fetched at the beginning
 
-fn current_context(state) {
-  let State(cache:, counter:, ..) = state
-  tools.Context(cache:, counter:, effects: [])
+fn current_context(state: State(host)) {
+  let State(environment:, cache:, counter:, ..) = state
+  tools.Context(environment:, cache:, counter:, effects: [])
 }
 
-fn resolve_calls(return, state: State) {
+fn resolve_calls(return, state: State(host)) {
   let #(ctx, calls) = return
 
-  let tools.Context(cache:, counter:, effects: inner) = ctx
+  let tools.Context(environment:, cache:, counter:, effects: inner) = ctx
   let effects =
     list.map(
       inner,
@@ -304,7 +302,7 @@ fn resolve_calls(return, state: State) {
     ])
   }
 
-  let state = State(..state, status:, cache:, counter:)
+  let state = State(..state, status:, environment:, cache:, counter:)
   #(state, effects)
 }
 
@@ -338,18 +336,24 @@ fn stream_next_chunk(provider, reader, remaining) {
   |> system.Done
 }
 
-fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
+fn completion_request(
+  state: State(host),
+  messages: List(chat.Message(tool.Call)),
+) {
   let tools = [spec()]
   let context =
-    provider.Context(system_prompt: system_prompt(state.origin), tools:)
+    provider.Context(system_prompt: system_prompt(state.environment), tools:)
   let history = list.append(messages, state.history) |> list.reverse
   provider.stream_completion_request(state.llm, context, history)
 }
 
-fn system_prompt(origin: origin.Origin) -> String {
-  let scheme = http.scheme_to_eyg(origin.scheme)
-  let host = v.String(origin.host)
-  let port = v.option(origin.port, v.Integer)
+/// What the model is told before the conversation starts.
+///
+/// The first half is true of overlay wherever it runs. The rest is the
+/// environment: its briefing, then the effects it offers, written out with
+/// their types. Nothing here knows what those effects are.
+pub fn system_prompt(environment: Environment(host)) -> String {
+  let environment.Environment(briefing:, effects:, ..) = environment
 
   "You are an expery automation assistant.
 You help users by executing EYG scripts to interact with the users system.
@@ -359,58 +363,27 @@ ALWAYS use djot syntax for your responses.
 DO NOT write code blocks in your responses unless explicitly asked.
 All code execution uses the 'run' tool.
 
-To fetch a guide run the following script.
-ALWAYS fetch the EYG syntax guide before writing scripts
-
-```eyg
-let request = {
-  method: GET({}),
-  scheme: " <> simple_debug.inspect(scheme) <> ",
-  host: " <> simple_debug.inspect(host) <> ",
-  port: " <> simple_debug.inspect(port) <> ",
-  path: \"/guides/eyg-syntax-guide.md\",
-  query: None({}),
-  headers: [],
-  body: !string_to_binary(\"\")
-}
-match perform Fetch(request) {
-  Ok({body}) -> {
-    match !string_from_binary(body) {
-      Ok(text) -> { text }
-      Error(_) -> { \"Not a utf-8 response.\" }
-    }
-  }
-  Error(reason) -> { !string_append(\"fetch guide \", reason) }
-}
-```
-
-Other guides are
-- /guides/builtins-reference.md
-- /guides/http-fetch.md
+" <> briefing <> "
 
 This environment has the following effects
 
 "
   |> string.append(
-    harness.effects()
+    effects
     |> list.map(fn(effect) {
-      let interface.Interface(name:, lift_type:, lower_type:, decode: _) =
-        effect
+      let #(name, #(lift_type, lower_type)) = effect
 
-      "-"
+      "- "
       <> name
       <> "("
       <> t_debug.mono(lift_type)
-      <> "_ -> "
+      <> ") -> "
       <> t_debug.mono(lower_type)
     })
     |> string.join("\n"),
   ) <> "
 
-Remember to always use perform to call an effect.
-
-Use the service effects, such as DNSimple, to call service API's these do not require the scheme, host or port to be set.
-They do not require an API token this will be added by the platform."
+Remember to always use perform to call an effect."
 }
 
 pub fn spec() {

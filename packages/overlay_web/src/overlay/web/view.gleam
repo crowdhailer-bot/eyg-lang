@@ -4,7 +4,7 @@ import gleam/list
 import overlay/llm/chat
 import overlay/web/state.{type State, State}
 
-pub fn messages(state: State) {
+pub fn messages(state: State(host)) {
   let State(status:, history:, ..) = state
   let messages = case status {
     state.Waiting -> history

@@ -10,6 +10,7 @@ import gleam/string
 import javascript/mutable_reference
 import ogre/origin
 import overlay/llm/tool
+import overlay/web/environment/browser
 import overlay/web/provider_setup
 import overlay/web/state
 
@@ -91,10 +92,18 @@ pub fn submit_first_prompt(prompt) {
   state.update(state, state.UserSubmittedPrompt)
 }
 
+pub fn test_origin() {
+  origin.https("eyg.test")
+}
+
+pub fn browser_config() {
+  let origin = test_origin()
+  state.Config(origin:, environment: browser.environment(origin))
+}
+
 // init default
 pub fn init() {
-  let config = state.Config(origin: origin.https("eyg.test"))
-  let #(state, actions) = state.init(config)
+  let #(state, actions) = state.init(browser_config())
   let assert [_, _] = actions
   let #(state, actions) =
     state.update(

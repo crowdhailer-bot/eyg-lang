@@ -13,11 +13,12 @@ import gleam/string
 import oas/generator/utils
 import overlay/llm/chat
 import overlay/llm/tool
-import pal/platform/browser
+import overlay/web/environment.{type Environment, Environment}
 import pal/system
 
-pub type Context {
+pub type Context(host) {
   Context(
+    environment: Environment(host),
     cache: cache.Cache(Meta),
     counter: Int,
     effects: List(system.Effect(#(Int, state.Value(Meta)))),
@@ -25,7 +26,7 @@ pub type Context {
 }
 
 pub type Meta =
-  List(Int)
+  environment.Meta
 
 pub type Call {
   UnknownTool(name: String)
@@ -42,16 +43,16 @@ pub type Calls =
   List(#(String, Call))
 
 pub fn execute_all(
-  context: Context,
+  context: Context(host),
   tool_calls: List(tool.Call),
-) -> #(Context, Calls) {
+) -> #(Context(host), Calls) {
   list.map_fold(tool_calls, context, execute_single)
 }
 
 fn execute_single(
-  ctx: Context,
+  ctx: Context(host),
   call: tool.Call,
-) -> #(Context, #(String, Call)) {
+) -> #(Context(host), #(String, Call)) {
   let tool.Call(id:, function:) = call
   let tool.FunctionCall(name:, arguments:) = function
   case name {
@@ -85,8 +86,8 @@ fn cast_run(arguments) {
 // If we don't keep track of errors we'll keep calculating
 fn loop(
   return: Result(state.Value(Meta), state.Debug(Meta)),
-  ctx: Context,
-) -> #(Context, Call) {
+  ctx: Context(host),
+) -> #(Context(host), Call) {
   case return {
     Error(#(break.UndefinedReference(ref) as break, _m, env, k)) -> {
       // TODO use the direct fetch status
@@ -102,26 +103,26 @@ fn loop(
       }
     }
     Error(#(break.UnhandledEffect(label, lift), _, env, k)) -> {
-      case browser.cast(label, lift) {
-        Ok(effect) -> {
-          case browser.extrinsic(effect) {
-            browser.Abort(reason) -> #(ctx, Aborted(reason))
-            browser.Work(system.Done(value)) -> loop(Ok(value), ctx)
-            browser.Work(effect) -> {
-              let id = ctx.counter
+      let Environment(host:, handler:, ..) = ctx.environment
+      let #(host, handling) = handler(host, label, lift)
+      let environment = environment.set_host(ctx.environment, host)
+      let ctx = Context(..ctx, environment:)
+      case handling {
+        environment.Stopped(reason) -> #(ctx, Aborted(reason))
+        environment.Unknown(reason) -> #(ctx, Exception(reason))
+        // Work that is already finished resumes the program in place, there is
+        // nothing to wait for. Returning `Ok(value)` here would make the value
+        // the answer of the whole program and throw the rest of it away.
+        environment.Working(system.Done(value)) ->
+          loop(expression.resume(value, env, k), ctx)
+        environment.Working(effect) -> {
+          let id = ctx.counter
 
-              let effect = system.map(effect, fn(v) { #(id, v) })
-              let effects = [effect, ..ctx.effects]
-              let ctx = Context(..ctx, counter: id + 1, effects:)
-              #(ctx, Handling(id, env, k))
-            }
-            browser.Spotless(..) -> #(
-              ctx,
-              Aborted("Spotless integration not supported in harness"),
-            )
-          }
+          let effect = system.map(effect, fn(v) { #(id, v) })
+          let effects = [effect, ..ctx.effects]
+          let ctx = Context(..ctx, counter: id + 1, effects:)
+          #(ctx, Handling(id, env, k))
         }
-        Error(reason) -> #(ctx, Exception(reason))
       }
     }
     Error(#(reason, _, _, _)) -> #(ctx, Exception(reason))
@@ -180,9 +181,9 @@ fn do_all_returns(calls: Calls, acc) {
 }
 
 pub fn restart(
-  ctx: Context,
+  ctx: Context(host),
   call: #(String, Call),
-) -> #(Context, #(String, Call)) {
+) -> #(Context(host), #(String, Call)) {
   let #(call_id, call) = call
   case call {
     Pending(dep:, env:, k:) -> {
@@ -196,16 +197,16 @@ pub fn restart(
 }
 
 pub fn effect_handled(
-  ctx: Context,
+  ctx: Context(host),
   calls: List(#(String, Call)),
   id: Int,
   value: state.Value(Meta),
-) -> #(Context, List(#(String, Call))) {
+) -> #(Context(host), List(#(String, Call))) {
   list.map_fold(calls, ctx, fn(ctx, call) { apply_effect(ctx, call, id, value) })
 }
 
 fn apply_effect(
-  ctx: Context,
+  ctx: Context(host),
   call: #(String, Call),
   finished_id: Int,
   value: state.Value(Meta),

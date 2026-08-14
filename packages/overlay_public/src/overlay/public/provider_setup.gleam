@@ -7,7 +7,7 @@ import lustre/event
 import overlay/web/provider_setup
 import overlay/web/state
 
-pub fn render(model: state.State) {
+pub fn render(model: state.State(host)) {
   let setup = model.provider_setup
   h.div([a.class("provider-settings")], [
     h.button(
@@ -35,7 +35,7 @@ pub fn render(model: state.State) {
   ])
 }
 
-fn render_form(model: state.State) {
+fn render_form(model: state.State(host)) {
   let setup = model.provider_setup
   h.form(
     [
