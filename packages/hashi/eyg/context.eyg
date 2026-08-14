@@ -1,0 +1,546 @@
+// The hashi workspace.
+//
+// A context is a module with a `readme`, which is what an agent is told, and
+// the functions the readme describes. This one is about a hashiwokakero
+// puzzle: six effects reach the board, and everything below is written on top
+// of them.
+//
+// It uses nothing but builtins. No package reference, no import, so the whole
+// of it resolves with no network at all. That matters here: the page it runs
+// in has no `Fetch`.
+//
+// Coordinates are `{x, y}` with the origin at the top left of the board, the
+// way it is drawn. `x` grows to the right and `y` grows downwards.
+
+// LISTS ----------------------------------------------------------------------
+// EYG has one list primitive, `!list_fold`. These are the pieces of a list
+// library built from it, kept private because a caller wants the game helpers.
+
+let reverse = (items) -> {
+  !list_fold(items, [], (item, acc) -> { [item, ..acc] })
+}
+
+let map = (items, f) -> {
+  reverse(!list_fold(items, [], (item, acc) -> { [f(item), ..acc] }))
+}
+
+let filter = (items, keep) -> {
+  reverse(!list_fold(items, [], (item, acc) -> {
+    match keep(item) {
+      True(_) -> { [item, ..acc] }
+      False(_) -> { acc }
+    }
+  }))
+}
+
+let find = (items, keep) -> {
+  !list_fold(items, Error({}), (item, found) -> {
+    match found {
+      Ok(_) -> { found }
+      Error(_) -> {
+        match keep(item) {
+          True(_) -> { Ok(item) }
+          False(_) -> { found }
+        }
+      }
+    }
+  })
+}
+
+let count = (items) -> {
+  !list_fold(items, 0, (_, total) -> { !int_add(total, 1) })
+}
+
+let is_empty = (items) -> {
+  match !list_pop(items) {
+    Ok(_) -> { False({}) }
+    Error(_) -> { True({}) }
+  }
+}
+
+let greater = (a, b) -> {
+  match !int_compare(a, b) {
+    Gt(_) -> { True({}) }
+    | (_) -> { False({}) }
+  }
+}
+
+// THE SIX EFFECTS ------------------------------------------------------------
+// Everything the board can be asked or told. Nothing else is reachable from
+// here: this page has no Fetch, no Print and no clipboard.
+
+// Every island, in reading order, as {position, target}. `target` is the
+// number of bridge ends the island must finish the game with.
+let islands = (_) -> { perform ListIslands({}) }
+
+// Every bridge built so far, as {start, end, count}. `count` is 1 or 2.
+let bridges = (_) -> { perform ListBridges({}) }
+
+// Build a bridge between two islands. Returns Ok({}) or
+// Error(BadStart({}) | BadEnd({}) | Full({})).
+//
+// - BadStart, there is no island where you started
+// - BadEnd, there is no island where you ended, or nothing can reach it from
+//   the start: not in line, or an island or another bridge is in the way
+// - Full, those two islands already have the two bridges they are allowed
+let connect = (start, end) -> { perform AddBridge({start, end}) }
+
+// Take back the last bridge. Answers True({}) if there was one to take back.
+let undo = (_) -> { perform Undo({}) }
+
+// Put back a bridge that was taken back. Answers True({}) if there was one.
+let redo = (_) -> { perform Redo({}) }
+
+// Post the result to Bluesky. Only worth doing once the board is finished.
+// Returns Ok({}) or Error(reason).
+let share = (text) -> { perform ShareOutcome(text) }
+
+// READING THE BOARD ----------------------------------------------------------
+
+// Do two positions name the same cell?
+let same = (one, other) -> { !equal(one, other) }
+
+// The islands asking for exactly this many bridge ends.
+let with_target = (target) -> {
+  filter(islands({}), (island) -> { !equal(island.target, target) })
+}
+
+// The islands asking for two. These are the ones worth looking at first: a two
+// with only one neighbour has to spend both of its ends on that neighbour.
+let twos = (_) -> { with_target(2) }
+
+// The island at a position, if there is one. Ok(island) or Error({}).
+let at = (position) -> {
+  find(islands({}), (island) -> { same(island.position, position) })
+}
+
+// How many bridge ends already leave a position.
+let ends = (position) -> {
+  !list_fold(bridges({}), 0, (bridge, total) -> {
+    match same(bridge.start, position) {
+      True(_) -> { !int_add(total, bridge.count) }
+      False(_) -> {
+        match same(bridge.end, position) {
+          True(_) -> { !int_add(total, bridge.count) }
+          False(_) -> { total }
+        }
+      }
+    }
+  })
+}
+
+// How many more bridge ends an island still needs. Ok(n) or Error({}) if
+// there is no island there. A negative answer means too many were built.
+let remaining = (position) -> {
+  match at(position) {
+    Ok(island) -> { Ok(!int_subtract(island.target, ends(position))) }
+    Error(_) -> { Error({}) }
+  }
+}
+
+// Every island that still needs bridges. The board is finished when this is
+// empty and every island is joined into one group.
+let unfinished = (_) -> {
+  filter(islands({}), (island) -> {
+    greater(!int_subtract(island.target, ends(island.position)), 0)
+  })
+}
+
+// NEIGHBOURS -----------------------------------------------------------------
+
+// The nearest island in one direction, out of a list already narrowed to the
+// islands lying that way.
+let nearest = (candidates, keep, distance) -> {
+  !list_fold(candidates, Error({}), (island, best) -> {
+    match keep(island.position) {
+      False(_) -> { best }
+      True(_) -> {
+        match best {
+          Error(_) -> { Ok(island) }
+          Ok(current) -> {
+            match !int_compare(
+              distance(island.position),
+              distance(current.position)
+            ) {
+              Lt(_) -> { Ok(island) }
+              | (_) -> { best }
+            }
+          }
+        }
+      }
+    }
+  })
+}
+
+// The four islands a bridge from here could reach, as
+// {up, down, left, right}, each Ok(island) or Error({}).
+//
+// A bridge only ever joins an island to its nearest neighbour in line, so
+// these are the only four islands worth trying. `connect` will still refuse
+// one whose way is blocked by a bridge already built.
+let neighbours = (position) -> {
+  let all = islands({})
+  let x = position.x
+  let y = position.y
+  {
+    up: nearest(
+      all,
+      (p) -> {
+        match !equal(p.x, x) {
+          True(_) -> { greater(y, p.y) }
+          False(_) -> { False({}) }
+        }
+      },
+      (p) -> { !int_subtract(y, p.y) }
+    ),
+    down: nearest(
+      all,
+      (p) -> {
+        match !equal(p.x, x) {
+          True(_) -> { greater(p.y, y) }
+          False(_) -> { False({}) }
+        }
+      },
+      (p) -> { !int_subtract(p.y, y) }
+    ),
+    left: nearest(
+      all,
+      (p) -> {
+        match !equal(p.y, y) {
+          True(_) -> { greater(x, p.x) }
+          False(_) -> { False({}) }
+        }
+      },
+      (p) -> { !int_subtract(x, p.x) }
+    ),
+    right: nearest(
+      all,
+      (p) -> {
+        match !equal(p.y, y) {
+          True(_) -> { greater(p.x, x) }
+          False(_) -> { False({}) }
+        }
+      },
+      (p) -> { !int_subtract(p.x, x) }
+    )
+  }
+}
+
+// The neighbours of a position as a plain list, without the directions.
+let around = (position) -> {
+  let {up, down, left, right} = neighbours(position)
+  !list_fold([up, down, left, right], [], (found, acc) -> {
+    match found {
+      Ok(island) -> { [island, ..acc] }
+      Error(_) -> { acc }
+    }
+  })
+}
+
+// PICTURING THE BOARD --------------------------------------------------------
+
+// The board as text, one line per row. A digit is an island and the number of
+// bridge ends it wants, `-` and `|` are bridges, `=` and `"` are double
+// bridges, `.` is empty.
+//
+// Read this before deciding a move; it is much easier to see what is going on
+// than by reading two lists.
+let picture = (_) -> {
+  let found = islands({})
+  let built = bridges({})
+
+  let extent = !list_fold(found, {width: 0, height: 0}, (island, box) -> {
+    let p = island.position
+    {
+      width: match greater(!int_add(p.x, 1), box.width) {
+        True(_) -> { !int_add(p.x, 1) }
+        False(_) -> { box.width }
+      },
+      height: match greater(!int_add(p.y, 1), box.height) {
+        True(_) -> { !int_add(p.y, 1) }
+        False(_) -> { box.height }
+      }
+    }
+  })
+
+  // Every bridge as the run of cells it passes through.
+  //
+  // `line` is the coordinate the bridge holds still: the column of a vertical
+  // bridge, the row of a horizontal one. `low` and `high` are the ends of the
+  // run along the other axis. A cell is under the bridge when it is on `line`
+  // and strictly between the two, which leaves the islands themselves alone.
+  let span = (bridge) -> {
+    let s = bridge.start
+    let e = bridge.end
+    let vertical = !equal(s.x, e.x)
+    let {line, from, to} = match vertical {
+      True(_) -> { {line: s.x, from: s.y, to: e.y} }
+      False(_) -> { {line: s.y, from: s.x, to: e.x} }
+    }
+    let doubled = !equal(bridge.count, 2)
+    let mark = match vertical {
+      True(_) -> {
+        match doubled {
+          True(_) -> { "\"" }
+          False(_) -> { "|" }
+        }
+      }
+      False(_) -> {
+        match doubled {
+          True(_) -> { "=" }
+          False(_) -> { "-" }
+        }
+      }
+    }
+    let low = match greater(to, from) {
+      True(_) -> { from }
+      False(_) -> { to }
+    }
+    let high = match greater(to, from) {
+      True(_) -> { to }
+      False(_) -> { from }
+    }
+    {line, low, high, vertical, mark}
+  }
+
+  let spans = map(built, span)
+
+  let covers = (span, x, y) -> {
+    let {fixed, along} = match span.vertical {
+      True(_) -> { {fixed: x, along: y} }
+      False(_) -> { {fixed: y, along: x} }
+    }
+    match !equal(span.line, fixed) {
+      False(_) -> { False({}) }
+      True(_) -> {
+        match greater(along, span.low) {
+          False(_) -> { False({}) }
+          True(_) -> { greater(span.high, along) }
+        }
+      }
+    }
+  }
+
+  let cell = (x, y) -> {
+    match at({x, y}) {
+      Ok(island) -> { !int_to_string(island.target) }
+      Error(_) -> {
+        !list_fold(spans, ".", (span, drawn) -> {
+          match !equal(drawn, ".") {
+            False(_) -> { drawn }
+            True(_) -> {
+              match covers(span, x, y) {
+                True(_) -> { span.mark }
+                False(_) -> { drawn }
+              }
+            }
+          }
+        })
+      }
+    }
+  }
+
+  // Counting down and prepending walks the board in reading order.
+  let row = !fix((self, x, y, line) -> {
+    match greater(extent.width, x) {
+      False(_) -> { line }
+      True(_) -> {
+        self(!int_add(x, 1), y, !string_append(line, cell(x, y)))
+      }
+    }
+  })
+  let rows = !fix((self, y, drawn) -> {
+    match greater(extent.height, y) {
+      False(_) -> { drawn }
+      True(_) -> {
+        self(!int_add(y, 1), !string_append(
+          !string_append(drawn, row(0, y, "")),
+          "\n"
+        ))
+      }
+    }
+  })
+  rows(0, "")
+}
+
+// WHAT THE AGENT IS TOLD -----------------------------------------------------
+
+let readme = "# Hashiwokakero
+
+You are solving a hashiwokakero puzzle. The board is a grid of islands, each
+with a number on it. Join the islands with bridges so that
+
+- every island has exactly as many bridge ends as its number
+- bridges run straight, up down left or right, never diagonally
+- no two islands have more than two bridges between them
+- no bridge crosses another bridge or passes over an island
+- every island ends up joined to every other one, in a single group
+
+Positions are `{x, y}` with the origin at the top left. `x` grows right, `y`
+grows down.
+
+## Start here
+
+Look at the board before deciding anything. It is much easier to read than two
+lists of records. A program's value comes back to you, so the whole of the
+first script is one line:
+
+```eyg
+picture({})
+```
+
+`picture` draws a digit for each island, `-` and `|` for bridges, `=` and `\\\"`
+for double bridges, and `.` for empty cells.
+
+## Working out a move
+
+A `2` with only one neighbour has to spend both of its ends on that neighbour.
+A `1` with one neighbour has only one place to go. Look for those first.
+
+```eyg
+!list_fold(twos({}), [], (island, acc) -> {
+  match !equal(count(around(island.position)), 1) {
+    True(_) -> { [{island, only: around(island.position)}, ..acc] }
+    False(_) -> { acc }
+  }
+})
+```
+
+Then build the bridge:
+
+```eyg
+match connect({x: 0, y: 0}, {x: 3, y: 0}) {
+  Ok(_) -> { \"built\" }
+  Error(reason) -> {
+    match reason {
+      BadStart(_) -> { \"no island there\" }
+      BadEnd(_) -> { \"nothing reaches that from here\" }
+      Full(_) -> { \"already two bridges between those\" }
+    }
+  }
+}
+
+`match` only ever takes apart one tag at a time. `Error(BadStart(_))` is not
+valid; match the outer tag and then match again inside the branch, as above.
+```
+
+`connect` refuses anything against the rules, so trying a move is safe. A
+refused move changes nothing, and there is nothing to undo afterwards.
+
+Build several in one script and return what happened to each; one script per
+move is a lot of turns.
+
+## Finishing
+
+`unfinished({})` is every island that still needs bridges. When it is empty the
+counts are all met, and if the board is also joined into one group it is
+solved. Then post the result:
+
+```eyg
+share(\"Solved today's hashi.\")
+```
+
+## What you have
+
+Everything below is already in scope. Do not write `import` and do not use a
+package reference; there is no network here. There is no `Print` either: the
+value of the script is what comes back to you.
+"
+
+let skills = [
+  {
+    name: "picture",
+    description: "picture({}) -> String. The board drawn as text, one line per row. Read this first."
+  },
+  {
+    name: "islands",
+    description: "islands({}) -> List({position: {x, y}, target: Integer}). Every island, in reading order."
+  },
+  {
+    name: "bridges",
+    description: "bridges({}) -> List({start: {x, y}, end: {x, y}, count: Integer}). Every bridge built so far."
+  },
+  {
+    name: "connect",
+    description: "connect(start, end) -> Ok({}) | Error(BadStart({}) | BadEnd({}) | Full({})). Build a bridge. Refuses anything against the rules, so trying is safe."
+  },
+  {
+    name: "neighbours",
+    description: "neighbours(position) -> {up, down, left, right}, each Ok(island) | Error({}). The only four islands a bridge from there could reach."
+  },
+  {
+    name: "around",
+    description: "around(position) -> List(island). The same four without the directions, and without the ones that are not there."
+  },
+  {
+    name: "twos",
+    description: "twos({}) -> List(island). Islands asking for two bridge ends. A two with one neighbour has to spend both on it."
+  },
+  {
+    name: "with_target",
+    description: "with_target(n) -> List(island). Islands asking for exactly n bridge ends."
+  },
+  {
+    name: "at",
+    description: "at(position) -> Ok(island) | Error({}). The island at a position, if there is one."
+  },
+  {
+    name: "ends",
+    description: "ends(position) -> Integer. How many bridge ends already leave that island."
+  },
+  {
+    name: "remaining",
+    description: "remaining(position) -> Ok(Integer) | Error({}). Target minus ends: how many more it needs."
+  },
+  {
+    name: "unfinished",
+    description: "unfinished({}) -> List(island). Every island that still needs bridges. Empty means the counts are all met."
+  },
+  {
+    name: "undo",
+    description: "undo({}) -> True({}) | False({}). Take back the last bridge. False if there was nothing to take back."
+  },
+  {
+    name: "redo",
+    description: "redo({}) -> True({}) | False({}). Put back a bridge that was taken back."
+  },
+  {
+    name: "share",
+    description: "share(text) -> Ok({}) | Error(String). Post the result to Bluesky. Only once the board is finished."
+  },
+  {
+    name: "same",
+    description: "same(one, other) -> True({}) | False({}). Do two positions name the same cell?"
+  },
+  {
+    name: "count",
+    description: "count(items) -> Integer. How long a list is."
+  },
+  {
+    name: "is_empty",
+    description: "is_empty(items) -> True({}) | False({}). Whether a list has nothing in it."
+  }
+]
+
+{
+  readme,
+  skills,
+  picture,
+  islands,
+  bridges,
+  connect,
+  undo,
+  redo,
+  share,
+  same,
+  at,
+  ends,
+  remaining,
+  unfinished,
+  with_target,
+  twos,
+  neighbours,
+  around,
+  count,
+  is_empty
+}

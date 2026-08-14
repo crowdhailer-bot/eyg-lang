@@ -61,12 +61,8 @@ fn execute_single(
         Ok(code) ->
           case parser.all_from_string(code) {
             Ok(source) -> {
-              let Environment(scope:, ..) = ctx.environment
               let #(ctx, call) =
-                source
-                |> ir.map_annotation(fn(_) { [] })
-                |> expression.execute(scope)
-                |> loop(ctx)
+                run(ctx, ir.map_annotation(source, fn(_) { [] }))
               #(ctx, #(id, call))
             }
             Error(reason) -> #(ctx, #(id, InvalidCode(reason)))
@@ -75,6 +71,21 @@ fn execute_single(
       }
     _ -> #(ctx, #(id, UnknownTool(name)))
   }
+}
+
+/// Run a program in this environment, starting with its scope in hand.
+///
+/// This is what a tool call does once its code has been read. It is public
+/// because a model is not the only thing that runs programs: a shell over the
+/// same environment runs the tree a person has built, and wants the same
+/// answer back.
+pub fn run(
+  ctx: Context(host),
+  source: ir.Node(Meta),
+) -> #(Context(host), Call) {
+  let Environment(scope:, ..) = ctx.environment
+  expression.execute(source, scope)
+  |> loop(ctx)
 }
 
 fn cast_run(arguments) {
