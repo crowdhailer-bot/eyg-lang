@@ -11,6 +11,9 @@
 ////   every effect so nothing has to be kept in a mutable box on the side.
 //// - `handler` carries out one effect against that state.
 //// - `effects` are the names and types the model is shown.
+//// - `scope` are values every program starts with in hand, so an application
+////   can hand over a library of its own instead of making the model write one
+////   from the effects each time.
 //// - `briefing` is what the model is told about the place before the effects
 ////   are listed. This is where a context readme goes.
 ////
@@ -47,6 +50,7 @@ pub type Environment(host) {
     handler: Handler(host),
     briefing: String,
     effects: List(#(String, #(t.Type(Int), t.Type(Int)))),
+    scope: List(#(String, istate.Value(Meta))),
   )
 }
 

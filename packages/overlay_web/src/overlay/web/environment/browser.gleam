@@ -22,6 +22,7 @@ pub fn environment(origin: origin.Origin) -> Environment(Nil) {
     handler: handle,
     briefing: briefing(origin),
     effects: harness.types(harness.effects()),
+    scope: [],
   )
 }
 

@@ -61,10 +61,11 @@ fn execute_single(
         Ok(code) ->
           case parser.all_from_string(code) {
             Ok(source) -> {
+              let Environment(scope:, ..) = ctx.environment
               let #(ctx, call) =
                 source
                 |> ir.map_annotation(fn(_) { [] })
-                |> expression.execute([])
+                |> expression.execute(scope)
                 |> loop(ctx)
               #(ctx, #(id, call))
             }

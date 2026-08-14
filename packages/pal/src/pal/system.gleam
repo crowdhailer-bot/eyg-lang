@@ -97,6 +97,9 @@ pub type Effect(m) {
     value: String,
     resume: fn(Result(Nil, String)) -> Effect(m),
   )
+  /// Wait, then carry on. Polling something that answers "not yet" needs this;
+  /// without it a poll is a hot loop.
+  Sleep(milliseconds: Int, resume: fn() -> Effect(m))
   // TODO move to Follow etc but needs secure random and ability to combine effects
   // TODO browser shouldn't rely on harness but no circular dependency yet
   Spotless(
@@ -145,6 +148,8 @@ pub fn then(effect: Effect(a), func: fn(a) -> Effect(b)) -> Effect(b) {
       SetSessionStorageItem(key, value, fn(result) {
         then(resume(result), func)
       })
+    Sleep(milliseconds, resume) ->
+      Sleep(milliseconds, fn() { then(resume(), func) })
     Spotless(service, origin, resume) ->
       Spotless(service, origin, fn(x) { then(resume(x), func) })
     Visit(uri, resume) -> Visit(uri, fn(x) { then(resume(x), func) })
@@ -258,6 +263,10 @@ pub fn run(effect: Effect(m)) -> Promise(m) {
       run(resume(set_storage_item(web_storage.local(), key, value)))
     SetSessionStorageItem(key:, value:, resume:) ->
       run(resume(set_storage_item(web_storage.session(), key, value)))
+    Sleep(milliseconds:, resume:) -> {
+      use Nil <- promise.await(promise.wait(milliseconds))
+      run(resume())
+    }
     Visit(uri:, resume:) -> {
       run(resume(open(uri.to_string(uri), #(800, 400))))
     }

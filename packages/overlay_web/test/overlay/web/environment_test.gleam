@@ -43,6 +43,7 @@ fn counter() {
       #("Bump", #(t.unit, t.Integer)),
       #("Announce", #(t.unit, t.unit)),
     ],
+    scope: [#("step", v.Integer(10))],
   )
 }
 
@@ -119,6 +120,15 @@ pub fn the_application_state_carries_between_tool_calls_test() {
   let #(state, _) = state.update(state, state.LlmStreamFinished(Ok(Nil)))
   assert state.Asking([chat.ToolResultMessage("def", "2", [])]) == state.status
   assert 2 == state.environment.host
+}
+
+pub fn a_program_starts_with_the_environments_scope_in_hand_test() {
+  let #(state, _) =
+    state.update(
+      running("!int_add(step, perform Bump({}))"),
+      state.LlmStreamFinished(Ok(Nil)),
+    )
+  assert state.Asking([chat.ToolResultMessage("abc", "11", [])]) == state.status
 }
 
 pub fn a_stopped_effect_reports_its_reason_test() {

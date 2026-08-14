@@ -19,3 +19,10 @@ pub fn map_test() {
   assert system.Done(201)
     == resume(Ok(response.new(201) |> response.set_body(<<>>)))
 }
+
+pub fn sleep_carries_on_where_it_left_off_test() {
+  let assert system.Sleep(300, resume) =
+    system.Sleep(300, fn() { system.Done(1) })
+    |> system.map(int.add(_, 2))
+  assert system.Done(3) == resume()
+}
