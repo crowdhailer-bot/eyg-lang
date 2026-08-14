@@ -12,7 +12,14 @@ fn position(x, y) {
 pub fn every_game_effect_is_in_the_harness_test() {
   let names = list.map(harness.effects(), fn(i) { i.name })
   assert names
-    == ["ListIslands", "ListBridges", "AddBridge", "ShareOutcome", "Undo", "Redo"]
+    == [
+      "ListIslands",
+      "ListBridges",
+      "AddBridge",
+      "ShareOutcome",
+      "Undo",
+      "Redo",
+    ]
 }
 
 pub fn the_harness_has_no_browser_effects_test() {
@@ -46,12 +53,12 @@ pub fn add_bridge_casts_a_start_and_end_test() {
 
 pub fn add_bridge_needs_both_ends_test() {
   let lift = v.Record(dict.from_list([#("start", position(0, 1))]))
-  assert harness.cast("AddBridge", lift)
-    == Error(break.MissingField("end"))
+  assert harness.cast("AddBridge", lift) == Error(break.MissingField("end"))
 }
 
 pub fn add_bridge_needs_integer_coordinates_test() {
-  let start = v.Record(dict.from_list([#("x", v.String("0")), #("y", v.Integer(1))]))
+  let start =
+    v.Record(dict.from_list([#("x", v.String("0")), #("y", v.Integer(1))]))
   let lift =
     v.Record(dict.from_list([#("start", start), #("end", position(3, 1))]))
   assert harness.cast("AddBridge", lift)
@@ -76,10 +83,16 @@ pub fn islands_encode_position_and_target_test() {
   assert harness.islands_encode(islands)
     == v.LinkedList([
       v.Record(
-        dict.from_list([#("position", position(0, 0)), #("target", v.Integer(2))]),
+        dict.from_list([
+          #("position", position(0, 0)),
+          #("target", v.Integer(2)),
+        ]),
       ),
       v.Record(
-        dict.from_list([#("position", position(3, 0)), #("target", v.Integer(1))]),
+        dict.from_list([
+          #("position", position(3, 0)),
+          #("target", v.Integer(1)),
+        ]),
       ),
     ])
 }
@@ -126,7 +139,14 @@ pub fn the_types_are_named_for_inference_test() {
   let types = harness.types(harness.effects())
   let names = list.map(types, fn(pair) { pair.0 })
   assert names
-    == ["ListIslands", "ListBridges", "AddBridge", "ShareOutcome", "Undo", "Redo"]
+    == [
+      "ListIslands",
+      "ListBridges",
+      "AddBridge",
+      "ShareOutcome",
+      "Undo",
+      "Redo",
+    ]
 }
 
 pub fn take_selects_a_subset_of_the_harness_test() {
