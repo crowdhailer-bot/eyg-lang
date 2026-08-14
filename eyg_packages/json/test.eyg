@@ -1,57 +1,57 @@
 let {assert} = import "../aok/index.eyg"
-let json = import "./index.eyg.json"
+let {decode, encode} = import "./index.eyg"
 
-let person_decoder = json.decode.object((parsed) -> {
-  let name = json.decode.field("name", json.decode.string)(parsed)
-  let age = json.decode.field("age", json.decode.integer)(parsed)
+let person_decoder = decode.object((parsed) -> {
+  let name = decode.field("name", decode.string)(parsed)
+  let age = decode.field("age", decode.integer)(parsed)
   {name, age}
 })
 
-let nested_score_decoder = json.decode.object(
-  json.decode.field(
+let nested_score_decoder = decode.object(
+  decode.field(
     "player",
-    json.decode.object(json.decode.field("score", json.decode.integer))
+    decode.object(decode.field("score", decode.integer))
   )
 )
 
 [
   {name: "json decodes true",
-   test: (_) -> { assert.equal(json.parse("true", json.decode.boolean), Ok(True({}))) }},
+   test: (_) -> { assert.equal(decode.parse("true", decode.boolean), Ok(True({}))) }},
   {name: "json decodes false",
-   test: (_) -> { assert.equal(json.parse("false", json.decode.boolean), Ok(False({}))) }},
+   test: (_) -> { assert.equal(decode.parse("false", decode.boolean), Ok(False({}))) }},
 
   {name: "json decodes integer",
-   test: (_) -> { assert.equal(json.parse("42", json.decode.integer), Ok(42)) }},
+   test: (_) -> { assert.equal(decode.parse("42", decode.integer), Ok(42)) }},
   {name: "json decodes negative integer",
-   test: (_) -> { assert.equal(json.parse("-7", json.decode.integer), Ok(-7)) }},
+   test: (_) -> { assert.equal(decode.parse("-7", decode.integer), Ok(-7)) }},
 
   {name: "json decodes string",
-   test: (_) -> { assert.equal(json.parse("\"hello\"", json.decode.string), Ok("hello")) }},
+   test: (_) -> { assert.equal(decode.parse("\"hello\"", decode.string), Ok("hello")) }},
   {name: "json decodes escaped string",
-   test: (_) -> { assert.equal(json.parse("\"line\\nbreak\"", json.decode.string), Ok("line\nbreak")) }},
+   test: (_) -> { assert.equal(decode.parse("\"line\\nbreak\"", decode.string), Ok("line\nbreak")) }},
 
   // u-escapes per RFC 8259 section 7. lobste.rs HTML-escapes description fields this way.
   // Expected strings stay ASCII because the EYG lexer panics on non-ASCII
   // bytes in source (see notes/lobsters-and-json.md). Cross-plane decoding
   // is covered by the Gleam-side tests in packages/julienne.
   // {name: "decodes ascii unicode escape",
-  //   test: (_) -> { assert.equal(Ok("<p>"), json.parse("\"\\u003cp\\u003e\"", json.decode.string)) }},
+  //   test: (_) -> { assert.equal(Ok("<p>"), decode.parse("\"\\u003cp\\u003e\"", decode.string)) }},
   // {name: "decodes consecutive unicode escapes",
-  //   test: (_) -> { assert.equal(Ok("<<>>"), json.parse("\"\\u003c\\u003c\\u003e\\u003e\"", json.decode.string)) }},
+  //   test: (_) -> { assert.equal(Ok("<<>>"), decode.parse("\"\\u003c\\u003c\\u003e\\u003e\"", decode.string)) }},
   {name: "rejects lone high surrogate",
-    test: (_) -> {assert.error(json.parse("\"\\uD834\"", json.decode.string)) }},
+    test: (_) -> {assert.error(decode.parse("\"\\uD834\"", decode.string)) }},
   {name: "rejects bad hex digits in unicode escape",
-    test: (_) -> {assert.error(json.parse("\"\\u00ZZ\"", json.decode.string)) }},
+    test: (_) -> {assert.error(decode.parse("\"\\u00ZZ\"", decode.string)) }},
 
   {name: "json decodes empty list",
-   test: (_) -> { assert.equal(json.parse("[]", json.decode.list(json.decode.integer)), Ok([])) }},
+   test: (_) -> { assert.equal(decode.parse("[]", decode.list(decode.integer)), Ok([])) }},
   {name: "json decodes list in source order",
-   test: (_) -> { assert.equal(json.parse("[1,2,3]", json.decode.list(json.decode.integer)), Ok([1, 2, 3])) }},
+   test: (_) -> { assert.equal(decode.parse("[1,2,3]", decode.list(decode.integer)), Ok([1, 2, 3])) }},
   {name: "json decodes string list in source order",
-   test: (_) -> { assert.equal(json.parse("[\"a\",\"b\",\"c\"]", json.decode.list(json.decode.string)), Ok(["a", "b", "c"])) }},
+   test: (_) -> { assert.equal(decode.parse("[\"a\",\"b\",\"c\"]", decode.list(decode.string)), Ok(["a", "b", "c"])) }},
   {name: "json decodes nested lists",
    test: (_) -> { assert.equal(
-     json.parse("[[1,2],[3,4]]", json.decode.list(json.decode.list(json.decode.integer))),
+     decode.parse("[[1,2],[3,4]]", decode.list(decode.list(decode.integer))),
      Ok([[1, 2], [3, 4]])
    ) }},
 
@@ -59,25 +59,76 @@ let nested_score_decoder = json.decode.object(
 
   {name: "json decodes object field",
    test: (_) -> { assert.equal(
-     json.parse("{\"name\":\"Ada\"}", json.decode.object(json.decode.field("name", json.decode.string))),
+     decode.parse("{\"name\":\"Ada\"}", decode.object(decode.field("name", decode.string))),
      Ok("Ada")
    ) }},
   {name: "json decodes multiple object fields",
    test: (_) -> { assert.equal(
-     json.parse("{\"name\":\"Ada\",\"age\":36}", person_decoder),
+     decode.parse("{\"name\":\"Ada\",\"age\":36}", person_decoder),
      Ok({name: "Ada", age: 36})
    ) }},
   {name: "json decodes nested object field",
    test: (_) -> { assert.equal(
-     json.parse("{\"player\":{\"score\":99}}", nested_score_decoder),
+     decode.parse("{\"player\":{\"score\":99}}", nested_score_decoder),
      Ok(99)
    ) }},
   {name: "json decodes list of objects in source order",
    test: (_) -> { assert.equal(
-     json.parse("[{\"id\":1},{\"id\":2}]", json.decode.list(json.decode.object(json.decode.field("id", json.decode.integer)))),
+     decode.parse("[{\"id\":1},{\"id\":2}]", decode.list(decode.object(decode.field("id", decode.integer)))),
      Ok([1, 2])
    ) }},
 
   {name: "json returns Error for invalid input",
-   test: (_) -> { assert.error(json.parse("not json", json.decode.boolean)) }},
+   test: (_) -> { assert.error(decode.parse("not json", decode.boolean)) }},
+
+  {name: "json expect returns the decoded value",
+   test: (_) -> { assert.equal(decode.expect(decode.parse("1", decode.integer), "not a number"), 1) }},
+
+  // encoding
+
+  {name: "json encodes a string",
+   test: (_) -> { assert.equal(encode.string("Ada"), "\"Ada\"") }},
+  {name: "json escapes a quote in a string",
+   test: (_) -> { assert.equal(encode.string("say \"hi\""), "\"say \\\"hi\\\"\"") }},
+  {name: "json escapes a backslash before the escapes it adds",
+   test: (_) -> { assert.equal(encode.string("a\\b"), "\"a\\\\b\"") }},
+  {name: "json escapes a newline",
+   test: (_) -> { assert.equal(encode.string("one\ntwo"), "\"one\\ntwo\"") }},
+  {name: "json encodes an integer",
+   test: (_) -> { assert.equal(encode.integer(36), "36") }},
+  {name: "json encodes a negative integer",
+   test: (_) -> { assert.equal(encode.integer(-7), "-7") }},
+  {name: "json encodes booleans",
+   test: (_) -> { assert.equal(encode.boolean(True({})), "true") }},
+  {name: "json encodes null",
+   test: (_) -> { assert.equal(encode.null({}), "null") }},
+  {name: "json encodes an empty array",
+   test: (_) -> { assert.equal(encode.array([]), "[]") }},
+  {name: "json encodes an array in order",
+   test: (_) -> { assert.equal(encode.array([encode.integer(1), encode.integer(2)]), "[1,2]") }},
+  {name: "json encodes an empty object",
+   test: (_) -> { assert.equal(encode.object([]), "{}") }},
+  {name: "json encodes an object in order",
+   test: (_) -> { assert.equal(
+     encode.object([encode.field("name", encode.string("Ada")), encode.field("age", encode.integer(36))]),
+     "{\"name\":\"Ada\",\"age\":36}"
+   ) }},
+
+  // what is encoded can be read back
+
+  {name: "json round trips a string with escapes",
+   test: (_) -> { assert.equal(decode.parse(encode.string("line\nbreak"), decode.string), Ok("line\nbreak")) }},
+  {name: "json round trips an object",
+   test: (_) -> { assert.equal(
+     decode.parse(
+       encode.object([encode.field("name", encode.string("Ada")), encode.field("age", encode.integer(36))]),
+       person_decoder
+     ),
+     Ok({name: "Ada", age: 36})
+   ) }},
+  {name: "json round trips a list of integers",
+   test: (_) -> { assert.equal(
+     decode.parse(encode.array([encode.integer(1), encode.integer(2)]), decode.list(decode.integer)),
+     Ok([1, 2])
+   ) }},
 ]
