@@ -1,0 +1,81 @@
+// RFC 4648 base32, uppercase with `=` padding.
+//
+// The hub carries a signature in an `authorization: Signature <base32>` header
+// and this is the encoding it expects, the same one `multiformats/base32`
+// produces. EYG has no shift or modulo builtins so the bit buffer is kept as an
+// integer and divided.
+
+let list = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.list
+let string = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.string
+
+let expect = (result, reason) -> {
+  match result {
+    Ok(value) -> { value }
+    Error(_) -> { !never(perform Abort(reason)) }
+  }
+}
+
+let divide = (a, b) -> { expect(!int_divide(a, b), "divided by zero") }
+
+let power_of_two = (n) -> {
+  !fix((self, n, acc) -> {
+    match !int_compare(n, 0) {
+      Gt(_) -> { self(!int_subtract(n, 1), !int_multiply(acc, 2)) }
+      | (_) -> { acc }
+    }
+  })(n, 1)
+}
+
+// A-Z is 0 to 25, then 2-7 is 26 to 31.
+let symbol = (n) -> {
+  let code = match !int_compare(n, 25) {
+    Gt(_) -> { !int_add(n, 24) }
+    | (_) -> { !int_add(n, 65) }
+  }
+  expect(!string_from_binary(!binary_from_integers([code])), "not a symbol")
+}
+
+// Take every whole group of five bits out of the buffer.
+let drain = !fix((self, bits, count, out) -> {
+  match !int_compare(count, 5) {
+    Lt(_) -> { {bits, count, out} }
+    | (_) -> {
+      let remaining = !int_subtract(count, 5)
+      let size = power_of_two(remaining)
+      let index = divide(bits, size)
+      let bits = !int_subtract(bits, !int_multiply(index, size))
+      self(bits, remaining, [symbol(index), ..out])
+    }
+  }
+})
+
+let encode = (binary) -> {
+  let {bits, count, out} = !binary_fold(binary, {bits: 0, count: 0, out: []}, (byte, acc) -> {
+    let bits = !int_add(!int_multiply(acc.bits, 256), byte)
+    drain(bits, !int_add(acc.count, 8), acc.out)
+  })
+  // whatever is left is padded out to a whole symbol
+  let out = match !int_compare(count, 0) {
+    Gt(_) -> {
+      let index = !int_multiply(bits, power_of_two(!int_subtract(5, count)))
+      [symbol(index), ..out]
+    }
+    | (_) -> { out }
+  }
+  let symbols = list.reverse(out)
+  let length = list.length(symbols)
+  let over = !int_subtract(length, !int_multiply(divide(length, 8), 8))
+  let padding = match !int_compare(over, 0) {
+    Gt(_) -> { !int_subtract(8, over) }
+    | (_) -> { 0 }
+  }
+  let padded = !fix((self, n, acc) -> {
+    match !int_compare(n, 0) {
+      Gt(_) -> { self(!int_subtract(n, 1), ["=", ..acc]) }
+      | (_) -> { acc }
+    }
+  })(padding, [])
+  string.concat(list.append(symbols, padded))
+}
+
+{encode}

@@ -1,0 +1,137 @@
+let {assert} = import "../aok/index.eyg"
+let sl = import "./index.eyg"
+let list = @standard.list
+
+// Answer the Fetch effect from the test, so nothing here touches the network.
+let serve = (answer, run) -> {
+  handle Fetch((request, resume) -> { resume(answer(request)) }, run)
+}
+
+let json_response = (status, body) -> {
+  Ok({status, headers: [], body: !string_to_binary(body)})
+}
+
+let board_body = "{\"departures\":[
+  {\"destination\":\"Sickla udde\",\"direction_code\":1,\"direction\":\"Sickla udde\",
+   \"state\":\"EXPECTED\",\"display\":\"3 min\",
+   \"scheduled\":\"2026-08-13T15:32:00\",\"expected\":\"2026-08-13T15:32:00\",
+   \"line\":{\"id\":74,\"designation\":\"74\",\"transport_mode\":\"BUS\"}},
+  {\"destination\":\"Ruddammen\",\"direction_code\":1,\"direction\":\"Ruddammen\",
+   \"state\":\"EXPECTED\",\"display\":\"Nu\",
+   \"scheduled\":\"2026-08-13T15:29:00\",\"expected\":\"2026-08-13T15:29:00\",
+   \"line\":{\"id\":61,\"designation\":\"61\",\"transport_mode\":\"BUS\"}}
+]}"
+
+let sites_body = "[
+  {\"id\":9192,\"name\":\"Slussen\"},
+  {\"id\":1251,\"name\":\"Moa Martinsons torg\"},
+  {\"id\":9194,\"name\":\"Slussen/Stadsgarden\"}
+]"
+
+[
+  {name: "trafiklab buses reads a departure board",
+   test: (_) -> {
+     let found = serve((_) -> { json_response(200, board_body) }, (_) -> {
+       sl.buses({site: sl.moa_martinsons_torg, forecast: 60})
+     })
+     let lines = list.map(assert.ok(found), ({line}) -> { line })
+     assert.equal(lines, ["74", "61"])
+   }},
+
+  {name: "trafiklab buses reads every field of a departure",
+   test: (_) -> {
+     let found = serve((_) -> { json_response(200, board_body) }, (_) -> {
+       sl.buses({site: 1251, forecast: 60})
+     })
+     let {head} = assert.ok(!list_pop(assert.ok(found)))
+     let _ = assert.equal_string(head.destination, "Sickla udde")
+     let _ = assert.equal_string(head.direction, "Sickla udde")
+     let _ = assert.equal_string(head.display, "3 min")
+     let _ = assert.equal_string(head.scheduled, "2026-08-13T15:32:00")
+     let _ = assert.equal_string(head.expected, "2026-08-13T15:32:00")
+     let _ = assert.equal_string(head.line, "74")
+     assert.equal_string(head.transport, "BUS")
+   }},
+
+  {name: "trafiklab buses asks the API for buses only",
+   test: (_) -> {
+     let found = serve(({path, query}) -> {
+       match !equal(path, "/v1/sites/1251/departures") {
+         True(_) -> {
+           match query {
+             Some(q) -> {
+               match !equal(q, "transport=BUS&forecast=60") {
+                 True(_) -> { json_response(200, board_body) }
+                 False(_) -> { json_response(400, "{}") }
+               }
+             }
+             None(_) -> { json_response(400, "{}") }
+           }
+         }
+         False(_) -> { json_response(404, "{}") }
+       }
+     }, (_) -> { sl.buses({site: sl.moa_martinsons_torg, forecast: 60}) })
+     assert.equal(@standard.list.length(assert.ok(found)), 2)
+   }},
+
+  {name: "trafiklab departures does not filter by mode",
+   test: (_) -> {
+     let found = serve(({query}) -> {
+       match query {
+         Some(q) -> {
+           match !equal(q, "forecast=30") {
+             True(_) -> { json_response(200, board_body) }
+             False(_) -> { json_response(400, "{}") }
+           }
+         }
+         None(_) -> { json_response(400, "{}") }
+       }
+     }, (_) -> { sl.departures({site: 1251, forecast: 30}) })
+     assert.equal(@standard.list.length(assert.ok(found)), 2)
+   }},
+
+  {name: "trafiklab sites finds stops whose name starts with the search",
+   test: (_) -> {
+     let found = serve((_) -> { json_response(200, sites_body) }, (_) -> {
+       sl.sites({name: "slussen"})
+     })
+     let names = list.map(assert.ok(found), ({name}) -> { name })
+     assert.equal(names, ["Slussen", "Slussen/Stadsgarden"])
+   }},
+
+  {name: "trafiklab reports a failed status with the path",
+   test: (_) -> {
+     let found = serve((_) -> { json_response(503, "") }, (_) -> {
+       sl.buses({site: 1251, forecast: 60})
+     })
+     assert.equal_string(
+       assert.error(found),
+       "SL returned HTTP 503 for /v1/sites/1251/departures"
+     )
+   }},
+
+  {name: "trafiklab passes a network failure through",
+   test: (_) -> {
+     let found = serve((_) -> { Error("network error") }, (_) -> {
+       sl.buses({site: 1251, forecast: 60})
+     })
+     assert.equal_string(assert.error(found), "network error")
+   }},
+
+  {name: "trafiklab describes every field it exposes",
+   test: (_) -> {
+     let names = list.map(sl.skills, ({name}) -> { name })
+     assert.equal(names, [
+       "buses",
+       "departures",
+       "sites",
+       "moa_martinsons_torg",
+       "eyvind_johnsons_gata"
+     ])
+   }},
+
+  {name: "trafiklab readme opens with the workspace name",
+   test: (_) -> {
+     assert.true(!string_starts_with(sl.readme, "# Buses in Stockholm"))
+   }}
+]

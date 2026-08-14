@@ -1,0 +1,110 @@
+let {assert} = import "../aok/index.eyg"
+let publishing = import "./index.eyg"
+let list = @standard.list
+let string = @standard.string
+let to_string = @standard.integer.to_string
+
+let serve = (answer, run) -> {
+  handle Fetch((request, resume) -> { resume(answer(request)) }, run)
+}
+
+let response = (status, body) -> {
+  Ok({status, headers: [], body: !string_to_binary(body)})
+}
+
+let escaped = (json) -> { !string_replace(json, "\"", "\\\"") }
+
+let entry = (chain, cid, sequence, payload) -> {
+  string.concat([
+    "{\"entity\":{\"/\":\"",
+    chain,
+    "\"},\"cid\":{\"/\":\"",
+    cid,
+    "\"},\"sequence\":",
+    to_string(sequence),
+    ",\"payload\":\"",
+    escaped(payload),
+    "\"}"
+  ])
+}
+
+// The signatory is inside the payload, the entity of the entry is the chain.
+let release = (chain, cid, sequence, signatory, package, version, module) -> {
+  entry(chain, cid, sequence, string.concat([
+    "{\"type\":\"release\",\"signatory\":{\"/\":\"",
+    signatory,
+    "\"},\"content\":{\"module\":{\"/\":\"",
+    module,
+    "\"},\"package\":\"",
+    package,
+    "\",\"version\":",
+    to_string(version),
+    "}}"
+  ]))
+}
+
+let ledger = (entries) -> {
+  string.concat(["{\"entries\":[", string.join(entries, ","), "]}"])
+}
+
+let packages_ledger = ledger([
+  release("chain1", "chain1", 1, "sigA", "publishing", 1, "bafypub1"),
+  release("chain1", "cid2", 2, "sigB", "other", 2, "bafyother2"),
+  release("chain1", "cid3", 3, "sigA", "publishing", 3, "bafypub3")
+])
+
+let both = (request) -> {
+  match !equal(request.path, "/packages/pull") {
+    True(_) -> { response(200, packages_ledger) }
+    False(_) -> { response(404, "{}") }
+  }
+}
+
+[
+  {name: "publishing knows the released version of itself",
+   test: (_) -> {
+     let found = serve(both, (_) -> { publishing.self({}) })
+     let me = assert.ok(found)
+     let _ = assert.equal_string(me.package, "publishing")
+     let _ = assert.equal(me.version, 3)
+     let _ = assert.equal_string(me.module, "bafypub3")
+     assert.true(me.published)
+   }},
+
+  {name: "publishing reports itself as unpublished when it has no releases",
+   test: (_) -> {
+     let found = serve((_) -> { response(200, ledger([])) }, (_) -> {
+       publishing.self({})
+     })
+     let me = assert.ok(found)
+     let _ = assert.equal(me.version, 0)
+     assert.false(me.published)
+   }},
+
+  {name: "publishing describes every field it exposes",
+   test: (_) -> {
+     let described = list.map(publishing.skills, ({name}) -> { name })
+     assert.equal(described, [
+       "self",
+       "releases",
+       "signatories",
+       "next",
+       "publish",
+       "owner",
+       "entry",
+       "publishers"
+     ])
+   }},
+
+  {name: "publishing readme says permission cannot be read from the hub",
+   test: (_) -> {
+     let has = (text) -> {
+       match !string_split_once(publishing.readme, text) {
+         Ok(_) -> { True({}) }
+         Error(_) -> { False({}) }
+       }
+     }
+     let _ = assert.true(has("`publishers` is\nhistory, `owner` is permission"))
+     assert.true(has("check\nthat first and tell the user to ask for the name"))
+   }}
+]

@@ -9,11 +9,14 @@ let expect = (result, message) -> {
   }
 }
 
-// Two-arg shim around @standard.list.reverse: call sites pass an
-// initial accumulator (always `[]` in this package), so the explicit
-// form keeps the call sites unchanged.
+// Pinned so a release of this package always reads the same standard library.
+let std_list = @standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja.list
+
+// Two-arg shim around std_list.reverse: call sites pass an initial accumulator
+// (always `[]` in this package), so the explicit form keeps the call sites
+// unchanged.
 let reverse = (items, acc) -> {
-  @standard.list.append(@standard.list.reverse(items), acc)
+  std_list.append(std_list.reverse(items), acc)
 }
 
 let take = (parsed) -> {
@@ -184,21 +187,23 @@ let parse = (json, decoder) -> {
   parse_bytes(!string_to_binary(json), decoder)
 }
 
+// Everything for reading JSON is in `decode`, everything for writing it is in
+// `encode`, so `let {encode, decode} = @json` is all a caller needs.
 let decode = {
   boolean,
   integer,
   string,
   list,
   field,
-  object
+  object,
+  parse,
+  parse_bytes,
+  expect
 }
 
 let encode = import "./encode.eyg"
 
 {
-  parse,
-  parse_bytes,
-  expect,
   decode,
   encode
 }
