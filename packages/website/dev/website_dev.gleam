@@ -17,6 +17,7 @@ import simplifile
 import snag
 import website/routes/documentation
 import website/routes/editor
+import website/routes/embedded
 import website/routes/guides
 import website/routes/home
 import website/routes/llms
@@ -67,10 +68,22 @@ fn build() {
 fn routes() {
   let assert Ok(share) = simplifile.read_bits("src/website/share.png")
   let assert Ok(pea) = simplifile.read_bits("src/website/images/pea.webp")
+  // The recordings the embedded runtime page is built around. They are made by
+  // the demonstration itself, so they live with it.
+  let assert Ok(shell_video) = simplifile.read_bits("../hashi/media/shell.webm")
+  let assert Ok(agent_video) = simplifile.read_bits("../hashi/media/agent.webm")
+  let assert Ok(shell_still) =
+    simplifile.read_bits("../hashi/media/shell-solved.png")
+  let assert Ok(agent_still) =
+    simplifile.read_bits("../hashi/media/agent-solved.png")
 
   Route(index: route.Page(home.page()), items: [
     #("llms.txt", Route(route.Static(<<llms.content():utf8>>), [])),
     #("share.png", Route(route.Static(share), [])),
+    #("hashi-shell.webm", Route(route.Static(shell_video), [])),
+    #("hashi-agent.webm", Route(route.Static(agent_video), [])),
+    #("hashi-shell.png", Route(route.Static(shell_still), [])),
+    #("hashi-agent.png", Route(route.Static(agent_still), [])),
     // Keep for old emails
     #("pea.webp", Route(route.Static(pea), [])),
     #(
@@ -80,6 +93,7 @@ fn routes() {
     // This old editor was a shell only
     #("shell", Route(index: route.Page(editor.page()), items: [])),
     #("editor", Route(index: route.Page(workspace.page()), items: [])),
+    #("embedded", Route(index: route.Page(embedded.page()), items: [])),
     #("guides", guides.route()),
     #("news", news.route()),
     #("roadmap", Route(index: route.Page(roadmap.page()), items: [])),
