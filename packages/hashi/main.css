@@ -35,6 +35,9 @@ body {
 .layout {
   display: grid;
   grid-template-columns: minmax(360px, 30rem) minmax(0, 1fr);
+  /* The row is held to the window rather than grown by the panel, so a long
+     conversation scrolls inside the panel and never pushes the board off. */
+  grid-template-rows: minmax(0, 1fr);
   block-size: 100vh;
 }
 
@@ -46,6 +49,8 @@ body {
   background-color: var(--panel-colour);
   border-inline-end: var(--s-4) solid var(--bridge-colour);
   min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
 }
 
 .rail {
@@ -233,17 +238,22 @@ body {
   color: var(--shell-dim);
 }
 
+/* The conversation is built newest first, so it is laid out bottom up. That
+   also keeps the newest message in view without scrolling anything. */
 .messages {
   flex: 1 1 auto;
   overflow-y: auto;
   overscroll-behavior-y: contain;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: var(--s-2);
   padding-inline-end: var(--s-3);
 }
 
 .message {
+  /* A message keeps its own height. Without this the flex column squashes
+     every one of them to fit, and a folded program loses its top and bottom. */
+  flex: 0 0 auto;
   padding: var(--s-2);
   border-radius: var(--s-2);
   overflow-wrap: anywhere;
@@ -269,10 +279,17 @@ body {
 .message.tool-result {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--s-1);
+  line-height: 1.6;
   background-color: white;
   border: 1px solid var(--panel-edge);
   cursor: pointer;
   overflow-x: auto;
+}
+
+/* A folded program is one line of it, and the line has to have room to be a
+   line: `overflow: hidden` on a `pre` cuts the top and bottom off otherwise. */
+.message.code pre {
+  line-height: 1.6;
 }
 
 .message.tool-result {

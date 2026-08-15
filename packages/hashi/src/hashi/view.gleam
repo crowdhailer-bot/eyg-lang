@@ -253,7 +253,7 @@ fn bindings() {
     #("arrows", "move about the program"),
     #("space", "jump to the next hole"),
     #("a", "select more"),
-    #("enter", "run it"),
+    #("ctrl+enter", "run it"),
     #("s", "a string"),
     #("n", "a number"),
     #("v", "a variable"),
