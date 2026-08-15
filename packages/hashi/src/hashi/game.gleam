@@ -12,7 +12,9 @@
 
 import frontend/hashi_grid
 import gleam/dict
+import gleam/dynamic/decode
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/order.{type Order}
 import gleam/result
@@ -57,7 +59,32 @@ pub fn islands(game: Game) -> List(harness.Island) {
 pub fn bridges(game: Game) -> List(harness.Bridge) {
   let Game(grid:, ..) = game
   let hashi_grid.Solution(connections:, ..) = hashi_grid.current_solution(grid)
+  listed(connections)
+}
 
+/// The bridges the puzzle was built from: the answer.
+///
+/// The game never shows this to a player. It is here so a demonstration can be
+/// scripted, and so a test can solve a generated board through the same effects
+/// a program would.
+///
+/// The original project keeps a puzzle's own connections to itself, but writes
+/// them out when it serialises one, and hands back a decoder for them. So this
+/// asks the puzzle to describe itself and reads the answer out of that, rather
+/// than reaching inside it.
+pub fn solution(game: Game) -> List(harness.Bridge) {
+  let Game(puzzle:, ..) = game
+  let assert Ok(connections) =
+    json.parse(
+      json.to_string(hashi.to_json(puzzle)),
+      decode.field("connections", hashi.connections_decoder(), decode.success),
+    )
+  listed(connections)
+}
+
+/// The grid keeps a connection from either end; each bridge is reported once,
+/// from whichever of its two islands comes first, in reading order.
+fn listed(connections) -> List(harness.Bridge) {
   {
     use #(start, connections) <- list.flat_map(dict.to_list(connections))
     use #(end, bridge) <- list.filter_map(dict.to_list(connections))

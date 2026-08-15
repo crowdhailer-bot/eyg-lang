@@ -136,19 +136,13 @@ fn shell_panel(model: State) {
       [a.class("shell-history")],
       list.reverse(list.index_map(history, previous)),
     ),
-    h.div(
-      [
-        a.class("shell-editor"),
-        a.attribute("tabindex", "0"),
-        a.autofocus(True),
-        event.on("keydown", key_decoder()),
-      ],
-      [
-        projection_ui.code(buffer.projection, buffer.analysis, fn(path) {
-          state.ShellMessage(shell.UserClickedCode(path))
-        }),
-      ],
-    ),
+    // Keys are listened for on the page, not here: a prompt takes the focus
+    // while a name is being typed and the shell has nothing to give it back to.
+    h.div([a.class("shell-editor")], [
+      projection_ui.code(buffer.projection, buffer.analysis, fn(path) {
+        state.ShellMessage(shell.UserClickedCode(path))
+      }),
+    ]),
     prompt(mode),
     h.div([a.class("shell-actions")], [
       h.button(
@@ -228,11 +222,6 @@ fn writing_prompt(label: String, value: String) {
       event.on("keydown", prompt_key_decoder()),
     ]),
   ])
-}
-
-fn key_decoder() {
-  use key <- decode.field("key", decode.string)
-  decode.success(state.ShellMessage(shell.UserPressedKey(key)))
 }
 
 fn prompt_key_decoder() {

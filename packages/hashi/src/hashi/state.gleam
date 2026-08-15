@@ -108,6 +108,12 @@ pub type Message {
   /// A program the shell ran was waiting on the platform, and the platform is
   /// done.
   ShellEffectHandled(task_id: Int, value: istate.Value(tools.Meta))
+  /// A key pressed anywhere on the page.
+  ///
+  /// The shell is driven by keys and has no text box to type them into, so
+  /// there is nothing to keep focused; a name typed into a prompt would
+  /// otherwise leave the keys stranded once the prompt closed.
+  UserPressedKey(String)
   /// The board is drawn but not played with. Every pointer event it produces
   /// arrives here and is dropped.
   Ignore
@@ -140,6 +146,14 @@ pub fn update(
         tools.effect_handled(ctx, state.running, task_id, value)
       settle(state, ctx, running)
     }
+
+    // Only the shell is written with keys. While the agent is showing they
+    // belong to whatever the person is typing to it.
+    UserPressedKey(key) ->
+      case state.panel {
+        Shell -> update(state, ShellMessage(shell.UserPressedKey(key)))
+        Agent -> #(state, [])
+      }
 
     Ignore -> #(state, [])
   }

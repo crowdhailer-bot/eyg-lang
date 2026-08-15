@@ -1,6 +1,9 @@
+import gleam/int
+import gleam/list
 import gleam/set
 import hashi/game
 import hashi/harness
+import hashi/state
 import shared/hashi
 
 /// Two islands, four cells apart on a single row, joined by one bridge.
@@ -190,4 +193,36 @@ pub fn a_new_bridge_after_an_undo_drops_the_redo_test() {
   assert !moved
   assert game.bridges(game)
     == [harness.Bridge(start: #(0, 0), end: #(0, 2), count: 1)]
+}
+
+pub fn the_answer_is_the_bridges_the_puzzle_was_built_from_test() {
+  assert game.solution(square())
+    == [
+      harness.Bridge(start: #(0, 0), end: #(2, 0), count: 1),
+      harness.Bridge(start: #(0, 0), end: #(0, 2), count: 1),
+      harness.Bridge(start: #(2, 0), end: #(2, 2), count: 1),
+      harness.Bridge(start: #(0, 2), end: #(2, 2), count: 1),
+    ]
+}
+
+/// A generated board can be finished through the same `AddBridge` a program
+/// performs, which is the only claim that matters: the harness is enough to
+/// play the game with.
+pub fn a_generated_board_can_be_solved_through_the_effects_test() {
+  use day <- list.each([19_950, 19_951, 19_952, 19_953, 19_954])
+  let board = game.new(state.daily(day))
+  assert !game.is_complete(board)
+
+  let solved =
+    list.fold(game.solution(board), board, fn(board, bridge) {
+      let harness.Bridge(start:, end:, count:) = bridge
+      // A double bridge is the same move made twice.
+      use board, _ <- int.range(from: 0, to: count, with: board)
+      let #(board, outcome) = game.add_bridge(board, start, end)
+      assert Ok(Nil) == outcome
+      board
+    })
+
+  assert game.solution(board) == game.bridges(solved)
+  assert game.is_complete(solved)
 }

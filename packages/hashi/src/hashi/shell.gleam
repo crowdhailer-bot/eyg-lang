@@ -13,6 +13,7 @@
 //// run.
 
 import eyg/analysis/inference/levels_j/contextual as infer
+import eyg/analysis/type_/binding
 import eyg/analysis/type_/binding/debug as t_debug
 import eyg/analysis/type_/isomorphic as t
 import gleam/int
@@ -150,7 +151,7 @@ pub fn update(
         // Nothing typed yet, or not a number. Leave it be rather than guess.
         Error(Nil) -> #(shell, Nothing)
       }
-    UserSubmittedInput, Command -> #(shell, Run)
+    UserSubmittedInput, Command -> #(shell, Nothing)
 
     UserDismissedInput, _ -> #(Shell(..shell, mode: Command), Nothing)
 
@@ -175,7 +176,9 @@ fn command(shell: Shell, key: String, context: infer.Context) {
   let Shell(buffer: b, ..) = shell
   case key {
     "?" -> #(Shell(..shell, help: !shell.help), Nothing)
-    "Enter" -> #(shell, Run)
+    // `Enter` finishes typing a name and belongs to whatever prompt is open;
+    // running is the modified one, the way a notebook runs a cell.
+    "Mod+Enter" -> #(shell, Run)
 
     // moving about
     "ArrowRight" -> moved(shell, buffer.next(b))
@@ -249,10 +252,15 @@ fn writing(shell: Shell, result) {
   }
 }
 
+/// A number is typed from nothing rather than edited.
+///
+/// A fresh hole starts at zero, so showing what is there would mean typing 3
+/// and getting 30. The number that is there is still on the screen, in the
+/// program behind the prompt.
 fn numbering(shell: Shell, result) {
   case result {
-    Ok(#(value, rebuild)) -> #(
-      Shell(..shell, mode: Numbering(value: int.to_string(value), rebuild:)),
+    Ok(#(_existing, rebuild)) -> #(
+      Shell(..shell, mode: Numbering(value: "", rebuild:)),
       Nothing,
     )
     Error(Nil) -> #(shell, Nothing)
@@ -313,9 +321,17 @@ fn extended(shell: Shell, result, context) {
 
 /// A picker wants a name and something to say about it. Where the something is
 /// a type this is the whole point of having written the program as a tree.
-fn variables(b) {
+fn variables(b: buffer.Buffer) {
+  let infer.Analysis(bindings, _, _) = b.analysis
   case buffer.target_scope(b) {
-    Ok(scope) -> list.map(scope, fn(entry) { #(entry.0, "") })
+    Ok(scope) ->
+      list.map(scope, fn(entry) {
+        let #(name, poly) = entry
+        // A name in scope has a general type; the picker wants one reading of
+        // it, which is what instantiating gives.
+        let #(mono, _) = binding.instantiate(poly, 1, bindings)
+        #(name, t_debug.mono(mono))
+      })
     Error(_) -> []
   }
 }
