@@ -60,15 +60,53 @@ The application should run in vite the same as overlay_public
 
 Write any tasks discovered during development into the list below
 
-- [ ] setup vite project
-- [ ] clone hashi project to neighbor directory
-- [ ] Write the harness
-- [ ] Render the game board on the page and connect the harness implementation to game state
-- [ ] Write a side bar with structural shell that has the harness effects when run
-- [ ] Write the toggle and agent implementation build on overlay_web compontents.
-- [ ] Take screenshots and ensure the styling is top quality and matches the original hashi style
-- [ ] mock responses from the agent to test running a whole game as an agent.
-- [ ] record shell video
-- [ ] record agent video
-- [ ] write tutorial
-- [ ] write promotion page.
+- [x] setup vite project
+- [x] clone hashi project to neighbor directory
+- [x] Write the harness
+- [x] Render the game board on the page and connect the harness implementation to game state
+- [x] Write a side bar with structural shell that has the harness effects when run
+- [x] Write the toggle and agent implementation build on overlay_web compontents.
+- [x] Take screenshots and ensure the styling is top quality and matches the original hashi style
+- [x] mock responses from the agent to test running a whole game as an agent.
+- [x] record shell video
+- [x] record agent video
+- [x] write tutorial — `guides/embedding_a_runtime.md`, published at /guides/building-an-embedded-runtime
+- [x] write promotion page — `packages/website/src/website/routes/embedded.gleam`, at /embedded
+
+### Discovered while building it
+
+- [x] Give overlay an `Environment` so it can be embedded in something that is
+      not a browser: the host state, a handler, the effects and the briefing.
+- [x] Put the scope in the environment, so a host can hand over a library
+      instead of making the model rebuild one out of raw effects.
+- [x] Move the provider picker, the chat input and the drawn conversation out of
+      `overlay_public` and into `overlay_web`, where another application can
+      reach them. Same for `ui.code` into `morph/lustre/projection`.
+- [x] `system.Sleep`, without which polling something that answers "not yet" is
+      a hot loop.
+- [x] A `browser` skill in the parent repo saying how this repo drives a
+      browser, and why that is the one exception to the EYG-only rule.
+
+Bugs found on the way, all fixed:
+
+- [x] An effect that finished immediately returned its value as the answer of
+      the whole program, throwing away everything after it. `perform Print(..)`
+      followed by anything lost the anything.
+- [x] The effect list in overlay's system prompt was written with an unclosed
+      bracket.
+- [x] The workspace readme was teaching `Error(BadStart(_))`, which EYG does not
+      have — match takes apart one tag at a time.
+
+### Still open
+
+- [ ] spotless.run has no `bluesky` party, so `ShareOutcome` answers 404 today.
+      The whole device-code flow is written and tested against the shape
+      spotless already has. atproto wants DPoP-bound tokens, so adding the party
+      is a piece of work in the spotless server rather than here. See
+      `packages/hashi/notes.md`.
+- [ ] `morph`'s picker decides with the value it was last rendered with, so
+      typing a name and pressing enter in the same frame loses the last
+      character.
+- [ ] The change the demonstration needs in giacomocavalieri/hashi lives on a
+      local branch of the clone and is not sent upstream: that project asks that
+      LLM tools are not used to write issues or pull requests to it.
