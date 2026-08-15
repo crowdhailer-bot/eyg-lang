@@ -207,20 +207,12 @@ fn prompt(mode: shell.Mode) {
         picker.render(chosen)
         |> element.map(fn(message) {
           state.ShellMessage(case message {
-            picker.Updated(picker: updated) ->
-              shell.UserWroteInput(current_filter(updated))
+            picker.Updated(picker: moved) -> shell.UserMovedPicker(moved)
             picker.Decided(value:) -> shell.UserChoseSuggestion(value)
             picker.Dismissed -> shell.UserDismissedInput
           })
         }),
       ])
-  }
-}
-
-fn current_filter(chosen: picker.Picker) {
-  case chosen {
-    picker.Typing(value:, ..) -> value
-    picker.Scrolling(..) -> picker.current(chosen)
   }
 }
 

@@ -73,6 +73,9 @@ pub type Message {
   UserPressedKey(String)
   UserClickedCode(List(Int))
   UserWroteInput(String)
+  /// The picker keeps its own filtering and scrolling; it hands back what it
+  /// became rather than a string to rebuild it from.
+  UserMovedPicker(picker.Picker)
   UserSubmittedInput
   UserDismissedInput
   UserChoseSuggestion(String)
@@ -115,11 +118,14 @@ pub fn update(
       Shell(..shell, mode: Numbering(value:, rebuild:)),
       Nothing,
     )
-    UserWroteInput(value), Choosing(picker: current, rebuild:) -> {
-      let picker = picker.new(value, current.suggestions)
-      #(Shell(..shell, mode: Choosing(picker:, rebuild:)), Nothing)
-    }
+    UserWroteInput(_), Choosing(..) -> #(shell, Nothing)
     UserWroteInput(_), Command -> #(shell, Nothing)
+
+    UserMovedPicker(picker), Choosing(rebuild:, ..) -> #(
+      Shell(..shell, mode: Choosing(picker:, rebuild:)),
+      Nothing,
+    )
+    UserMovedPicker(_), _ -> #(shell, Nothing)
 
     UserChoseSuggestion(choice), Choosing(rebuild:, ..) -> #(
       named(shell, rebuild, choice, context),
@@ -368,6 +374,14 @@ pub fn settled(shell: Shell, outcome: Outcome) -> Shell {
       Shell(..shell, history: [Entry(buffer:, outcome:), ..rest])
     _ -> shell
   }
+}
+
+/// Put a program in the buffer, ready to change and run.
+///
+/// The shell is written with keys, but a program that came from somewhere else
+/// — an example, a link, a test — comes in here.
+pub fn edit(shell: Shell, source, context: infer.Context) -> Shell {
+  Shell(..shell, buffer: buffer.from_source(source, context), mode: Command)
 }
 
 /// Put a program that has already run back in the buffer, to change and run

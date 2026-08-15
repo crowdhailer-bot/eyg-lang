@@ -10,6 +10,7 @@
 import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/interpreter/simple_debug
 import eyg/interpreter/state as istate
+import eyg/interpreter/value as v
 import eyg/parser/debug as parser_debug
 import gleam/dict
 import gleam/list
@@ -32,9 +33,19 @@ pub type Config {
     origin: origin.Origin,
     /// The source of `eyg/context.eyg`, handed in by the page.
     context: String,
-    /// Which puzzle to play. The same seed is always the same board.
-    seed: Int,
+    /// The board to play. Which board that is belongs to whoever starts the
+    /// application, not to the application.
+    puzzle: hashi.Puzzle,
   )
+}
+
+/// One puzzle a day, the same one for everybody, which is what the original
+/// project plays. Nine islands on an eight by eight board is the size it uses
+/// for a comfortable game.
+pub fn daily(day: Int) -> hashi.Puzzle {
+  hashi.new(width: 8, height: 8, islands: 9)
+  |> hashi.with_seed(day)
+  |> hashi.generate
 }
 
 /// Which side of the panel is showing.
@@ -60,7 +71,7 @@ pub type State {
 }
 
 pub fn init(config: Config) -> #(State, List(system.Effect(Message))) {
-  let Config(origin:, context: source, seed:) = config
+  let Config(origin:, context: source, puzzle:) = config
 
   let #(readme, scope, types, failure) = case context.load(source) {
     Ok(context.Context(readme:, scope:, types:)) -> #(
@@ -72,7 +83,7 @@ pub fn init(config: Config) -> #(State, List(system.Effect(Message))) {
     Error(reason) -> #("", [], [], Some("the workspace is broken: " <> reason))
   }
 
-  let host = platform.Host(game: game.new(puzzle(seed)), origin:)
+  let host = platform.Host(game: game.new(puzzle), origin:)
   let environment = platform.environment(host, readme, scope)
   let #(agent, actions) = agent.init(agent.Config(origin:, environment:))
 
@@ -88,14 +99,6 @@ pub fn init(config: Config) -> #(State, List(system.Effect(Message))) {
       failure:,
     )
   #(state, list.map(actions, system.map(_, AgentMessage)))
-}
-
-/// The daily-ish puzzle. Nine islands on an eight by eight board is the size
-/// the original project uses for a comfortable game.
-fn puzzle(seed: Int) {
-  hashi.new(width: 8, height: 8, islands: 9)
-  |> hashi.with_seed(seed)
-  |> hashi.generate
 }
 
 pub type Message {
@@ -188,6 +191,9 @@ fn settle(
 /// How a program ended, or nothing if it has not ended.
 fn outcome(call: tools.Call) -> Option(shell.Outcome) {
   case call {
+    // A string is shown as it reads. `picture({})` draws the board, and a
+    // board written out with the newlines escaped is no use to anybody.
+    tools.Successful(v.String(text)) -> Some(shell.Returned(text))
     tools.Successful(value) -> Some(shell.Returned(simple_debug.inspect(value)))
     tools.Exception(reason) -> Some(shell.Failed(simple_debug.describe(reason)))
     tools.Aborted(reason) -> Some(shell.Failed(reason))

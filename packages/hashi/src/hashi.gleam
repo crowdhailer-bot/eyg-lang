@@ -20,13 +20,12 @@ pub fn main(context: String) -> Nil {
   let app = lustre.application(do_init, do_update, view.render)
   let browser_origin = location.origin(window.location(window.self()))
   let assert Ok(origin) = origin.from_string(browser_origin)
-  let config = state.Config(origin:, context:, seed: today())
+  let config = state.Config(origin:, context:, puzzle: state.daily(today()))
   let assert Ok(_runtime) = lustre.start(app, "#app", config)
   Nil
 }
 
-/// One puzzle a day, the same one for everybody, which is what the original
-/// project plays.
+/// Which day it is, counted from the epoch.
 fn today() -> Int {
   let #(seconds, _) =
     timestamp.to_unix_seconds_and_nanoseconds(timestamp.system_time())

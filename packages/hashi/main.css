@@ -291,6 +291,14 @@ body {
   gap: var(--s-3);
 }
 
+.chat-input .hstack {
+  display: flex;
+}
+
+.chat-input .split {
+  justify-content: space-between;
+}
+
 .chat-input textarea {
   font: inherit;
   font-weight: normal;
@@ -339,6 +347,18 @@ body {
   padding: var(--s-1);
 }
 
+.provider-panel-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.provider-panel-heading span {
+  font-size: var(--s-2);
+  font-weight: normal;
+  color: var(--shell-dim);
+}
+
 .provider-panel label {
   display: flex;
   flex-direction: column;
@@ -385,6 +405,13 @@ body {
   display: flex;
   justify-content: center;
   inline-size: 100%;
+}
+
+/* The original sizes the board for a phone held in one hand. Here it has a
+   whole column to itself. */
+.board-frame .hashi-grid {
+  inline-size: min(100%, 60vh, 34rem);
+  max-inline-size: none;
 }
 
 /* The board is looked at, not played with. Nothing on it should invite a
