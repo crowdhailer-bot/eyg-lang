@@ -1,0 +1,422 @@
+/*
+The board's own stylesheet, from the original project, so the islands and
+bridges look exactly as they do at hashi.giacomocavalieri.me. It is imported
+rather than copied: the clone is the one copy of it.
+
+Everything below is this page: the panel on the left, and the few places where
+the original's page-level rules have to be undone to make room for it.
+*/
+@import "../../../hashi/backend/priv/static/styles-8.css";
+
+:root {
+  --panel-colour: #fffaf2;
+  --panel-edge: #e3d3c1;
+  --shell-ink: #372732;
+  --shell-dim: #7d6b78;
+}
+
+/* The original sets a reading measure on everything, which a two column page
+   cannot live with. */
+* {
+  max-inline-size: none;
+}
+
+html,
+body {
+  block-size: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 30rem) minmax(0, 1fr);
+  block-size: 100vh;
+}
+
+/* THE PANEL ---------------------------------------------------------------- */
+
+.panel {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  background-color: var(--panel-colour);
+  border-inline-end: var(--s-4) solid var(--bridge-colour);
+  min-inline-size: 0;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2);
+  border-inline-end: 1px solid var(--panel-edge);
+}
+
+.rail-button {
+  display: grid;
+  place-items: center;
+  inline-size: var(--s2);
+  block-size: var(--s2);
+  padding: 0;
+  border: var(--s-5) solid transparent;
+  box-shadow: none;
+  background-color: transparent;
+  color: var(--faded-bridge-colour);
+}
+
+.rail-button:hover {
+  color: var(--bridge-colour);
+}
+
+.rail-button.selected {
+  color: var(--bridge-colour);
+  background-color: var(--island-colour);
+  border-color: var(--bridge-colour);
+  box-shadow: var(--s-5) var(--s-5) var(--bridge-colour);
+}
+
+.icon {
+  inline-size: var(--s0);
+  block-size: var(--s0);
+}
+
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  min-inline-size: 0;
+  padding: var(--s-1);
+  gap: var(--s-1);
+}
+
+/* THE SHELL ---------------------------------------------------------------- */
+
+.shell-history {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--s-1);
+}
+
+.shell-entry {
+  border-block-start: 1px dashed var(--panel-edge);
+  padding-block-start: var(--s-2);
+}
+
+.shell-entry-code {
+  cursor: pointer;
+  overflow-x: auto;
+}
+
+.shell-outcome {
+  color: var(--dark-green-colour);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.shell-outcome.working {
+  color: var(--unreachable-island-colour);
+}
+
+.shell-outcome.failed {
+  color: var(--wrong-island-colour);
+}
+
+.shell-editor {
+  border: 1px solid var(--bridge-colour);
+  background-color: white;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--s-1);
+  min-block-size: var(--s3);
+  max-block-size: 40vh;
+  overflow: auto;
+}
+
+.shell-editor:focus,
+.shell-editor:focus-visible {
+  outline: var(--s-5) solid var(--selected-island-colour);
+  outline-offset: 2px;
+}
+
+.shell-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  border: 1px solid var(--panel-edge);
+  background-color: white;
+  padding: var(--s-2);
+  max-block-size: 30vh;
+  overflow-y: auto;
+}
+
+.shell-prompt label {
+  font-size: var(--s-2);
+  text-transform: uppercase;
+  color: var(--shell-dim);
+}
+
+.shell-prompt input {
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  border: none;
+  border-block-end: 1px solid var(--bridge-colour);
+  padding: var(--s-3);
+  background-color: transparent;
+}
+
+.shell-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-1);
+}
+
+.button.run {
+  --button-colour: var(--dark-green-colour);
+}
+
+.shell-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--s-3) var(--s-1);
+  font-size: var(--s-2);
+  border-block-start: 1px solid var(--panel-edge);
+  padding-block-start: var(--s-2);
+  max-block-size: 30vh;
+  overflow-y: auto;
+}
+
+.shell-keys > div {
+  display: flex;
+  gap: var(--s-2);
+}
+
+.shell-keys kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background-color: var(--island-colour);
+  border: 1px solid var(--bridge-colour);
+  border-radius: var(--s-5);
+  padding-inline: var(--s-4);
+  min-inline-size: 4.5rem;
+  text-align: center;
+}
+
+.shell-keys span {
+  color: var(--shell-dim);
+}
+
+/* THE AGENT ---------------------------------------------------------------- */
+
+.agent-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.agent-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s-1);
+}
+
+.agent-empty .hint {
+  font-weight: normal;
+  font-size: var(--s-1);
+  color: var(--shell-dim);
+}
+
+.messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-inline-end: var(--s-3);
+}
+
+.message {
+  padding: var(--s-2);
+  border-radius: var(--s-2);
+  overflow-wrap: anywhere;
+}
+
+.message.user {
+  background-color: var(--island-colour);
+  align-self: flex-end;
+  max-inline-size: 85%;
+}
+
+.message.assistant {
+  background-color: transparent;
+}
+
+.message.thinking {
+  color: var(--shell-dim);
+  font-size: var(--s-1);
+  cursor: pointer;
+}
+
+.message.code,
+.message.tool-result {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--s-1);
+  background-color: white;
+  border: 1px solid var(--panel-edge);
+  cursor: pointer;
+  overflow-x: auto;
+}
+
+.message.tool-result {
+  color: var(--dark-green-colour);
+}
+
+.one-line {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.chat-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.chat-input textarea {
+  font: inherit;
+  font-weight: normal;
+  border: 1px solid var(--bridge-colour);
+  padding: var(--s-2);
+  min-block-size: var(--s3);
+  resize: vertical;
+}
+
+.provider-settings {
+  position: relative;
+}
+
+.provider-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: var(--s-2);
+  border-color: var(--panel-edge);
+  box-shadow: none;
+}
+
+.provider-dot {
+  inline-size: var(--s-2);
+  block-size: var(--s-2);
+  border-radius: 50%;
+  background-color: var(--wrong-island-colour);
+}
+
+.provider-dot.configured-true {
+  background-color: var(--complete-island-colour);
+}
+
+.provider-panel {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: 100%;
+  z-index: 2;
+  inline-size: 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  background-color: var(--panel-colour);
+  border: 1px solid var(--bridge-colour);
+  box-shadow: var(--s-4) var(--s-4) var(--bridge-colour);
+  padding: var(--s-1);
+}
+
+.provider-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  font-size: var(--s-2);
+}
+
+.provider-panel select,
+.provider-panel input {
+  font: inherit;
+  font-weight: normal;
+  padding: var(--s-3);
+  border: 1px solid var(--bridge-colour);
+  background-color: white;
+}
+
+.provider-key-link {
+  font-size: var(--s-2);
+}
+
+.provider-error,
+.failure {
+  color: var(--wrong-island-colour);
+  font-size: var(--s-1);
+}
+
+/* THE BOARD ---------------------------------------------------------------- */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s0);
+  padding: var(--s1);
+  min-inline-size: 0;
+}
+
+.board h1 {
+  font-size: var(--s1);
+}
+
+.board-frame {
+  display: flex;
+  justify-content: center;
+  inline-size: 100%;
+}
+
+/* The board is looked at, not played with. Nothing on it should invite a
+   click, and nothing on it does anything if it gets one. */
+.board-frame .hashi-grid,
+.board-frame .hashi-grid * {
+  cursor: default;
+  pointer-events: none;
+  user-select: none;
+}
+
+.board-status {
+  font-size: var(--s-1);
+  font-weight: normal;
+  color: var(--shell-dim);
+  text-align: center;
+}
+
+.board-status.solved {
+  color: var(--dark-green-colour);
+  font-weight: bold;
+}
+
+@media (max-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) max-content;
+    overflow-y: auto;
+  }
+
+  .panel {
+    border-inline-end: none;
+    border-block-end: var(--s-4) solid var(--bridge-colour);
+  }
+}

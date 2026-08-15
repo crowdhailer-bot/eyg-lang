@@ -105,6 +105,9 @@ pub type Message {
   /// A program the shell ran was waiting on the platform, and the platform is
   /// done.
   ShellEffectHandled(task_id: Int, value: istate.Value(tools.Meta))
+  /// The board is drawn but not played with. Every pointer event it produces
+  /// arrives here and is dropped.
+  Ignore
 }
 
 pub fn update(
@@ -134,6 +137,8 @@ pub fn update(
         tools.effect_handled(ctx, state.running, task_id, value)
       settle(state, ctx, running)
     }
+
+    Ignore -> #(state, [])
   }
 }
 
