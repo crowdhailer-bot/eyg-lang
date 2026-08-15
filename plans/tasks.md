@@ -99,6 +99,14 @@ Bugs found on the way, all fixed:
 
 ### Still open
 
+- [ ] `eyg script entry.eyg` does not pass on this branch, and did not on
+      `contexts` either — it aborts on the first import with "module not found
+      for package: @json". The context modules pin
+      `@json:2:baguqeeradd5eqagcv44aj2kj6xihc7izwsd5pucj52ln6mvfdn66wiu2267q`
+      and `@json` has no releases on the hub at all, so nothing that reads JSON
+      resolves. Publishing it is a release decision rather than a code change.
+      Nothing in `packages/hashi` is affected: `eyg/context.eyg` references no
+      package on purpose, and its tests run.
 - [ ] spotless.run has no `bluesky` party, so `ShareOutcome` answers 404 today.
       The whole device-code flow is written and tested against the shape
       spotless already has. atproto wants DPoP-bound tokens, so adding the party
