@@ -7,12 +7,14 @@ import eyg/interpreter/break
 import eyg/interpreter/state as istate
 import eyg/ir/dag_json
 import eyg/ir/tree as ir
+import filepath
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/string
 import morph/analysis
 import morph/buffer.{type Buffer}
 import morph/editable as e
@@ -68,8 +70,28 @@ pub type Previous {
 pub type Run {
   Exception(istate.Reason(Meta))
   Aborted(String)
-  Handling(task_id: Int, env: istate.Env(Meta), k: istate.Stack(Meta))
-  Blocked(dep: cache.Dependency, env: istate.Env(Meta), k: istate.Stack(Meta))
+  Handling(
+    task_id: Int,
+    env: istate.Env(Meta),
+    k: istate.Stack(Meta),
+    parents: List(LocalFrame),
+    visiting: List(Filename),
+  )
+  Blocked(
+    dep: cache.Dependency,
+    env: istate.Env(Meta),
+    k: istate.Stack(Meta),
+    parents: List(LocalFrame),
+    visiting: List(Filename),
+  )
+}
+
+pub type LocalFrame {
+  LocalFrame(
+    env: istate.Env(Meta),
+    k: istate.Stack(Meta),
+    visiting: List(Filename),
+  )
 }
 
 pub type Mode {
@@ -265,10 +287,15 @@ pub fn update(state: State, message) -> #(State, List(system.Effect(Message))) {
     Ignore -> #(state, [])
     EffectHandled(task_id: tid, value:) ->
       case state.mode {
-        RunningShell(_occured, Handling(task_id:, env:, k:)) if tid == task_id -> {
+        RunningShell(
+          _occured,
+          Handling(task_id:, env:, k:, parents:, visiting:),
+        )
+          if tid == task_id
+        -> {
           let output =
             block.resume(value, env, k)
-            |> loop(state)
+            |> evaluate(state, parents, visiting)
 
           case output {
             Stop(value:, scope:) -> {
@@ -303,6 +330,7 @@ pub fn update(state: State, message) -> #(State, List(system.Effect(Message))) {
     }
     CacheMessage(message) -> {
       let #(cache, _done) = cache.update(state.cache, message, fn(_) { [] })
+      let #(cache, cache_effects) = flush_cache(cache, state.origin)
       let state = State(..state, cache:)
       // reanalyse modules
       case state.mode {
@@ -319,7 +347,10 @@ pub fn update(state: State, message) -> #(State, List(system.Effect(Message))) {
                   ctx(State(..state, scope:), Repl),
                   cache.types(state.cache),
                 )
-              #(State(..state, mode: Editing, previous:, scope:, repl:), [])
+              #(
+                State(..state, mode: Editing, previous:, scope:, repl:),
+                cache_effects,
+              )
             }
             Running(run, counter, effect) -> {
               let mode = RunningShell([], run)
@@ -327,11 +358,14 @@ pub fn update(state: State, message) -> #(State, List(system.Effect(Message))) {
                 Some(effect) -> [effect]
                 None -> []
               }
-              #(State(..state, mode:, counter:), effects)
+              #(
+                State(..state, mode:, counter:),
+                list.append(cache_effects, effects),
+              )
             }
           }
         }
-        _ -> #(state, [])
+        _ -> #(state, cache_effects)
       }
     }
   }
@@ -526,10 +560,16 @@ fn confirm(state: State) -> #(State, List(system.Effect(Message))) {
   let State(focused:, ..) = state
   case focused {
     Repl -> {
-      let output =
+      let source =
         state.repl.projection
         |> p.rebuild()
         |> e.to_annotated([])
+      let #(cache, _) =
+        prepare_workspace(state.cache, source, state.modules, [], [])
+      let #(cache, cache_effects) = flush_cache(cache, state.origin)
+      let state = State(..state, cache:)
+      let output =
+        source
         |> block.execute(state.scope)
         |> loop(state)
       case output {
@@ -543,7 +583,10 @@ fn confirm(state: State) -> #(State, List(system.Effect(Message))) {
               ctx(State(..state, scope:), Repl),
               cache.types(state.cache),
             )
-          #(State(..state, mode: Editing, previous:, scope:, repl:), [])
+          #(
+            State(..state, mode: Editing, previous:, scope:, repl:),
+            cache_effects,
+          )
         }
         Running(run, counter, effect) -> {
           let mode = RunningShell([], run)
@@ -551,7 +594,10 @@ fn confirm(state: State) -> #(State, List(system.Effect(Message))) {
             Some(effect) -> [effect]
             None -> []
           }
-          #(State(..state, mode:, counter:), effects)
+          #(
+            State(..state, mode:, counter:),
+            list.append(cache_effects, effects),
+          )
         }
       }
     }
@@ -820,17 +866,27 @@ fn loop(
   return: Result(#(Option(istate.Value(Meta)), List(_)), istate.Debug(Meta)),
   state: State,
 ) -> StopOrRunning {
+  evaluate(return, state, [], [])
+}
+
+fn evaluate(
+  return: Result(#(Option(istate.Value(Meta)), List(_)), istate.Debug(Meta)),
+  state: State,
+  parents: List(LocalFrame),
+  visiting: List(Filename),
+) -> StopOrRunning {
   case return {
     Error(#(break.UnhandledEffect(label, lift), _meta, env, k)) -> {
       case platform.cast(label, lift) {
         Ok(effect) -> {
           case platform.extrinsic(effect) {
             platform.Work(system.Done(value)) -> {
-              loop(block.resume(value, env, k), state)
+              evaluate(block.resume(value, env, k), state, parents, visiting)
             }
             platform.Work(effect) -> {
               let effect = system.map(effect, EffectHandled(state.counter, _))
-              let run = Handling(state.counter, env, k)
+              let run =
+                Handling(state.counter, env, k, parents: parents, visiting:)
               Running(run, state.counter + 1, Some(effect))
             }
             platform.Abort(reason) ->
@@ -844,24 +900,55 @@ fn loop(
     }
     Error(#(break.UndefinedReference(ir.Content(cid)), _, env, k)) ->
       case cache.get_module(state.cache, cid) {
-        Ok(cache.Module(value:, ..)) -> loop(block.resume(value, env, k), state)
+        Ok(cache.Module(value:, ..)) ->
+          evaluate(block.resume(value, env, k), state, parents, visiting)
         // All dependencies are marked as blocked the view shows error vs running status
         Error(_) -> {
-          let run = Blocked(cache.Content(cid), env, k)
+          let run =
+            Blocked(cache.Content(cid), env, k, parents: parents, visiting:)
           Running(run, state.counter, None)
         }
       }
     Error(#(break.UndefinedReference(ir.Pinned(release)), _, env, k)) -> {
       case cache.release_code(state.cache, release) {
-        Ok(cache.Module(value:, ..)) -> loop(block.resume(value, env, k), state)
+        Ok(cache.Module(value:, ..)) ->
+          evaluate(block.resume(value, env, k), state, parents, visiting)
         _ -> {
-          let run = Blocked(cache.Pinned(release), env, k)
+          let run =
+            Blocked(cache.Pinned(release), env, k, parents: parents, visiting:)
           Running(run, state.counter, None)
         }
       }
     }
+    Error(#(
+      break.UndefinedReference(ir.Relative(location)) as reason,
+      _,
+      env,
+      k,
+    )) ->
+      case local_module(state.modules, location, visiting) {
+        Ok(#(filename, module)) ->
+          case list.contains(visiting, filename) {
+            True -> Running(Exception(reason), state.counter, None)
+            False -> {
+              let parent = LocalFrame(env:, k:, visiting:)
+              evaluate(
+                block.execute(buffer.source(module), []),
+                state,
+                [parent, ..parents],
+                [filename, ..visiting],
+              )
+            }
+          }
+        Error(Nil) -> Running(Exception(reason), state.counter, None)
+      }
     Ok(#(value, scope)) -> {
-      Stop(value, scope)
+      case value, parents {
+        Some(value), [LocalFrame(env:, k:, visiting: parent_visiting), ..rest]
+        -> evaluate(block.resume(value, env, k), state, rest, parent_visiting)
+        None, [_, ..] -> Running(Exception(break.Vacant), state.counter, None)
+        _, [] -> Stop(value, scope)
+      }
     }
     Error(#(reason, _, _, _)) -> Running(Exception(reason), state.counter, None)
   }
@@ -869,13 +956,58 @@ fn loop(
 
 pub fn restart(run: Run, state: State) -> StopOrRunning {
   case run {
-    Blocked(dep:, env:, k:) -> {
+    Blocked(dep:, env:, k:, parents:, visiting:) -> {
       let reason = cache.dep_to_reason(dep)
       let return = Error(#(reason, [], env, k))
-      loop(return, state)
+      evaluate(return, state, parents, visiting)
     }
     _ -> Running(run, state.counter, None)
   }
+}
+
+fn prepare_workspace(cache, source, modules, visited, from) {
+  let cache = cache.prepare(cache, source)
+  list.fold(ir.list_references(source), #(cache, visited), fn(acc, reference) {
+    let #(cache, visited) = acc
+    case reference {
+      ir.Relative(location) ->
+        case local_module(modules, location, from) {
+          Ok(#(filename, module)) ->
+            case list.contains(visited, filename) {
+              True -> #(cache, visited)
+              False ->
+                prepare_workspace(
+                  cache,
+                  buffer.source(module),
+                  modules,
+                  [filename, ..visited],
+                  [filename, ..from],
+                )
+            }
+          Error(Nil) -> #(cache, visited)
+        }
+      _ -> #(cache, visited)
+    }
+  })
+}
+
+fn local_module(modules, location, from) {
+  let directory = case from {
+    [#(name, EygJson), ..] -> filepath.directory_name(name <> ".eyg.json")
+    [] -> ""
+  }
+  let path = case filepath.is_absolute(location) {
+    True -> string.drop_start(location, 1)
+    False -> filepath.join(directory, location)
+  }
+  use path <- result.try(filepath.expand(path))
+  use _ <- result.try(case string.ends_with(path, ".eyg.json") {
+    True -> Ok(Nil)
+    False -> Error(Nil)
+  })
+  let filename = #(string.drop_end(path, 9), EygJson)
+  use module <- result.try(dict.get(modules, filename))
+  Ok(#(filename, module))
 }
 
 /// This is a bad name as running is in error cases
