@@ -1,0 +1,262 @@
+let {assert} = import "../aok/index.eyg"
+let hub = import "./index.eyg"
+let list = @standard.list
+let string = @standard.string
+let to_string = @standard.integer.to_string
+
+// Answer the Fetch effect from the test, so nothing here touches the network.
+let serve = (answer, run) -> {
+  handle Fetch((request, resume) -> { resume(answer(request)) }, run)
+}
+
+let response = (status, body) -> {
+  Ok({status, headers: [], body: !string_to_binary(body)})
+}
+
+// The hub keeps a release as a JSON payload inside a JSON entry, so the quotes
+// of the payload are escaped once.
+let payload = (package, version, module) -> {
+  string.concat([
+    "{\"type\":\"release\",\"signatory\":{\"/\":\"sigA\"},\"content\":{\"module\":{\"/\":\"",
+    module,
+    "\"},\"package\":\"",
+    package,
+    "\",\"version\":",
+    to_string(version),
+    "}}"
+  ])
+}
+
+let entry = (cursor, package, version, module) -> {
+  string.concat([
+    "{\"cursor\":",
+    to_string(cursor),
+    ",\"entity\":{\"/\":\"chain1\"},\"cid\":{\"/\":\"cid",
+    to_string(cursor),
+    "\"},\"sequence\":",
+    to_string(cursor),
+    ",\"payload\":\"",
+    !string_replace(payload(package, version, module), "\"", "\\\""),
+    "\"}"
+  ])
+}
+
+let ledger = (entries) -> {
+  string.concat(["{\"entries\":[", string.join(entries, ","), "]}"])
+}
+
+let published = ledger([
+  entry(1, "alpha", 1, "bafyalpha1"),
+  entry(2, "beta", 1, "bafybeta1"),
+  entry(3, "alpha", 2, "bafyalpha2")
+])
+
+let page = !fix((self, cursor, acc) -> {
+  match !int_compare(cursor, 0) {
+    Eq(_) -> { acc }
+    | (_) -> {
+      self(
+        !int_subtract(cursor, 1),
+        [entry(cursor, "page", cursor, "bafypage"), ..acc]
+      )
+    }
+  }
+})
+
+let names = (rows) -> { list.map(rows, ({package}) -> { package }) }
+
+[
+  {name: "hub releases reads every entry in ledger order",
+   test: (_) -> {
+     let found = serve((_) -> { response(200, published) }, (_) -> {
+       hub.releases({})
+     })
+     assert.equal(names(assert.ok(found)), ["alpha", "beta", "alpha"])
+   }},
+
+  {name: "hub releases reads every field of a release",
+   test: (_) -> {
+     let found = serve((_) -> { response(200, published) }, (_) -> {
+       hub.releases({})
+     })
+     let {head} = assert.ok(!list_pop(assert.ok(found)))
+     let _ = assert.equal_string(head.package, "alpha")
+     let _ = assert.equal(head.version, 1)
+     let _ = assert.equal_string(head.module, "bafyalpha1")
+     let _ = assert.equal_string(head.signatory, "sigA")
+     let _ = assert.equal_string(head.chain, "chain1")
+     let _ = assert.equal_string(head.cid, "cid1")
+     assert.equal(head.sequence, 1)
+   }},
+
+  {name: "hub packages keeps only the newest release of each name",
+   test: (_) -> {
+     let found = serve((_) -> { response(200, published) }, (_) -> {
+       hub.packages({})
+     })
+     let rows = assert.ok(found)
+     let _ = assert.equal(names(rows), ["alpha", "beta"])
+     assert.equal(list.map(rows, ({version}) -> { version }), [2, 1])
+   }},
+
+  {name: "hub history returns every release of one name, oldest first",
+   test: (_) -> {
+     let found = serve((_) -> { response(200, published) }, (_) -> {
+       hub.history({package: "alpha"})
+     })
+     let versions = list.map(assert.ok(found), ({version}) -> { version })
+     assert.equal(versions, [1, 2])
+   }},
+
+  {name: "hub history of an unpublished name is empty",
+   test: (_) -> {
+     let found = serve((_) -> { response(200, published) }, (_) -> {
+       hub.history({package: "gamma"})
+     })
+     assert.equal(assert.ok(found), [])
+   }},
+
+  {name: "hub search matches part of a name, either case",
+   test: (_) -> {
+     let found = serve((_) -> { response(200, published) }, (_) -> {
+       hub.search({text: "LPH"})
+     })
+     assert.equal(names(assert.ok(found)), ["alpha"])
+   }},
+
+  {name: "hub search finds nothing for an unknown name",
+   test: (_) -> {
+     let found = serve((_) -> { response(200, published) }, (_) -> {
+       hub.search({text: "gamma"})
+     })
+     assert.equal(assert.ok(found), [])
+   }},
+
+  {name: "hub pulls the ledger from the start with a page limit",
+   test: (_) -> {
+     let found = serve(({scheme, host, port, path, query}) -> {
+       let _ = match scheme {
+         HTTPS(_) -> { {} }
+         HTTP(_) -> { perform Abort("expected https") }
+       }
+       let _ = assert.equal_string(host, "eyg.run")
+       let _ = match port {
+         None(_) -> { {} }
+         Some(_) -> { perform Abort("expected the default https port") }
+       }
+       let _ = assert.equal_string(path, "/packages/pull")
+       match query {
+         Some(value) -> {
+           let _ = assert.equal_string(value, "since=0&limit=1000")
+           response(200, published)
+         }
+         None(_) -> { response(400, "{\"entries\":[]}") }
+       }
+     }, (_) -> { hub.releases({}) })
+      assert.equal(list.length(assert.ok(found)), 3)
+    }},
+
+  {name: "hub follows a full ledger page from its last cursor",
+   test: (_) -> {
+     let first = ledger(page(1000, []))
+     let second = ledger([entry(1001, "last", 1, "bafylast")])
+     let found = serve(({query}) -> {
+       match query {
+         Some(value) -> {
+           match !equal(value, "since=0&limit=1000") {
+             True(_) -> { response(200, first) }
+             False(_) -> {
+               match !equal(value, "since=1000&limit=1000") {
+                 True(_) -> { response(200, second) }
+                 False(_) -> { perform Abort("unexpected page query") }
+               }
+             }
+           }
+         }
+         None(_) -> { perform Abort("expected a page query") }
+       }
+     }, (_) -> { hub.releases({}) })
+     assert.equal(list.length(assert.ok(found)), 1001)
+   }},
+
+  {name: "hub rejects a full page whose cursor does not advance",
+   test: (_) -> {
+     let stuck = ledger(list.append(
+       page(999, []),
+       [entry(0, "stuck", 1, "bafystuck")]
+     ))
+     let found = serve((_) -> { response(200, stuck) }, (_) -> {
+       hub.releases({})
+     })
+     assert.equal_string(
+       assert.error(found),
+       "The hub returned a non-advancing ledger cursor"
+     )
+   }},
+
+  {name: "hub reports a failed status with the path",
+   test: (_) -> {
+     let found = serve((_) -> { response(503, "") }, (_) -> {
+       hub.packages({})
+     })
+     assert.equal_string(
+       assert.error(found),
+       "The hub returned HTTP 503 for /packages/pull"
+     )
+   }},
+
+  {name: "hub passes a network failure through",
+   test: (_) -> {
+     let found = serve((_) -> { Error("network error") }, (_) -> {
+       hub.releases({})
+     })
+     assert.equal_string(assert.error(found), "network error")
+   }},
+
+  {name: "hub skips an entry whose payload it cannot read",
+   test: (_) -> {
+     let broken = ledger([
+       entry(1, "alpha", 1, "bafyalpha1"),
+       "{\"cursor\":2,\"entity\":{\"/\":\"chain1\"},\"cid\":{\"/\":\"cid2\"},\"sequence\":2,\"payload\":\"{}\"}"
+     ])
+     let found = serve((_) -> { response(200, broken) }, (_) -> {
+       hub.releases({})
+     })
+     assert.equal(names(assert.ok(found)), ["alpha"])
+   }},
+
+  {name: "hub at binds the same functions to another hub",
+   test: (_) -> {
+     let local = hub.at({scheme: HTTP({}), host: "localhost", port: Some(8080)})
+     let found = serve(({scheme, host, port}) -> {
+       let _ = match scheme {
+         HTTP(_) -> { {} }
+         HTTPS(_) -> { perform Abort("expected http") }
+       }
+       let _ = assert.equal_string(host, "localhost")
+       let _ = match port {
+         Some(value) -> { assert.equal(value, 8080) }
+         None(_) -> { perform Abort("expected a port") }
+       }
+       response(200, published)
+     }, (_) -> { local.packages({}) })
+     assert.equal(names(assert.ok(found)), ["alpha", "beta"])
+   }},
+
+  {name: "hub describes every field it exposes",
+   test: (_) -> {
+     let described = list.map(hub.skills, ({name}) -> { name })
+     assert.equal(described, [
+       "packages",
+       "releases",
+       "history",
+       "search",
+       "at"
+     ])
+   }},
+
+  {name: "hub readme opens with the workspace name",
+   test: (_) -> {
+     assert.true(!string_starts_with(hub.readme, "# The EYG hub"))
+   }}
+]

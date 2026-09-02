@@ -1,0 +1,296 @@
+// The EYG hub workspace.
+//
+// An overlay context for looking at what is published. A hub keeps a ledger of
+// releases; this reads it and shapes the answers, and the readme explains them
+// to an agent.
+//
+// `at` binds the functions to one hub. The fields beside it are the same
+// functions bound to eyg.run, which is the hub almost everything means.
+
+let list = @standard.list
+let string = @standard.string
+let concat = string.concat
+let to_string = @standard.integer.to_string
+
+let {decode, parse_bytes} = import "../json/index.eyg"
+
+// The ledger puts the event as a JSON string inside the entry, so every entry
+// is read in two passes.
+let payloads = decode.object(decode.field("entries", decode.list(
+  decode.object((parsed) -> {
+    {
+      cursor: decode.field("cursor", decode.integer)(parsed),
+      payload: decode.field("payload", decode.string)(parsed),
+      // the entity is the chain the entry belongs to, which is the id of the
+      // first entry in it. The signatory is inside the payload, they are not
+      // the same thing.
+      chain: decode.field("entity", decode.object(decode.field("/", decode.string)))(parsed),
+      cid: decode.field("cid", decode.object(decode.field("/", decode.string)))(parsed),
+      sequence: decode.field("sequence", decode.integer)(parsed)
+    }
+  })
+)))
+
+let release_of = decode.object((parsed) -> {
+  {
+    signatory: decode.field("signatory", decode.object(decode.field("/", decode.string)))(parsed),
+    release: decode.field("content", decode.object((content) -> {
+      {
+        package: decode.field("package", decode.string)(content),
+        version: decode.field("version", decode.integer)(content),
+        module: decode.field("module", decode.object(decode.field("/", decode.string)))(content)
+      }
+    }))(parsed)
+  }
+})
+
+// The JSON decoders abort on a shape they did not expect, so an entry of a
+// kind this does not know would end the whole read. Catching it here is what
+// lets a ledger that grows a new entry type still be read for its releases.
+let read_release = (payload) -> {
+  handle Abort((reason, _resume) -> { Error(reason) }, (_) -> {
+    parse_bytes(!string_to_binary(payload), release_of)
+  })
+}
+
+// Read each entry's payload, dropping any this does not understand.
+//
+// Written out rather than with list.filter_map because decoding performs an
+// effect, and the standard library takes functions that perform none.
+let read_each = !fix((self, remaining, acc) -> {
+  match !list_pop(remaining) {
+    Ok({head, tail}) -> {
+      let {cursor: _, payload, chain, cid, sequence} = head
+      match read_release(payload) {
+        Ok(value) -> { self(tail, [{chain, cid, sequence, value}, ..acc]) }
+        Error(_) -> { self(tail, acc) }
+      }
+    }
+    Error(_) -> { list.reverse(acc) }
+  }
+})
+
+let page_size = 1000
+
+// Every function bound to one hub.
+let at = ({scheme, host, port}) -> {
+  let get = (path, query, decoder) -> {
+    let request = {
+      method: GET({}),
+      scheme,
+      host,
+      port,
+      path,
+      query,
+      headers: [],
+      body: !string_to_binary("")
+    }
+    match perform Fetch(request) {
+      Ok({status, body}) -> {
+        match !int_compare(status, 299) {
+          Gt(_) -> {
+            Error(concat(["The hub returned HTTP ", to_string(status), " for ", path]))
+          }
+          | (_) -> { parse_bytes(body, decoder) }
+        }
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // Pull the whole ledger. A short page is the end of it; a full one is
+  // followed by the next, and a cursor that does not advance is a broken hub
+  // rather than a reason to ask forever.
+  let pages = !fix((self, since, acc) -> {
+    let query = Some(concat(["since=", to_string(since), "&limit=", to_string(page_size)]))
+    match get("/packages/pull", query, payloads) {
+      Ok(entries) -> {
+        let all = list.append(acc, entries)
+        match !int_compare(list.length(entries), page_size) {
+          Lt(_) -> { Ok(all) }
+          | (_) -> {
+            match !list_pop(list.reverse(entries)) {
+              Ok({head, tail: _}) -> {
+                match !int_compare(head.cursor, since) {
+                  Gt(_) -> { self(head.cursor, all) }
+                  | (_) -> { Error("The hub returned a non-advancing ledger cursor") }
+                }
+              }
+              Error(_) -> { Ok(all) }
+            }
+          }
+        }
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  })
+
+  // Every release the hub has, oldest first.
+  let releases = (_) -> {
+    match pages(0, []) {
+      Ok(entries) -> {
+        Ok(list.map(read_each(entries, []), ({chain, cid, sequence, value}) -> {
+          {
+            package: value.release.package,
+            version: value.release.version,
+            module: value.release.module,
+            signatory: value.signatory,
+            chain,
+            cid,
+            sequence
+          }
+        }))
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // One row per package, keeping only the newest release of each.
+  let packages = (_) -> {
+    match releases({}) {
+      Ok(found) -> {
+        // keep the first appearance of each package in place, replacing the
+        // row when a newer version of it comes along
+        Ok(list.fold(found, [], (release, acc) -> {
+          match list.find((row) -> { !equal(row.package, release.package) }, acc) {
+            Ok(previous) -> {
+              match !int_compare(release.version, previous.version) {
+                Gt(_) -> {
+                  list.map(acc, (row) -> {
+                    match !equal(row.package, release.package) {
+                      True(_) -> { release }
+                      False(_) -> { row }
+                    }
+                  })
+                }
+                | (_) -> { acc }
+              }
+            }
+            Error(_) -> { list.append(acc, [release]) }
+          }
+        }))
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // Every release of one package, oldest first.
+  let history = ({package}) -> {
+    match releases({}) {
+      Ok(found) -> {
+        Ok(list.filter((row) -> { !equal(row.package, package) }, found))
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  // The packages whose name contains the text, lowercased both sides.
+  let search = ({text}) -> {
+    let wanted = !string_lowercase(text)
+    match packages({}) {
+      Ok(found) -> {
+        Ok(list.filter((row) -> {
+          match !string_split_once(!string_lowercase(row.package), wanted) {
+            Ok(_) -> { True({}) }
+            Error(_) -> { False({}) }
+          }
+        }, found))
+      }
+      Error(reason) -> { Error(reason) }
+    }
+  }
+
+  {releases, packages, history, search}
+}
+
+let eyg_run = at({scheme: HTTPS({}), host: "eyg.run", port: None({})})
+
+let readme = "# The EYG hub
+
+You are looking at what is published on the EYG hub, eyg.run. A package there is
+a name with a numbered release; each release points at a module by its content
+id, so a name always resolves to exactly one piece of code.
+
+The `context` variable, in scope for every program, has these fields.
+
+- `readme` this text.
+- `skills` a list of `{name, description}`.
+- `packages` `({}) -> Result(List(Release), String)`, one row per package, the newest release of each.
+- `releases` `({}) -> Result(List(Release), String)`, every release the hub has, oldest first.
+- `history` `({package}) -> Result(List(Release), String)`, every release of one name.
+- `search` `({text}) -> Result(List(Release), String)`, packages whose name contains the text, either case.
+- `at` `({scheme, host, port}) -> {releases, packages, history, search}`, the same four bound to another hub.
+
+There are no other fields, do not guess any.
+
+A `Release` is `{package, version, module, signatory, chain, cid, sequence}`.
+`module` is the content id of the code. `signatory` is who published it, and
+`cid` identifies the ledger entry rather than the module.
+
+## Read once, then filter
+
+Every one of these functions reads the whole ledger. Asking per package reads it
+again each time. Call `packages({})` or `releases({})` once, hold the result,
+and work from it.
+
+```eyg
+match context.packages({}) {
+  Ok(found) -> {
+    !list_fold(found, {}, ({package, version, module}, _) -> {
+      let line = !string_append(package, !string_append(\" v\", !string_append(!int_to_string(version), !string_append(\" \", !string_append(module, \"\\n\")))))
+      perform Print(line)
+    })
+  }
+  Error(reason) -> { perform Abort(reason) }
+}
+```
+
+Anything you print comes back with the result, so print what the user asked for
+and then say it back to them in your reply.
+
+## Running the code
+
+A published module can be read straight into a program by its name. `@standard`
+is the latest release of the standard library, `@standard:1` release one. Write
+the reference where the value goes.
+
+## What this does not answer
+
+Signatures on entries are not checked here. This context is for looking, and a
+module fetched by content id is verified by its hash anyway. Who is *allowed* to
+publish a name is a different question from who *has*, and this answers only the
+second.
+"
+
+let skills = [
+  {
+    name: "packages",
+    description: "packages({}) -> Result(List({package, version, module, signatory, chain, cid, sequence}), String). One row per package, the newest release of each."
+  },
+  {
+    name: "releases",
+    description: "releases({}) -> Result(List(Release), String). Every release the hub has, oldest first."
+  },
+  {
+    name: "history",
+    description: "history({package}) -> Result(List(Release), String). Every release of one package."
+  },
+  {
+    name: "search",
+    description: "search({text}) -> Result(List(Release), String). Packages whose name contains the text, either case."
+  },
+  {
+    name: "at",
+    description: "at({scheme, host, port}) -> {releases, packages, history, search}. The same functions bound to another hub."
+  }
+]
+
+{
+  readme,
+  skills,
+  at,
+  releases: eyg_run.releases,
+  packages: eyg_run.packages,
+  history: eyg_run.history,
+  search: eyg_run.search
+}
