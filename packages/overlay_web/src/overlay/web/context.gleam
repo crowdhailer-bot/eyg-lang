@@ -10,9 +10,11 @@ import eyg/interpreter/simple_debug
 import eyg/interpreter/value
 import eyg/ir/tree as ir
 import gleam/dict
+import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
+import gleam/uri
 import multiformats/cid/v1
 import overlay/web/tools
 
@@ -32,6 +34,83 @@ pub type Source {
   Reference(cid: v1.Cid)
   Package(name: String, version: Option(Int))
   Invalid(raw: String, reason: String)
+}
+
+/// Parse the search component of the page location, with or without its "?".
+pub fn from_search(search: String) -> Source {
+  let query = case search {
+    "?" <> query -> query
+    query -> query
+  }
+  case uri.parse_query(query) {
+    Ok(query) -> from_query(query)
+    Error(Nil) ->
+      Invalid(
+        raw: "?" <> query,
+        reason: "The context query could not be parsed.",
+      )
+  }
+}
+
+/// - `?reference=<cid>` selects a module by content.
+/// - `?package=<name>` selects the latest release of a package.
+/// - `?package=<name>&version=<n>` selects a single release.
+pub fn from_query(query: List(#(String, String))) -> Source {
+  case
+    list.key_find(query, "reference"),
+    list.key_find(query, "package"),
+    list.key_find(query, "version")
+  {
+    Ok(reference), Ok(name), _ ->
+      Invalid(
+        raw: "?reference=" <> reference <> "&package=" <> name,
+        reason: "Set only one of the reference and package parameters.",
+      )
+    Ok(reference), Error(Nil), Ok(version) ->
+      Invalid(
+        raw: "?reference=" <> reference <> "&version=" <> version,
+        reason: "The version parameter requires a package.",
+      )
+    Ok(reference), Error(Nil), Error(Nil) -> parse_reference(reference)
+    Error(Nil), Ok(name), version -> parse_package(name, version)
+    Error(Nil), Error(Nil), Ok(version) ->
+      Invalid(
+        raw: "?version=" <> version,
+        reason: "The version parameter requires a package.",
+      )
+    Error(Nil), Error(Nil), Error(Nil) -> Default
+  }
+}
+
+fn parse_reference(reference) {
+  case v1.from_string(reference) {
+    Ok(#(cid, <<>>)) -> Reference(cid)
+    _ ->
+      Invalid(
+        raw: "#" <> reference,
+        reason: "Not a valid reference: " <> reference,
+      )
+  }
+}
+
+fn parse_package(name, version) {
+  case version {
+    Error(Nil) -> Package(name:, version: None)
+    Ok(raw) ->
+      case int.parse(raw) {
+        Ok(version) if version > 0 -> Package(name:, version: Some(version))
+        Ok(_) ->
+          Invalid(
+            raw: "@" <> name <> ":" <> raw,
+            reason: "Version must be greater than zero: " <> raw,
+          )
+        Error(Nil) ->
+          Invalid(
+            raw: "@" <> name <> ":" <> raw,
+            reason: "Not a valid version: " <> raw,
+          )
+      }
+  }
 }
 
 pub type Status {
