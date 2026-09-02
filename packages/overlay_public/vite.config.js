@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite'
 import gleam from 'vite-gleam'
 
+// The hub the page resolves contexts and packages from. Set EYG_HUB to point at
+// a hub running locally.
+const hub = process.env.EYG_HUB ?? 'https://eyg.run'
+
 export default defineConfig({
   base: '/overlay/',
   plugins: [gleam()],
@@ -14,6 +18,14 @@ export default defineConfig({
       },
       '/guides': {
         target: 'https://eyg.run',
+        changeOrigin: true,
+      },
+      '/modules': {
+        target: hub,
+        changeOrigin: true,
+      },
+      '/packages': {
+        target: hub,
         changeOrigin: true,
       },
     },
