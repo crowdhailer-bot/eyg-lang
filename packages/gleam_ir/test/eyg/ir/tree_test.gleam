@@ -270,3 +270,77 @@ pub fn fail_on_cycles_test() {
       "/project/b.eyg",
     ]
 }
+
+pub fn fold_pure_visits_in_the_same_order_as_fold_test() {
+  let node =
+    tree.let_(
+      "x",
+      tree.apply(tree.variable("a"), tree.integer(1)),
+      tree.lambda("f", tree.integer(2)),
+    )
+  let nodes =
+    tree.fold_pure(node, [], fn(acc, node) { [print(node.0), ..acc] })
+    |> list.reverse
+  assert [
+      "Let: x",
+      "Apply",
+      "Variable: a",
+      "Integer: 1",
+      "Lambda: f",
+      "Integer: 2",
+    ]
+    == nodes
+}
+
+pub fn map_annotation_maps_every_node_and_keeps_the_shape_test() {
+  let node =
+    tree.let_(
+      "x",
+      tree.apply(tree.variable("a"), tree.integer(1)),
+      tree.lambda("f", tree.integer(2)),
+    )
+  let mapped = tree.map_annotation(node, fn(_) { "seen" })
+  assert ["seen", "seen", "seen", "seen", "seen", "seen"]
+    == tree.get_annotation(mapped)
+  assert shape(node) == shape(mapped)
+}
+
+// A real module is thousands of nodes, a long chain of lets. Walking one must
+// cost no stack, or it cannot be read in a browser, where the limit is far
+// lower than the one node gives a CLI.
+pub fn a_long_chain_of_lets_is_walked_without_the_stack_test() {
+  let node = lets(20_000, tree.integer(0))
+  assert 40_001 == list.length(tree.get_annotation(node))
+  let mapped = tree.map_annotation(node, fn(_) { 1 })
+  assert 40_001 == list.fold(tree.get_annotation(mapped), 0, fn(a, b) { a + b })
+  assert [] == tree.list_references(mapped)
+  assert [] == tree.list_builtins(mapped)
+  assert shape(node) == shape(mapped)
+}
+
+// Nested on the left, where a walk cannot lean on the tail call of a body.
+pub fn a_deeply_nested_function_is_walked_without_the_stack_test() {
+  let node = applications(20_000, tree.integer(0))
+  assert 40_001 == list.length(tree.get_annotation(node))
+  let mapped = tree.map_annotation(node, fn(_) { Nil })
+  assert 40_001 == list.length(tree.get_annotation(mapped))
+  assert shape(node) == shape(mapped)
+}
+
+fn lets(count, inner) {
+  case count {
+    0 -> inner
+    _ -> lets(count - 1, tree.let_("x", tree.integer(count), inner))
+  }
+}
+
+fn applications(count, inner) {
+  case count {
+    0 -> inner
+    _ -> applications(count - 1, tree.apply(inner, tree.integer(count)))
+  }
+}
+
+fn shape(node) {
+  tree.fold_pure(node, [], fn(acc, n) { [print(n.0), ..acc] })
+}
