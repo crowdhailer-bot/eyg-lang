@@ -113,6 +113,18 @@ fn parse_package(name, version) {
   }
 }
 
+/// A short name for the requested context, to show to the user.
+pub fn describe(source: Source) -> String {
+  case source {
+    Default -> "overlay"
+    Reference(cid:) -> "#" <> v1.to_string(cid)
+    Package(name:, version: None) -> "@" <> name
+    Package(name:, version: Some(version)) ->
+      "@" <> name <> ":" <> int.to_string(version)
+    Invalid(raw:, reason: _) -> raw
+  }
+}
+
 pub type Status {
   Pulling(reference: ir.Reference)
   Fetching(cids: List(v1.Cid), reference: ir.Reference)
@@ -150,7 +162,7 @@ pub fn pulled(status, cache) {
           case tools.to_fetch(tools.missing_references(errors), cache, []) {
             // The release log is up to date, so a reference that is still
             // missing is one the hub does not have.
-            [] -> #(Errored(describe(errors)), cache)
+            [] -> #(Errored(describe_errors(errors)), cache)
             missing -> #(
               Fetching(missing, reference:),
               cache.fetch_all(cache, missing),
@@ -173,7 +185,7 @@ pub fn check_fetching(status, cache) {
             [] -> loaded(source, analysis, cache)
             // The cache follows the dependencies of a module it fetches, so
             // nothing further arrives to resolve these.
-            errors -> Errored(describe(errors))
+            errors -> Errored(describe_errors(errors))
           }
         }
         // Because we check pulled status and then fetching this branch is reached almost immediatly
@@ -201,7 +213,7 @@ fn loaded(source, analysis, cache) -> Status {
   }
 }
 
-fn describe(errors: List(#(a, error.Reason))) {
+fn describe_errors(errors: List(#(a, error.Reason))) {
   list.map(errors, fn(error) { analysis_debug.reason(error.1) })
   |> string.join("\n")
 }

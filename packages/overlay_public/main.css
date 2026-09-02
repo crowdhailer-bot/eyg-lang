@@ -240,6 +240,22 @@ pre {
   }
 }
 
+.context {
+  align-self: center;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 90%;
+  padding: 2px 8px;
+}
+
+.context.loading {
+  opacity: 0.6;
+}
+
+.context.ready {
+  background-color: var(--color-base-200);
+}
+
 .failure-message {
   margin-inline: 0;
   padding-left: 7px;

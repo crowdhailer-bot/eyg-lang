@@ -30,6 +30,7 @@ pub fn render(model: state.State) {
         ],
         [
           h.h1([a.class("impact-heading")], [h.text("Overlay")]),
+          render_context(view.context(model)),
           provider_view.render(model),
         ],
       ),
@@ -62,6 +63,22 @@ pub fn render(model: state.State) {
   // // h.div([], [h.span([], [h.text("cell5")])]),
   // ]),
   ])
+}
+
+fn render_context(context) {
+  case context {
+    view.Default -> element.none()
+    view.Loading(name:) ->
+      h.div([a.class("context loading")], [
+        h.text("Loading context " <> name <> "..."),
+      ])
+    view.Loaded(name:) ->
+      h.div([a.class("context ready")], [h.text("Context " <> name)])
+    view.Failed(name:, reason:) ->
+      h.div([a.class("context failure-message")], [
+        h.text(name <> ": " <> reason),
+      ])
+  }
 }
 
 fn render_chat(message: #(Int, chat.Message(tool.Call)), expanded) {

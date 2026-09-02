@@ -6,7 +6,26 @@ import gleam/dict
 import gleam/list
 import gleam/string
 import overlay/llm/chat
+import overlay/web/context
 import overlay/web/state.{type State, State}
+
+pub type Context {
+  Default
+  Loading(name: String)
+  Loaded(name: String)
+  Failed(name: String, reason: String)
+}
+
+pub fn context(state: State) -> Context {
+  let State(context_source:, context:, ..) = state
+  let name = context.describe(context_source)
+  case context_source, context {
+    context.Default, _ -> Default
+    _, context.Pulling(..) | _, context.Fetching(..) -> Loading(name)
+    _, context.Loaded(..) -> Loaded(name)
+    _, context.Errored(reason:) -> Failed(name, reason)
+  }
+}
 
 pub fn messages(state: State) {
   let State(status:, history:, ..) = state
