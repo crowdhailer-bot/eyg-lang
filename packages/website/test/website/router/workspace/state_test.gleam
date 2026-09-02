@@ -8,6 +8,7 @@ import gleam/dict
 import gleam/list
 import gleam/option.{Some}
 import morph/buffer
+import morph/picker
 import ogre/origin
 import pal/system
 import website/config
@@ -127,6 +128,66 @@ pub fn relative_workspace_module_fetches_remote_dependencies_test() {
     )
   let assert [state.Previous(value:, ..)] = state.previous
   assert Some(v.Integer(42)) == value
+}
+
+pub fn insert_relative_workspace_reference_test() {
+  let module = buffer.from_source(ir.integer(42), infer.pure(), dict.new())
+  let state = with_source(ir.vacant())
+  let modules = dict.from_list([#(#("local", state.EygJson), module)])
+  let state = State(..state, modules:)
+
+  let assert #(state, []) = command(state, "q")
+  let assert state.Manipulating(..) = state.mode
+  let assert #(state, []) =
+    state.update(state, state.PickerMessage(picker.Decided("local")))
+  let assert #(ir.Reference(ir.Relative(location)), _) =
+    buffer.source(state.repl)
+
+  assert "/local.eyg.json" == location
+}
+
+pub fn workspace_picker_rejects_an_unknown_module_test() {
+  let module = buffer.from_source(ir.integer(42), infer.pure(), dict.new())
+  let state = with_source(ir.vacant())
+  let modules = dict.from_list([#(#("local", state.EygJson), module)])
+  let state = State(..state, modules:)
+
+  let assert #(state, []) = command(state, "q")
+  let assert #(state, []) =
+    state.update(state, state.PickerMessage(picker.Decided("missing")))
+  let assert #(ir.Vacant, _) = buffer.source(state.repl)
+}
+
+pub fn release_picker_uses_the_latest_version_when_confirmed_test() {
+  let first =
+    cache.Entry(
+      version: 1,
+      module: dag_json.vacant_cid,
+      cursor: 1,
+      sequence: 1,
+      cid: dag_json.vacant_cid,
+    )
+  let state = with_source(ir.vacant())
+  let cache =
+    cache.Cache(
+      ..state.cache,
+      packages: dict.insert(state.cache.packages, "standard", first),
+    )
+  let state = State(..state, cache:)
+  let assert #(state, []) = command(state, "@")
+
+  let latest = cache.Entry(..first, version: 2, cursor: 2, sequence: 2)
+  let cache =
+    cache.Cache(
+      ..state.cache,
+      packages: dict.insert(state.cache.packages, "standard", latest),
+    )
+  let state = State(..state, cache:)
+  let assert #(state, []) =
+    state.update(state, state.PickerMessage(picker.Decided("standard")))
+
+  let assert #(ir.Reference(ir.Pinned(release)), _) = buffer.source(state.repl)
+  assert ir.Release("standard", 2, dag_json.vacant_cid) == release
 }
 
 fn command(state, key) {
