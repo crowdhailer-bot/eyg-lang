@@ -1,0 +1,621 @@
+{
+ "browser": "151.0.7922.34",
+ "results": [
+  {
+   "example": "read_handles",
+   "design": "dom.handles",
+   "backend": "full",
+   "arg": "{}",
+   "value": "I12497500",
+   "times": [
+    4.100000381469727,
+    7.399999618530273,
+    3.3999996185302734,
+    4,
+    4
+   ],
+   "effects": {
+    "total": 5001,
+    "Query": 1,
+    "ReadText": 5000
+   },
+   "median": 4,
+   "correct": true
+  },
+  {
+   "example": "read_handles",
+   "design": "dom.handles",
+   "backend": "generator",
+   "arg": "{}",
+   "value": "I12497500",
+   "times": [
+    12.400001525878906,
+    15.5,
+    10.799999237060547,
+    11.799999237060547,
+    11.600000381469727
+   ],
+   "effects": {
+    "total": 5001,
+    "Query": 1,
+    "ReadText": 5000
+   },
+   "median": 11.799999237060547,
+   "correct": true
+  },
+  {
+   "example": "read_selectors",
+   "design": "dom.selectors",
+   "backend": "full",
+   "arg": "{}",
+   "value": "I12497500",
+   "times": [
+    2,
+    1.8999996185302734,
+    2.5,
+    2.1999988555908203,
+    2.1999988555908203
+   ],
+   "effects": {
+    "total": 1,
+    "ReadAll": 1
+   },
+   "median": 2.1999988555908203,
+   "correct": true
+  },
+  {
+   "example": "read_selectors",
+   "design": "dom.selectors",
+   "backend": "generator",
+   "arg": "{}",
+   "value": "I12497500",
+   "times": [
+    2.700000762939453,
+    2.6999988555908203,
+    2.6999988555908203,
+    1.6000003814697266,
+    2.5
+   ],
+   "effects": {
+    "total": 1,
+    "ReadAll": 1
+   },
+   "median": 2.6999988555908203,
+   "correct": true
+  },
+  {
+   "example": "read_selectors_each",
+   "design": "dom.selectors",
+   "backend": "full",
+   "arg": "({rows: 1000, columns: 5})",
+   "value": "I12497500",
+   "times": [
+    152.60000038146973,
+    143.20000076293945,
+    143.60000038146973,
+    154.29999923706055,
+    176
+   ],
+   "effects": {
+    "total": 5000,
+    "ReadText": 5000
+   },
+   "median": 152.60000038146973,
+   "correct": true
+  },
+  {
+   "example": "read_selectors_each",
+   "design": "dom.selectors",
+   "backend": "generator",
+   "arg": "({rows: 1000, columns: 5})",
+   "value": "I12497500",
+   "times": [
+    152.5,
+    177.60000038146973,
+    154.19999885559082,
+    159,
+    170
+   ],
+   "effects": {
+    "total": 5000,
+    "ReadText": 5000
+   },
+   "median": 159,
+   "correct": true
+  },
+  {
+   "example": "read_snapshot",
+   "design": "dom.snapshot",
+   "backend": "full",
+   "arg": "{}",
+   "value": "I12497500",
+   "times": [
+    11.69999885559082,
+    8.399999618530273,
+    10,
+    10,
+    8.200000762939453
+   ],
+   "effects": {
+    "total": 1,
+    "Snapshot": 1
+   },
+   "median": 10,
+   "correct": true
+  },
+  {
+   "example": "read_snapshot",
+   "design": "dom.snapshot",
+   "backend": "generator",
+   "arg": "{}",
+   "value": "I12497500",
+   "times": [
+    9.69999885559082,
+    8,
+    9.600000381469727,
+    7.899999618530273,
+    7.69999885559082
+   ],
+   "effects": {
+    "total": 1,
+    "Snapshot": 1
+   },
+   "median": 8,
+   "correct": true
+  },
+  {
+   "example": "rows_imperative",
+   "design": "dom.imperative",
+   "backend": "full",
+   "arg": "1000",
+   "value": "I1000",
+   "times": [
+    4.200000762939453,
+    4.19999885559082,
+    4.200000762939453,
+    4.399999618530273,
+    3.5999984741210938
+   ],
+   "effects": {
+    "total": 11101,
+    "Query": 1,
+    "CreateElement": 3000,
+    "CreateText": 2000,
+    "Append": 5000,
+    "SetText": 100,
+    "Remove": 1000
+   },
+   "median": 4.200000762939453,
+   "correct": true
+  },
+  {
+   "example": "rows_imperative",
+   "design": "dom.imperative",
+   "backend": "generator",
+   "arg": "1000",
+   "value": "I1000",
+   "times": [
+    12.399999618530273,
+    12.69999885559082,
+    10.899999618530273,
+    10.700000762939453,
+    10.799999237060547
+   ],
+   "effects": {
+    "total": 11101,
+    "Query": 1,
+    "CreateElement": 3000,
+    "CreateText": 2000,
+    "Append": 5000,
+    "SetText": 100,
+    "Remove": 1000
+   },
+   "median": 10.899999618530273,
+   "correct": true
+  },
+  {
+   "example": "rows_patch",
+   "design": "dom.patch",
+   "backend": "full",
+   "arg": "1000",
+   "value": "I1000",
+   "times": [
+    5.600000381469727,
+    4.400001525878906,
+    6.399999618530273,
+    5.399999618530273,
+    6.399999618530273
+   ],
+   "effects": {
+    "total": 4,
+    "Query": 1,
+    "Patch": 3
+   },
+   "median": 5.600000381469727,
+   "correct": true
+  },
+  {
+   "example": "rows_patch",
+   "design": "dom.patch",
+   "backend": "generator",
+   "arg": "1000",
+   "value": "I1000",
+   "times": [
+    12.5,
+    15.19999885559082,
+    15.100000381469727,
+    9.299999237060547,
+    11.299999237060547
+   ],
+   "effects": {
+    "total": 4,
+    "Query": 1,
+    "Patch": 3
+   },
+   "median": 12.5,
+   "correct": true
+  },
+  {
+   "example": "rows_render",
+   "design": "dom.render",
+   "backend": "full",
+   "arg": "1000",
+   "value": "I1000",
+   "times": [
+    12,
+    10.299999237060547,
+    7.200000762939453,
+    7.799999237060547,
+    9.100000381469727
+   ],
+   "effects": {
+    "total": 3,
+    "Render": 3
+   },
+   "median": 9.100000381469727,
+   "correct": true
+  },
+  {
+   "example": "rows_render",
+   "design": "dom.render",
+   "backend": "generator",
+   "arg": "1000",
+   "value": "I1000",
+   "times": [
+    12.899999618530273,
+    12,
+    10.799999237060547,
+    11.600000381469727,
+    9.899999618530273
+   ],
+   "effects": {
+    "total": 3,
+    "Render": 3
+   },
+   "median": 11.600000381469727,
+   "correct": true
+  },
+  {
+   "example": "counters_host",
+   "design": "signals.host",
+   "backend": "full",
+   "arg": "200",
+   "value": "S\"200\"",
+   "times": [
+    12.799999237060547,
+    12.899999618530273,
+    13.600000381469727,
+    12.200000762939453,
+    12.30000114440918
+   ],
+   "effects": {
+    "total": 1403,
+    "Signal": 200,
+    "BindText": 201,
+    "Derive": 1,
+    "Set": 1000,
+    "Get": 1
+   },
+   "median": 12.799999237060547,
+   "correct": true
+  },
+  {
+   "example": "counters_host",
+   "design": "signals.host",
+   "backend": "generator",
+   "arg": "200",
+   "value": "S\"200\"",
+   "times": [
+    16.299999237060547,
+    16.5,
+    17.200000762939453,
+    18.200000762939453,
+    16.5
+   ],
+   "effects": {
+    "total": 1403,
+    "Signal": 200,
+    "BindText": 201,
+    "Derive": 1,
+    "Set": 1000,
+    "Get": 1
+   },
+   "median": 16.5,
+   "correct": true
+  },
+  {
+   "example": "counters_handlers",
+   "design": "dom.selectors",
+   "backend": "full",
+   "arg": "200",
+   "value": "S\"200\"",
+   "times": [
+    884.3999996185303,
+    939.2999992370605,
+    888.5,
+    923.6000003814697,
+    962.7000007629395
+   ],
+   "effects": {
+    "total": 2201,
+    "WriteText": 2201
+   },
+   "median": 923.6000003814697,
+   "correct": true
+  },
+  {
+   "example": "counters_handlers",
+   "design": "dom.selectors",
+   "backend": "generator",
+   "arg": "200",
+   "value": "S\"200\"",
+   "times": [
+    2958,
+    4625.60000038147,
+    2312.3999996185303,
+    2364.099998474121,
+    2128.1000003814697
+   ],
+   "effects": {
+    "total": 2201,
+    "WriteText": 2201
+   },
+   "median": 2364.099998474121,
+   "correct": true
+  },
+  {
+   "example": "counters_render",
+   "design": "dom.render",
+   "backend": "full",
+   "arg": "200",
+   "value": "S\"200\"",
+   "times": [
+    123,
+    127.70000076293945,
+    122.79999923706055,
+    121.60000038146973,
+    119.39999961853027
+   ],
+   "effects": {
+    "total": 1001,
+    "Render": 1001
+   },
+   "median": 122.79999923706055,
+   "correct": true
+  },
+  {
+   "example": "counters_render",
+   "design": "dom.render",
+   "backend": "generator",
+   "arg": "200",
+   "value": "S\"200\"",
+   "times": [
+    166.10000038146973,
+    181.39999961853027,
+    181.19999885559082,
+    164.70000076293945,
+    121.4000015258789
+   ],
+   "effects": {
+    "total": 1001,
+    "Render": 1001
+   },
+   "median": 166.10000038146973,
+   "correct": true
+  },
+  {
+   "example": "counters_render_batched",
+   "design": "dom.render",
+   "backend": "full",
+   "arg": "200",
+   "value": "S\"200\"",
+   "times": [
+    1.2999992370605469,
+    1.1999988555908203,
+    1.6000003814697266,
+    3.299999237060547,
+    1.4000015258789062
+   ],
+   "effects": {
+    "total": 6,
+    "Render": 6
+   },
+   "median": 1.4000015258789062,
+   "correct": true
+  },
+  {
+   "example": "counters_render_batched",
+   "design": "dom.render",
+   "backend": "generator",
+   "arg": "200",
+   "value": "S\"200\"",
+   "times": [
+    1.4000015258789062,
+    1.5999984741210938,
+    4.700000762939453,
+    1.5,
+    4.30000114440918
+   ],
+   "effects": {
+    "total": 6,
+    "Render": 6
+   },
+   "median": 1.5999984741210938,
+   "correct": true
+  },
+  {
+   "example": "webrtc_mirror",
+   "design": "webrtc.mirror",
+   "backend": "full",
+   "arg": "2000",
+   "value": "I10000",
+   "times": [
+    175.20000076293945,
+    216.79999923706055,
+    200.60000038146973
+   ],
+   "effects": {
+    "total": 4011,
+    "CreatePeer": 2,
+    "CreateChannel": 1,
+    "CreateOffer": 1,
+    "CreateAnswer": 1,
+    "SetAnswer": 1,
+    "AcceptChannel": 1,
+    "WaitOpen": 2,
+    "Send": 2000,
+    "Receive": 2000,
+    "Close": 2
+   },
+   "median": 200.60000038146973,
+   "correct": true
+  },
+  {
+   "example": "webrtc_mirror",
+   "design": "webrtc.mirror",
+   "backend": "generator",
+   "arg": "2000",
+   "value": "I10000",
+   "times": [
+    210,
+    201.5,
+    199.29999923706055
+   ],
+   "effects": {
+    "total": 4011,
+    "CreatePeer": 2,
+    "CreateChannel": 1,
+    "CreateOffer": 1,
+    "CreateAnswer": 1,
+    "SetAnswer": 1,
+    "AcceptChannel": 1,
+    "WaitOpen": 2,
+    "Send": 2000,
+    "Receive": 2000,
+    "Close": 2
+   },
+   "median": 201.5,
+   "correct": true
+  },
+  {
+   "example": "webrtc_batch",
+   "design": "webrtc.batch",
+   "backend": "full",
+   "arg": "2000",
+   "value": "I10000",
+   "times": [
+    210.80000114440918,
+    210.5999984741211,
+    198
+   ],
+   "effects": {
+    "total": 2012,
+    "CreatePeer": 2,
+    "CreateChannel": 1,
+    "CreateOffer": 1,
+    "CreateAnswer": 1,
+    "SetAnswer": 1,
+    "AcceptChannel": 1,
+    "WaitOpen": 2,
+    "SendAll": 1,
+    "ReceiveAll": 2000,
+    "Close": 2
+   },
+   "median": 210.5999984741211,
+   "correct": true
+  },
+  {
+   "example": "webrtc_batch",
+   "design": "webrtc.batch",
+   "backend": "generator",
+   "arg": "2000",
+   "value": "I10000",
+   "times": [
+    288.3999996185303,
+    276,
+    296.0999984741211
+   ],
+   "effects": {
+    "total": 2012,
+    "CreatePeer": 2,
+    "CreateChannel": 1,
+    "CreateOffer": 1,
+    "CreateAnswer": 1,
+    "SetAnswer": 1,
+    "AcceptChannel": 1,
+    "WaitOpen": 2,
+    "SendAll": 1,
+    "ReceiveAll": 2000,
+    "Close": 2
+   },
+   "median": 288.3999996185303,
+   "correct": true
+  },
+  {
+   "example": "webrtc_session",
+   "design": "webrtc.session",
+   "backend": "full",
+   "arg": "2000",
+   "value": "I10000",
+   "times": [
+    219,
+    220.30000114440918,
+    205.69999885559082
+   ],
+   "effects": {
+    "total": 4005,
+    "Offer": 1,
+    "Accept": 1,
+    "Connect": 1,
+    "Ready": 2,
+    "Send": 2000,
+    "Receive": 2000
+   },
+   "median": 219,
+   "correct": true
+  },
+  {
+   "example": "webrtc_session",
+   "design": "webrtc.session",
+   "backend": "generator",
+   "arg": "2000",
+   "value": "I10000",
+   "times": [
+    216.79999923706055,
+    212.5,
+    211.5999984741211
+   ],
+   "effects": {
+    "total": 4005,
+    "Offer": 1,
+    "Accept": 1,
+    "Connect": 1,
+    "Ready": 2,
+    "Send": 2000,
+    "Receive": 2000
+   },
+   "median": 212.5,
+   "correct": true
+  }
+ ]
+}
