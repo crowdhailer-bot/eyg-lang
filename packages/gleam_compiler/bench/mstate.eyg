@@ -1,0 +1,27 @@
+// State as a function of the state, the resumption is captured under a lambda
+// so the operation is not tail resumptive.
+(n) -> {
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let xs = range(n)
+  let run = handle State((op, resume) -> {
+    (s) -> {
+      match op {
+        Get(_) -> { resume(s)(s) }
+        Set(next) -> { resume(next)(next) }
+      }
+    }
+  }, (_) -> {
+    let final = !list_fold(xs, 0, (_, _) -> {
+      let v = perform State(Get({}))
+      perform State(Set(!int_add(v, 1)))
+    })
+    let done = (_) -> { final }
+    done
+  })
+  run(0)
+}

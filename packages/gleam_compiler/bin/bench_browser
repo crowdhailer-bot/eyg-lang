@@ -1,0 +1,96 @@
+#!/usr/bin/env bun
+// Run the compiled benchmarks in Chromium, so they are measured on V8 as well
+// as JavaScriptCore under bun. Each case runs in a new browser context.
+//
+// Run `gleam run -m eyg/compiler/bench -- compile` first, it writes every
+// compiled program to bench/out. Results are written to bench/results/chromium.json.
+
+import { chromium } from "playwright";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+
+const runtime = "build/dev/javascript/eyg_compiler/eyg/compiler/runtime/";
+const sizes = {
+  fib: 30,
+  counter: 2000,
+  counter1: 2000,
+  counter10: 2000,
+  host: 2000,
+  polymorphic: 1000,
+  mstate: 10000,
+  nqueens: 9,
+};
+const html = `<script type="module">
+import * as evidence from "/runtime/evidence.mjs";
+import * as generator from "/runtime/generator.mjs";
+import { canonical } from "/runtime/inspect.mjs";
+window.eyg = { evidence, generator, canonical };
+</script>`;
+
+const browser = await chromium.launch();
+const results = [];
+for (const file of readdirSync("bench/out").sort()) {
+  const [bench, label] = file.replace(/\.js$/, "").split(".");
+  const code = readFileSync("bench/out/" + file, "utf8");
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.route("http://bench.local/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/") return route.fulfill({ contentType: "text/html", body: html });
+    if (path.startsWith("/runtime/")) {
+      return route.fulfill({
+        contentType: "text/javascript",
+        body: readFileSync(runtime + path.slice("/runtime/".length)),
+      });
+    }
+    return route.fulfill({ status: 404 });
+  });
+  await page.goto("http://bench.local/");
+  await page.waitForFunction(() => window.eyg);
+  const result = await page.evaluate(
+    ({ code, label, size }) => {
+      const { evidence, generator, canonical } = window.eyg;
+      const options = {
+        full: {},
+        linked: { evidence: "linked" },
+        bubble: { evidence: "none" },
+        no_tail: { tail: false },
+        no_inline: {},
+        no_shortcut: { shortcut: false },
+        not_selective: {},
+      }[label];
+      const rt = label.startsWith("generator")
+        ? generator.create({ tail: label === "generator" })
+        : evidence.create(options);
+      const platform = { Random: { sync: (max) => max - 1 } };
+      try {
+        const f = rt.run(new Function("return " + code)()(rt), platform);
+        const times = [];
+        let value;
+        for (let i = 0; i < 10; i++) {
+          const start = performance.now();
+          value = rt.run(() => f(size), platform);
+          times.push(performance.now() - start);
+        }
+        return { value: canonical(value), times: times.slice(3) };
+      } catch (error) {
+        return { error: String(error && error.message ? error.message : error) };
+      }
+    },
+    { code, label, size: sizes[bench] },
+  );
+  await context.close();
+  const entry = { bench, backend: label, size: sizes[bench], ...result };
+  if (result.times) {
+    const sorted = [...result.times].sort((a, b) => a - b);
+    entry.median = sorted[Math.floor(sorted.length / 2)];
+  }
+  results.push(entry);
+  console.log(
+    bench.padEnd(12) +
+      label.padEnd(18) +
+      (entry.error ? "error " + entry.error : entry.median.toFixed(2).padStart(12) + " ms"),
+  );
+}
+const version = browser.version();
+await browser.close();
+writeFileSync("bench/results/chromium.json", JSON.stringify({ browser: version, results }, null, 1));

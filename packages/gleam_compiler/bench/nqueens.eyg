@@ -1,0 +1,44 @@
+// Count the solutions to the n queens problem.
+// Choose resumes once for every column, a multi-shot resumption.
+(n) -> {
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let columns = range(n)
+  let safe = !fix((safe, col, dist, qs) -> {
+    match !list_pop(qs) {
+      Error(_) -> { True({}) }
+      Ok({head, tail}) -> {
+        match !equal(head, col) {
+          True(_) -> { False({}) }
+          False(_) -> {
+            match !equal(!int_absolute(!int_subtract(head, col)), dist) {
+              True(_) -> { False({}) }
+              False(_) -> { safe(col, !int_add(dist, 1), tail) }
+            }
+          }
+        }
+      }
+    }
+  })
+  let place = !fix((place, row, qs) -> {
+    match !equal(row, n) {
+      True(_) -> { 1 }
+      False(_) -> {
+        let col = perform Choose(columns)
+        match safe(col, 1, qs) {
+          True(_) -> { place(!int_add(row, 1), [col, ..qs]) }
+          False(_) -> { !never(perform Fail({})) }
+        }
+      }
+    }
+  })
+  handle Choose((options, resume) -> {
+    !list_fold(options, 0, (col, acc) -> { !int_add(acc, resume(col)) })
+  }, (_) -> {
+    handle Fail((_, _) -> { 0 }, (_) -> { place(0, []) })
+  })
+}

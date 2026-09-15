@@ -1,0 +1,13 @@
+// A synchronous platform effect performed n * n times.
+(n) -> {
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let xs = range(n)
+  !list_fold(xs, 0, (_, acc) -> {
+    !list_fold(xs, acc, (_, acc) -> { !int_add(acc, perform Random(10)) })
+  })
+}

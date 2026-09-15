@@ -1,0 +1,15 @@
+// A tail resumptive reader performed n * n times.
+(n) -> {
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let xs = range(n)
+  handle Ask((_, resume) -> { resume(1) }, (_) -> {
+    !list_fold(xs, 0, (_, acc) -> {
+      !list_fold(xs, acc, (_, acc) -> { !int_add(acc, perform Ask({})) })
+    })
+  })
+}

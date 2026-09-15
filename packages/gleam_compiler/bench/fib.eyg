@@ -1,0 +1,10 @@
+// Pure recursion, no effects, measures the cost of the translation itself.
+(n) -> {
+  let fib = !fix((fib, i) -> {
+    match !int_compare(i, 2) {
+      Lt(_) -> { i }
+      | (_) -> { !int_add(fib(!int_subtract(i, 1)), fib(!int_subtract(i, 2))) }
+    }
+  })
+  fib(n)
+}

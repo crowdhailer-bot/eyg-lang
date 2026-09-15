@@ -1,0 +1,21 @@
+// An effect polymorphic map used with a pure function.
+// The body of map can not be known to be pure.
+(n) -> {
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let map = !fix((map, f, items) -> {
+    match !list_pop(items) {
+      Error(_) -> { [] }
+      Ok({head, tail}) -> { [f(head), ..map(f, tail)] }
+    }
+  })
+  let xs = range(n)
+  !list_fold(xs, 0, (_, acc) -> {
+    let ys = map((x) -> { !int_add(x, 1) }, xs)
+    !list_fold(ys, acc, (y, acc) -> { !int_add(acc, y) })
+  })
+}
