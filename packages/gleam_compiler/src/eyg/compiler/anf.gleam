@@ -201,7 +201,7 @@ fn tail(node: Node, env: Env, config, i) -> #(Block, Int) {
 }
 
 fn compute(node: Node, env: Env, config, i, k: K) -> #(Block, Int) {
-  let #(exp, info) = node
+  let #(exp, _) = node
   case exp {
     ir.Variable(x) ->
       case list.key_find(env, x) {
@@ -218,7 +218,9 @@ fn compute(node: Node, env: Env, config, i, k: K) -> #(Block, Int) {
     ir.Lambda(x, body) -> {
       let #(name, i) = fresh(x, i)
       let #(body, i) = tail(body, [#(x, name), ..env], config, i)
-      k(Lambda(name, body, !function_pure(info.type_)), False, i)
+      // A closed row on a lambda annotation does not imply calls in its body
+      // are annotated pure, so whether the body yields is taken from the body.
+      k(Lambda(name, body, yields(body)), False, i)
     }
     ir.Let(x, value, then) -> {
       use expr, effectful, i <- compute(value, env, config, i)
@@ -469,12 +471,12 @@ fn eta(head: Node, args: List(#(Node, Node)), n, env, config, i, k: K) {
 fn lambdas(params, body, type_) {
   case params {
     [] -> panic as "eta expansion needs parameters"
-    [param] -> Lambda(param, body, !function_pure(type_))
+    [param] -> Lambda(param, body, yields(body))
     [param, ..rest] ->
       Lambda(
         param,
         Return(lambdas(rest, body, return_type(type_)), False),
-        !function_pure(type_),
+        False,
       )
   }
 }

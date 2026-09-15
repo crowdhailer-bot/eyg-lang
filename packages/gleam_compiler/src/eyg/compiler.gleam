@@ -5,6 +5,7 @@ import eyg/analysis/type_/binding
 import eyg/analysis/type_/isomorphic as t
 import eyg/compiler/anf
 import eyg/compiler/evidence
+import eyg/compiler/generator
 import eyg/ir/tree
 
 /// Compile with generalized evidence passing and every optimisation.
@@ -25,6 +26,20 @@ pub fn unchecked(program, options) {
   |> tree.map_annotation(fn(_) { t.Var(-1) })
   |> anf.program(False)
   |> evidence.render(options)
+}
+
+/// Compile effectful functions to JavaScript generators.
+/// A program that does not type check makes every function a generator.
+pub fn generator(program, refs) {
+  let #(typed, checked) = analyse(program, refs)
+  case checked {
+    True -> anf.program(typed, True)
+    False ->
+      program
+      |> tree.map_annotation(fn(_) { t.Var(-1) })
+      |> anf.program(False)
+  }
+  |> generator.render
 }
 
 /// Annotate each node with its resolved type.

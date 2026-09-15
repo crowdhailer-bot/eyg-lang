@@ -7,36 +7,40 @@ import gleam/json
 import gleam/list
 import gleam/string
 
-pub type Config {
-  Config(
-    name: String,
-    options: evidence.Options,
-    shortcut: Bool,
-    selective: Bool,
-  )
+pub type Backend {
+  Evidence(options: evidence.Options, shortcut: Bool, selective: Bool)
+  Generator
 }
 
-/// Every combination the paper measures, each one optimisation turned off.
+pub type Config {
+  Config(name: String, backend: Backend)
+}
+
+/// The generator backend and every evidence passing combination the paper
+/// measures, each with one optimisation turned off.
 pub fn configs() {
   let full = evidence.default()
   [
-    Config("full", full, True, True),
+    Config("full", Evidence(full, True, True)),
     Config(
       "linked",
-      evidence.Options(..full, evidence: evidence.Linked),
-      True,
-      True,
+      Evidence(evidence.Options(..full, evidence: evidence.Linked), True, True),
     ),
     Config(
       "bubble",
-      evidence.Options(..full, evidence: evidence.Bubble),
-      True,
-      True,
+      Evidence(evidence.Options(..full, evidence: evidence.Bubble), True, True),
     ),
-    Config("no tail", evidence.Options(..full, tail: False), True, True),
-    Config("no inline", evidence.Options(..full, inline: False), True, True),
-    Config("no shortcut", full, False, True),
-    Config("not selective", full, True, False),
+    Config(
+      "no tail",
+      Evidence(evidence.Options(..full, tail: False), True, True),
+    ),
+    Config(
+      "no inline",
+      Evidence(evidence.Options(..full, inline: False), True, True),
+    ),
+    Config("no shortcut", Evidence(full, False, True)),
+    Config("not selective", Evidence(full, True, False)),
+    Config("generator", Generator),
   ]
 }
 
@@ -49,9 +53,12 @@ pub fn evidence_name(evidence) {
 }
 
 pub fn compile(source, config: Config) {
-  case config.selective {
-    True -> compiler.evidence(source, dict.new(), config.options)
-    False -> compiler.unchecked(source, config.options)
+  case config.backend {
+    Evidence(options:, selective: True, ..) ->
+      compiler.evidence(source, dict.new(), options)
+    Evidence(options:, selective: False, ..) ->
+      compiler.unchecked(source, options)
+    Generator -> compiler.generator(source, dict.new())
   }
 }
 
@@ -63,13 +70,17 @@ pub fn run(source, config: Config, effects) {
       let #(label, lift, reply) = effect
       #(label, canonical(lift), js_literal(reply))
     })
-  do_run(
-    code,
-    evidence_name(config.options.evidence),
-    config.options.tail,
-    config.shortcut,
-    effects,
-  )
+  case config.backend {
+    Evidence(options:, shortcut:, ..) ->
+      do_run(
+        code,
+        evidence_name(options.evidence),
+        options.tail,
+        shortcut,
+        effects,
+      )
+    Generator -> do_run_generator(code, effects)
+  }
 }
 
 @external(javascript, "./run_ffi.mjs", "run")
@@ -78,6 +89,12 @@ fn do_run(
   evidence: String,
   tail: Bool,
   shortcut: Bool,
+  effects: List(#(String, String, String)),
+) -> Result(String, String)
+
+@external(javascript, "./run_ffi.mjs", "run_generator")
+fn do_run_generator(
+  code: String,
   effects: List(#(String, String, String)),
 ) -> Result(String, String)
 
