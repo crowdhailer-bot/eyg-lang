@@ -524,7 +524,7 @@ s.y = { l, m: ev, v, k: [] }
       <li>A clause that resumes starts the rest of the loop inside itself</li>
       <li>JavaScriptCore eliminates those tail calls in strict mode, V8 does not</li>
       <li>Without tail resumption or evidence, 4 million performs overflow V8's stack</li>
-      <li><code>mstate</code> resumes under a lambda: overflows both engines at 200 000</li>
+      <li><code>mstate</code> resumes under a lambda: overflows V8 at 10 000 operations in every configuration</li>
     </ul>
     <table>
       <thead><tr><th>counter</th><th class="n">Bun</th><th class="n">Chromium</th></tr></thead>
