@@ -2,11 +2,15 @@
 ////
 //// The runtime is `runtime/generator.mjs`.
 ////
-//// A lambda with an effect row that is not empty becomes a generator
-//// function, a perform is a `yield` and an effectful call is a `yield*`.
-//// Generators keep their own locals when suspended so no join points or
-//// continuation frames are generated. A generator can not be copied, so a
-//// resumption used twice replays the handled computation.
+//// A lambda whose body can yield becomes a generator function, a perform is
+//// a `yield` and an effectful call is a `yield*`. Generators keep their own
+//// locals when suspended so no join points or continuation frames are
+//// generated. A generator can not be copied, so a resumption used twice
+//// replays the handled computation.
+////
+//// Tail resumptive handlers are marked as in the evidence passing backend,
+//// the runtime can evaluate them in the handler loop instead of nesting a
+//// new loop inside the handler for every effect.
 
 import eyg/compiler/anf.{type Block, type Expr}
 import eyg/compiler/evidence
@@ -25,7 +29,7 @@ pub fn render(program: Block) -> String {
   string.concat([
     "(function ($rt) {\n",
     "\"use strict\";\n",
-    "const {isGen: $isGen, pure: $pure, handle: $handle, list_fold: $list_fold, list_fold_pure: $list_fold_pure, binary_fold: $binary_fold, binary_fold_pure: $binary_fold_pure, fix: $fix, fix_pure: $fix_pure} = $rt;\n",
+    "const {isGen: $isGen, pure: $pure, handle: $handle, tailResumptive: $tr, list_fold: $list_fold, list_fold_pure: $list_fold_pure, binary_fold: $binary_fold, binary_fold_pure: $binary_fold_pure, fix: $fix, fix_pure: $fix_pure} = $rt;\n",
     evidence.builtins_prelude(),
     "return function* () {\n",
     body,
@@ -163,6 +167,14 @@ fn chain(subject, branches, otherwise, term, i) {
   #(code, i)
 }
 
+fn function(param, body) {
+  let #(b, _) = block(body, FnReturn, 0)
+  case anf.yields(body) {
+    True -> "(function* (" <> param <> ") {\n" <> b <> "})"
+    False -> "((" <> param <> ") => {\n" <> b <> "})"
+  }
+}
+
 fn expr(e: Expr) -> String {
   case e {
     anf.Var(name) -> name
@@ -173,11 +185,12 @@ fn expr(e: Expr) -> String {
       }
     anf.String(value) -> evidence.js_string(value)
     anf.Binary(value) -> evidence.binary(value)
-    anf.Lambda(param, body, effectful) -> {
-      let #(b, _) = block(body, FnReturn, 0)
-      case effectful {
-        True -> "(function* (" <> param <> ") {\n" <> b <> "})"
-        False -> "((" <> param <> ") => {\n" <> b <> "})"
+    anf.Lambda(param, body, _) -> {
+      let code = function(param, body)
+      case evidence.tail_resumptive(body) {
+        Ok(#(_, inner)) ->
+          "$tr(" <> code <> ", " <> function(param, inner) <> ")"
+        Error(Nil) -> code
       }
     }
     anf.Call(f, a) -> "$pure(" <> expr(f) <> "(" <> expr(a) <> "))"

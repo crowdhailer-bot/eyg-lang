@@ -410,7 +410,7 @@ fn lambda(param, body, env: Env, out) {
 /// A handler of the form `(lift) -> { (resume) -> { ...resume(e) } }` where
 /// every tail position calls resume and resume is used nowhere else.
 /// Returns the body with each `resume(e)` replaced by `e`.
-fn tail_resumptive(body) {
+pub fn tail_resumptive(body) {
   case body {
     anf.Return(anf.Lambda(resume, inner, _), False) ->
       case tail_version(inner, resume) {

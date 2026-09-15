@@ -38,6 +38,6 @@ export function run(code, evidenceOption, tail, shortcut, effects) {
   return execute(code, evidence.create({ evidence: evidenceOption, tail, shortcut }), effects);
 }
 
-export function run_generator(code, effects) {
-  return execute(code, generator.create(), effects);
+export function run_generator(code, tail, effects) {
+  return execute(code, generator.create({ tail }), effects);
 }

@@ -26,7 +26,11 @@ export function isGen(x) {
   return typeof x === "object" && x !== null && Generator.isPrototypeOf(x);
 }
 
-export function create() {
+/// tail: evaluate tail resumptive clauses inside the handler loop.
+/// Without it every handled effect starts a handler loop nested inside the
+/// clause of the previous effect, and deep chains of delegation overflow the stack.
+export function create(options = {}) {
+  const tail = options.tail ?? true;
   const unit = builtins.unit;
 
   /// The value of a call made at a pure type.
@@ -35,6 +39,11 @@ export function create() {
     const step = r.next();
     if (!step.done) throw new Unhandled(step.value.l, step.value.v);
     return step.value;
+  }
+
+  function tailResumptive(f, t) {
+    f.t = t;
+    return f;
   }
 
   // Generators can only be resumed once. A second use of a resumption runs
@@ -48,12 +57,22 @@ export function create() {
 
   // history is a linked list of every reply sent to gen, most recent first.
   function* loop(label, h, exec, gen, input, history) {
+    const inPlace = tail && h.t !== undefined ? h.t : null;
     while (true) {
       const step = gen.next(input);
       if (step.done) return step.value;
       const request = step.value;
       if (request.l !== label) {
         input = yield request;
+        history = { x: input, n: history };
+        continue;
+      }
+      if (inPlace !== null) {
+        // Effects of the clause are yielded from this loop, so they reach
+        // the handlers outside this one.
+        let r = inPlace(request.v);
+        if (isGen(r)) r = yield* r;
+        input = r;
         history = { x: input, n: history };
         continue;
       }
@@ -163,6 +182,7 @@ export function create() {
     isGen,
     pure,
     handle,
+    tailResumptive,
     list_fold,
     list_fold_pure,
     binary_fold,
@@ -171,5 +191,6 @@ export function create() {
     fix_pure,
     run,
     builtins,
+    options: { tail },
   };
 }

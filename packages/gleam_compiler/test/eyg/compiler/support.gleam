@@ -9,7 +9,7 @@ import gleam/string
 
 pub type Backend {
   Evidence(options: evidence.Options, shortcut: Bool, selective: Bool)
-  Generator
+  Generator(tail: Bool)
 }
 
 pub type Config {
@@ -40,7 +40,8 @@ pub fn configs() {
     ),
     Config("no shortcut", Evidence(full, False, True)),
     Config("not selective", Evidence(full, True, False)),
-    Config("generator", Generator),
+    Config("generator", Generator(True)),
+    Config("generator no tail", Generator(False)),
   ]
 }
 
@@ -58,7 +59,7 @@ pub fn compile(source, config: Config) {
       compiler.evidence(source, dict.new(), options)
     Evidence(options:, selective: False, ..) ->
       compiler.unchecked(source, options)
-    Generator -> compiler.generator(source, dict.new())
+    Generator(..) -> compiler.generator(source, dict.new())
   }
 }
 
@@ -79,7 +80,7 @@ pub fn run(source, config: Config, effects) {
         shortcut,
         effects,
       )
-    Generator -> do_run_generator(code, effects)
+    Generator(tail:) -> do_run_generator(code, tail, effects)
   }
 }
 
@@ -95,6 +96,7 @@ fn do_run(
 @external(javascript, "./run_ffi.mjs", "run_generator")
 fn do_run_generator(
   code: String,
+  tail: Bool,
   effects: List(#(String, String, String)),
 ) -> Result(String, String)
 
