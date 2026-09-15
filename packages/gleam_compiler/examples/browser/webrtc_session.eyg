@@ -1,0 +1,29 @@
+// webrtc.session: connect two peers in the same page and send n messages.
+// Offers and answers are tokens, in a real application they are moved
+// between peers by copy and paste, a QR code or a Fetch.
+(n) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let offer = ok(perform Offer("data"))
+  let answer = ok(perform Accept(offer.token))
+  let _ = ok(perform Connect({session: offer.session, token: answer.token}))
+  let _ = ok(perform Ready(offer.session))
+  let _ = ok(perform Ready(answer.session))
+  let message = !string_to_binary("hello")
+  let _ = !list_fold(range(n), {}, (_, _) -> {
+    ok(perform Send({session: offer.session, data: message}))
+  })
+  !list_fold(range(n), 0, (_, total) -> {
+    !int_add(total, !binary_size(ok(perform Receive(answer.session))))
+  })
+}

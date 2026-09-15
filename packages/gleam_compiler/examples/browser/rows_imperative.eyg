@@ -1,0 +1,46 @@
+// dom.imperative: create n rows, update every tenth row, remove every row.
+// One effect per DOM operation.
+(n) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let tenth = (i) -> {
+    match !int_divide(i, 10) {
+      Ok(q) -> { !equal(!int_multiply(q, 10), i) }
+      Error(_) -> { False({}) }
+    }
+  }
+  let body = match !list_pop(ok(perform Query("#rows"))) {
+    Ok({head, tail}) -> { head }
+    Error(_) -> { !never(perform Abort("no #rows")) }
+  }
+  let create = (i) -> {
+    let row = ok(perform CreateElement("tr"))
+    let id = ok(perform CreateElement("td"))
+    let _ = ok(perform Append({parent: id, child: perform CreateText(!int_to_string(i))}))
+    let label = ok(perform CreateElement("td"))
+    let _ = ok(perform Append({parent: label, child: perform CreateText("row")}))
+    let _ = ok(perform Append({parent: row, child: id}))
+    let _ = ok(perform Append({parent: row, child: label}))
+    let _ = ok(perform Append({parent: body, child: row}))
+    {row: row, label: label, index: i}
+  }
+  let rows = !list_fold(range(n), [], (i, acc) -> { [create(i), ..acc] })
+  let _ = !list_fold(rows, {}, (row, _) -> {
+    match tenth(row.index) {
+      True(_) -> { ok(perform SetText({node: row.label, text: "updated"})) }
+      False(_) -> { {} }
+    }
+  })
+  let _ = !list_fold(rows, {}, (row, _) -> { ok(perform Remove(row.row)) })
+  n
+}

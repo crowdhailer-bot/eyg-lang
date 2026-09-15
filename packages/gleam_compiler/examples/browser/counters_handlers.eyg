@@ -1,0 +1,133 @@
+// Signals written in EYG: n counters and their total, every counter is set in
+// each of five rounds. The signal graph is the state of a handler and the DOM
+// is written with dom.selectors.
+//
+// EYG has no recursive types, so there is no tree to use as a map.
+// Cells are a list indexed by position, every operation is linear.
+(n) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let reverse = (items) -> { !list_fold(items, [], (item, acc) -> { [item, ..acc] }) }
+  let length = (items) -> { !list_fold(items, 0, (_, count) -> { !int_add(count, 1) }) }
+  let update = (cells, id, f) -> {
+    let stepped = !list_fold(cells, {index: 0, acc: []}, (cell, state) -> {
+      let cell = match !equal(state.index, id) {
+        True(_) -> { f(cell) }
+        False(_) -> { cell }
+      }
+      {index: !int_add(state.index, 1), acc: [cell, ..state.acc]}
+    })
+    reverse(stepped.acc)
+  }
+  let value = (cells, id) -> {
+    let found = !list_fold(cells, {index: 0, value: ""}, (cell, state) -> {
+      let value = match !equal(state.index, id) {
+        True(_) -> { cell.value }
+        False(_) -> { state.value }
+      }
+      {index: !int_add(state.index, 1), value: value}
+    })
+    found.value
+  }
+  let write = (cells, id) -> {
+    let found = !list_fold(cells, {index: 0, bindings: [], value: ""}, (cell, state) -> {
+      match !equal(state.index, id) {
+        True(_) -> { {index: !int_add(state.index, 1), bindings: cell.bindings, value: cell.value} }
+        False(_) -> { {index: !int_add(state.index, 1), bindings: state.bindings, value: state.value} }
+      }
+    })
+    !list_fold(found.bindings, {}, (selector, _) -> {
+      ok(perform WriteText({selector: selector, text: found.value}))
+    })
+  }
+  let signals = (exec) -> {
+    let run = handle Signal((op, resume) -> {
+      (cells) -> {
+        match op {
+          Create(initial) -> {
+            let id = length(cells)
+            let cell = {value: initial, bindings: [], derived: Source({})}
+            resume({id: id, value: initial})(reverse([cell, ..reverse(cells)]))
+          }
+          Read(id) -> { resume({id: id, value: value(cells, id)})(cells) }
+          Bind({id, selector}) -> {
+            let cells = update(cells, id, (cell) -> { {bindings: [selector, ..cell.bindings], ..cell} })
+            let _ = write(cells, id)
+            resume({id: id, value: value(cells, id)})(cells)
+          }
+          Derive({inputs, compute}) -> {
+            let id = length(cells)
+            let initial = compute(reverse(!list_fold(inputs, [], (i, acc) -> { [value(cells, i), ..acc] })))
+            let cell = {value: initial, bindings: [], derived: Derived({inputs: inputs, compute: compute})}
+            resume({id: id, value: initial})(reverse([cell, ..reverse(cells)]))
+          }
+          Write({id, value: next}) -> {
+            let cells = update(cells, id, (cell) -> { {value: next, ..cell} })
+            let _ = write(cells, id)
+            let recomputed = !list_fold(cells, {index: 0, cells: cells}, (cell, state) -> {
+              let index = !int_add(state.index, 1)
+              match cell.derived {
+                Source(_) -> { {index: index, cells: state.cells} }
+                Derived({inputs, compute}) -> {
+                  let values = reverse(!list_fold(inputs, [], (i, acc) -> { [value(state.cells, i), ..acc] }))
+                  let computed = compute(values)
+                  match !equal(computed, cell.value) {
+                    True(_) -> { {index: index, cells: state.cells} }
+                    False(_) -> {
+                      let updated = update(state.cells, state.index, (c) -> { {value: computed, ..c} })
+                      let _ = write(updated, state.index)
+                      {index: index, cells: updated}
+                    }
+                  }
+                }
+              }
+            })
+            resume({id: id, value: next})(recomputed.cells)
+          }
+        }
+      }
+    }, (_) -> {
+      let result = exec({})
+      let done = (_) -> { result }
+      done
+    })
+    run([])
+  }
+  let sum = (values) -> {
+    !int_to_string(!list_fold(values, 0, (value, total) -> {
+      match !int_parse(value) {
+        Ok(x) -> { !int_add(total, x) }
+        Error(_) -> { total }
+      }
+    }))
+  }
+  signals((_) -> {
+    let counters = !list_fold(range(n), [], (i, acc) -> {
+      let created = perform Signal(Create("0"))
+      let selector = !string_append("#c", !int_to_string(i))
+      let _ = perform Signal(Bind({id: created.id, selector: selector}))
+      [created.id, ..acc]
+    })
+    let total = perform Signal(Derive({inputs: counters, compute: sum}))
+    let _ = perform Signal(Bind({id: total.id, selector: "#total"}))
+    let _ = !list_fold(range(5), {}, (round, _) -> {
+      let text = !int_to_string(round)
+      !list_fold(counters, {}, (id, _) -> {
+        let _ = perform Signal(Write({id: id, value: text}))
+        {}
+      })
+    })
+    let read = perform Signal(Read(total.id))
+    read.value
+  })
+}

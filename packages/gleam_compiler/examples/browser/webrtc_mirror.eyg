@@ -1,0 +1,35 @@
+// webrtc.mirror: connect two peers in the same page and send n messages.
+// Every step of the exchange, every send and every receive is an effect.
+(n) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let a = perform CreatePeer({})
+  let b = perform CreatePeer({})
+  let sender = ok(perform CreateChannel({peer: a, label: "data"}))
+  let offer = ok(perform CreateOffer(a))
+  let answer = ok(perform CreateAnswer({peer: b, offer: offer}))
+  let _ = ok(perform SetAnswer({peer: a, answer: answer}))
+  let receiver = ok(perform AcceptChannel(b))
+  let _ = ok(perform WaitOpen(sender))
+  let _ = ok(perform WaitOpen(receiver))
+  let message = !string_to_binary("hello")
+  let _ = !list_fold(range(n), {}, (_, _) -> {
+    ok(perform Send({channel: sender, data: message}))
+  })
+  let received = !list_fold(range(n), 0, (_, total) -> {
+    !int_add(total, !binary_size(ok(perform Receive(receiver))))
+  })
+  let _ = perform Close(a)
+  let _ = perform Close(b)
+  received
+}

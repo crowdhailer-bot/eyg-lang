@@ -1,0 +1,16 @@
+// dom.selectors: sum the numbers in every cell of a table.
+// Every cell is read in one effect.
+(_) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  !list_fold(ok(perform ReadAll("#data td")), 0, (text, total) -> {
+    match !int_parse(text) {
+      Ok(n) -> { !int_add(total, n) }
+      Error(_) -> { total }
+    }
+  })
+}

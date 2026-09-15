@@ -1,0 +1,17 @@
+// dom.handles: sum the numbers in every cell of a table.
+// One effect to find the cells and one effect to read each cell.
+(_) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let cells = ok(perform Query("#data td"))
+  !list_fold(cells, 0, (cell, total) -> {
+    match !int_parse(ok(perform ReadText(cell))) {
+      Ok(n) -> { !int_add(total, n) }
+      Error(_) -> { total }
+    }
+  })
+}

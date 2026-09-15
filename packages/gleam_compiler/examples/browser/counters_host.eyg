@@ -1,0 +1,40 @@
+// signals.host: n counters and their total, every counter is set in each of five rounds.
+// The page keeps the signals and updates the text bound to them.
+(n) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  // The type of Derive requires a pure function, the page calls it.
+  let sum = (values) -> {
+    !int_to_string(!list_fold(values, 0, (value, total) -> {
+      match !int_parse(value) {
+        Ok(x) -> { !int_add(total, x) }
+        Error(_) -> { total }
+      }
+    }))
+  }
+  let counters = !list_fold(range(n), [], (i, acc) -> {
+    let signal = perform Signal("0")
+    let selector = !string_append("#c", !int_to_string(i))
+    let _ = ok(perform BindText({selector: selector, signal: signal}))
+    [signal, ..acc]
+  })
+  let total = ok(perform Derive({inputs: counters, compute: sum}))
+  let _ = ok(perform BindText({selector: "#total", signal: total}))
+  let _ = !list_fold(range(5), {}, (round, _) -> {
+    let value = !int_to_string(round)
+    !list_fold(counters, {}, (signal, _) -> {
+      ok(perform Set({signal: signal, value: value}))
+    })
+  })
+  ok(perform Get(total))
+}

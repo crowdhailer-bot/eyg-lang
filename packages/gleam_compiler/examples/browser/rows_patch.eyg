@@ -1,0 +1,73 @@
+// dom.patch: create n rows, update every tenth row, remove every row.
+// Each step is a single effect with a list of operations.
+(n) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let remainder = (x, d) -> {
+    match !int_divide(x, d) {
+      Ok(q) -> { !int_subtract(x, !int_multiply(q, d)) }
+      Error(_) -> { 0 }
+    }
+  }
+  let tenth = (i) -> { !equal(remainder(i, 10), 0) }
+  let body = match !list_pop(ok(perform Query("#rows"))) {
+    Ok({head, tail}) -> { head }
+    Error(_) -> { !never(perform Abort("no #rows")) }
+  }
+  // Rows are visited from n down to 1 and prepended, so the list is in order.
+  // Row i creates five nodes starting at New(5 * (i - 1)).
+  let operations = !list_fold(range(n), [], (i, acc) -> {
+    let base = !int_multiply(5, !int_subtract(i, 1))
+    let at = (offset) -> { New(!int_add(base, offset)) }
+    [
+      Create("tr"),
+      Create("td"),
+      CreateText(!int_to_string(i)),
+      Create("td"),
+      CreateText("row"),
+      Append({parent: at(1), child: at(2)}),
+      Append({parent: at(3), child: at(4)}),
+      Append({parent: at(0), child: at(1)}),
+      Append({parent: at(0), child: at(3)}),
+      Append({parent: Existing(body), child: at(0)}),
+      ..acc
+    ]
+  })
+  let created = ok(perform Patch(operations))
+  // The created handles are in order, five for each row.
+  let picked = !list_fold(created, {position: 0, rows: [], labels: []}, (node, state) -> {
+    let slot = remainder(state.position, 5)
+    let position = !int_add(state.position, 1)
+    match !int_compare(slot, 0) {
+      Eq(_) -> { {position: position, rows: [node, ..state.rows], labels: state.labels} }
+      | (_) -> {
+        match !int_compare(slot, 3) {
+          Eq(_) -> { {position: position, rows: state.rows, labels: [node, ..state.labels]} }
+          | (_) -> { {position: position, rows: state.rows, labels: state.labels} }
+        }
+      }
+    }
+  })
+  // labels are in reverse, the first is row n
+  let updates = !list_fold(picked.labels, {index: n, operations: []}, (label, state) -> {
+    let operations = match tenth(state.index) {
+      True(_) -> { [SetText({node: Existing(label), text: "updated"}), ..state.operations] }
+      False(_) -> { state.operations }
+    }
+    {index: !int_subtract(state.index, 1), operations: operations}
+  })
+  let _ = ok(perform Patch(updates.operations))
+  let removals = !list_fold(picked.rows, [], (row, acc) -> { [Remove(Existing(row)), ..acc] })
+  let _ = ok(perform Patch(removals))
+  n
+}

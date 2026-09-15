@@ -1,0 +1,162 @@
+#!/usr/bin/env bun
+// Run the browser API examples in Chromium with each design of effects.
+//
+// Run `gleam run -m eyg/compiler/bench -- examples` first, it compiles every
+// example to examples/out. Results are written to bench/results/browser_apis.json.
+//
+// Every iteration starts from a fresh fixture and a fresh platform.
+// The number of effects performed is counted in a separate run so counting
+// does not change the times.
+
+import { chromium } from "playwright";
+import { readFileSync, writeFileSync } from "node:fs";
+
+const build = "build/dev/javascript/eyg_compiler/eyg/compiler/";
+
+const table = (rows, columns) => {
+  let html = '<table id="data">';
+  for (let r = 0; r < rows; r++) {
+    html += "<tr>";
+    for (let c = 0; c < columns; c++) html += "<td>" + (r * columns + c) + "</td>";
+    html += "</tr>";
+  }
+  return html + "</table>";
+};
+const tableSum = (rows, columns) => {
+  const n = rows * columns;
+  return (n * (n - 1)) / 2;
+};
+const spans = (n) => {
+  let html = "<b id=\"total\"></b>";
+  for (let i = 1; i <= n; i++) html += '<span id="c' + i + '"></span>';
+  return html;
+};
+
+const ROWS = 1000;
+const COLUMNS = 5;
+const N_ROWS = 1000;
+const N_COUNTERS = 200;
+const N_MESSAGES = 2000;
+
+const cases = [
+  { name: "read_handles", design: "dom.handles", fixture: table(ROWS, COLUMNS), arg: "{}", expected: "I" + tableSum(ROWS, COLUMNS) },
+  { name: "read_selectors", design: "dom.selectors", fixture: table(ROWS, COLUMNS), arg: "{}", expected: "I" + tableSum(ROWS, COLUMNS) },
+  { name: "read_selectors_each", design: "dom.selectors", fixture: table(ROWS, COLUMNS), arg: `({rows: ${ROWS}, columns: ${COLUMNS}})`, expected: "I" + tableSum(ROWS, COLUMNS) },
+  { name: "read_snapshot", design: "dom.snapshot", fixture: table(ROWS, COLUMNS), arg: "{}", expected: "I" + tableSum(ROWS, COLUMNS) },
+  { name: "rows_imperative", design: "dom.imperative", fixture: '<table><tbody id="rows"></tbody></table>', arg: String(N_ROWS), expected: "I" + N_ROWS },
+  { name: "rows_patch", design: "dom.patch", fixture: '<table><tbody id="rows"></tbody></table>', arg: String(N_ROWS), expected: "I" + N_ROWS },
+  { name: "rows_render", design: "dom.render", fixture: '<table><tbody id="rows"></tbody></table>', arg: String(N_ROWS), expected: "I" + N_ROWS },
+  { name: "counters_host", design: "signals.host", fixture: spans(N_COUNTERS), arg: String(N_COUNTERS), expected: 'S"' + N_COUNTERS + '"' },
+  { name: "counters_handlers", design: "dom.selectors", fixture: spans(N_COUNTERS), arg: String(N_COUNTERS), expected: 'S"' + N_COUNTERS + '"' },
+  { name: "counters_render", design: "dom.render", fixture: '<div id="counters"></div>', arg: String(N_COUNTERS), expected: 'S"' + N_COUNTERS + '"' },
+  { name: "counters_render_batched", design: "dom.render", fixture: '<div id="counters"></div>', arg: String(N_COUNTERS), expected: 'S"' + N_COUNTERS + '"' },
+  { name: "webrtc_mirror", design: "webrtc.mirror", fixture: "", arg: String(N_MESSAGES), expected: "I" + 5 * N_MESSAGES },
+  { name: "webrtc_batch", design: "webrtc.batch", fixture: "", arg: String(N_MESSAGES), expected: "I" + 5 * N_MESSAGES },
+  { name: "webrtc_session", design: "webrtc.session", fixture: "", arg: String(N_MESSAGES), expected: "I" + 5 * N_MESSAGES },
+];
+
+const html = `<!doctype html><body><script type="module">
+import * as evidence from "/eyg/runtime/evidence.mjs";
+import * as generator from "/eyg/runtime/generator.mjs";
+import { canonical } from "/eyg/runtime/inspect.mjs";
+import * as browser from "/eyg/platform/browser_runtime.mjs";
+import * as dom from "/eyg/platform/dom_runtime.mjs";
+import * as signals from "/eyg/platform/signals_runtime.mjs";
+import * as webrtc from "/eyg/platform/webrtc_runtime.mjs";
+window.eyg = { evidence, generator, canonical, browser, dom, signals, webrtc };
+</script></body>`;
+
+const browser = await chromium.launch();
+const results = [];
+for (const c of cases) {
+  for (const backend of ["full", "generator"]) {
+    const code = readFileSync(`examples/out/${c.name}.${backend}.js`, "utf8");
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.route("http://apis.local/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/") return route.fulfill({ contentType: "text/html", body: html });
+      if (path.startsWith("/eyg/")) {
+        return route.fulfill({ contentType: "text/javascript", body: readFileSync(build + path.slice(5)) });
+      }
+      return route.fulfill({ status: 404 });
+    });
+    await page.goto("http://apis.local/");
+    await page.waitForFunction(() => window.eyg);
+    const result = await page.evaluate(
+      async ({ code, backend, c, iterations, warmup }) => {
+        const { evidence, generator, canonical, browser, dom, signals, webrtc } = window.eyg;
+        const rt = backend === "generator" ? generator.create() : evidence.create();
+        const designs = {
+          "dom.handles": () => dom.handles(),
+          "dom.imperative": () => dom.imperative(),
+          "dom.selectors": () => dom.selectors(),
+          "dom.snapshot": () => dom.snapshot(),
+          "dom.patch": () => dom.patch(),
+          "dom.render": () => dom.render(),
+          "signals.host": () => signals.host({ pure: rt.pure ?? ((x) => x) }),
+          "webrtc.mirror": () => webrtc.mirror(),
+          "webrtc.batch": () => webrtc.batch(),
+          "webrtc.session": () => webrtc.session(),
+        };
+        const platform = (count) => {
+          const effects = { Abort: browser.effects().Abort, ...designs[c.design]() };
+          if (!count) return effects;
+          for (const [label, impl] of Object.entries(effects)) {
+            const wrap = (f) => (x) => {
+              count.total++;
+              count[label] = (count[label] ?? 0) + 1;
+              return f(x);
+            };
+            effects[label] = impl.sync ? { sync: wrap(impl.sync) } : { async: wrap(impl.async) };
+          }
+          return effects;
+        };
+        try {
+          const f = await rt.run(new Function("return " + code)()(rt), {});
+          const arg = new Function("return " + c.arg)();
+          const once = async (count) => {
+            document.body.innerHTML = c.fixture;
+            const start = performance.now();
+            const value = await rt.run(() => f(arg), platform(count));
+            return [performance.now() - start, canonical(value)];
+          };
+          const count = { total: 0 };
+          const [, value] = await once(count);
+          const times = [];
+          for (let i = 0; i < iterations + warmup; i++) {
+            const [time, v] = await once(null);
+            if (v !== value) throw new Error("result changed " + v);
+            if (i >= warmup) times.push(time);
+          }
+          return { value, times, effects: count };
+        } catch (error) {
+          return { error: String(error && error.message ? error.message : error) };
+        }
+      },
+      { code, backend, c, iterations: c.design.startsWith("webrtc") ? 3 : 5, warmup: 2 },
+    );
+    await context.close();
+    const entry = { example: c.name, design: c.design, backend, arg: c.arg, ...result };
+    if (result.times) {
+      const sorted = [...result.times].sort((a, b) => a - b);
+      entry.median = sorted[Math.floor(sorted.length / 2)];
+      entry.correct = result.value === c.expected;
+    }
+    results.push(entry);
+    console.log(
+      c.name.padEnd(26) +
+        backend.padEnd(11) +
+        (entry.error
+          ? "error " + entry.error
+          : entry.median.toFixed(2).padStart(10) +
+            " ms " +
+            String(entry.effects.total).padStart(8) +
+            " effects " +
+            (entry.correct ? "" : "WRONG " + entry.value)),
+    );
+  }
+}
+const version = browser.version();
+await browser.close();
+writeFileSync("bench/results/browser_apis.json", JSON.stringify({ browser: version, results }, null, 1));

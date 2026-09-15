@@ -1,0 +1,47 @@
+// dom.render: create n rows, update every tenth row, remove every row.
+// Each step renders a description of the whole table.
+(n) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let tenth = (i) -> {
+    match !int_divide(i, 10) {
+      Ok(q) -> { !equal(!int_multiply(q, 10), i) }
+      Error(_) -> { False({}) }
+    }
+  }
+  let view = (updated) -> {
+    !list_fold(range(n), [], (i, acc) -> {
+      let label = match updated {
+        True(_) -> {
+          match tenth(i) {
+            True(_) -> { "updated" }
+            False(_) -> { "row" }
+          }
+        }
+        False(_) -> { "row" }
+      }
+      [
+        {depth: 0, node: Element({tag: "tr", attributes: []})},
+        {depth: 1, node: Element({tag: "td", attributes: []})},
+        {depth: 2, node: Text(!int_to_string(i))},
+        {depth: 1, node: Element({tag: "td", attributes: []})},
+        {depth: 2, node: Text(label)},
+        ..acc
+      ]
+    })
+  }
+  let _ = ok(perform Render({selector: "#rows", nodes: view(False({}))}))
+  let _ = ok(perform Render({selector: "#rows", nodes: view(True({}))}))
+  let _ = ok(perform Render({selector: "#rows", nodes: []}))
+  n
+}

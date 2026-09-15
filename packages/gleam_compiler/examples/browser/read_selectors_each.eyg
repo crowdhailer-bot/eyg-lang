@@ -1,0 +1,27 @@
+// dom.selectors: sum the numbers in every cell of a table.
+// Each cell is addressed by its own selector, one effect per cell.
+(size) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let columns = range(size.columns)
+  !list_fold(range(size.rows), 0, (row, total) -> {
+    !list_fold(columns, total, (column, total) -> {
+      let cell = !string_append(") td:nth-child(", !string_append(!int_to_string(column), ")"))
+      let selector = !string_append("#data tr:nth-child(", !string_append(!int_to_string(row), cell))
+      match !int_parse(ok(perform ReadText(selector))) {
+        Ok(n) -> { !int_add(total, n) }
+        Error(_) -> { total }
+      }
+    })
+  })
+}

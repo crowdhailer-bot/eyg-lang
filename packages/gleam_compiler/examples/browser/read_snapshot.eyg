@@ -1,0 +1,29 @@
+// dom.snapshot: sum the numbers in every cell of a table.
+// The table is read as a value in one effect and traversed without effects.
+(_) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let nodes = ok(perform Snapshot("#data"))
+  let initial = {total: 0, cell: False({})}
+  let final = !list_fold(nodes, initial, (entry, state) -> {
+    match entry.node {
+      Element(element) -> { {total: state.total, cell: !equal(element.tag, "td")} }
+      Text(text) -> {
+        match state.cell {
+          True(_) -> {
+            match !int_parse(text) {
+              Ok(n) -> { {total: !int_add(state.total, n), cell: False({})} }
+              Error(_) -> { state }
+            }
+          }
+          False(_) -> { state }
+        }
+      }
+    }
+  })
+  final.total
+}

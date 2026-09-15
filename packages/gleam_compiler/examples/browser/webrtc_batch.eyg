@@ -1,0 +1,43 @@
+// webrtc.batch: connect two peers in the same page and send n messages.
+// The messages are sent in one effect and received in as few as possible.
+(n) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let a = perform CreatePeer({})
+  let b = perform CreatePeer({})
+  let sender = ok(perform CreateChannel({peer: a, label: "data"}))
+  let offer = ok(perform CreateOffer(a))
+  let answer = ok(perform CreateAnswer({peer: b, offer: offer}))
+  let _ = ok(perform SetAnswer({peer: a, answer: answer}))
+  let receiver = ok(perform AcceptChannel(b))
+  let _ = ok(perform WaitOpen(sender))
+  let _ = ok(perform WaitOpen(receiver))
+  let message = !string_to_binary("hello")
+  let messages = !list_fold(range(n), [], (_, acc) -> { [message, ..acc] })
+  let _ = ok(perform SendAll({channel: sender, messages: messages}))
+  let receive = !fix((receive, progress) -> {
+    match !int_compare(progress.count, n) {
+      Lt(_) -> {
+        let batch = ok(perform ReceiveAll({channel: receiver, min: 1}))
+        receive(!list_fold(batch, progress, (data, progress) -> {
+          {count: !int_add(progress.count, 1), bytes: !int_add(progress.bytes, !binary_size(data))}
+        }))
+      }
+      | (_) -> { progress }
+    }
+  })
+  let received = receive({count: 0, bytes: 0})
+  let _ = perform Close(a)
+  let _ = perform Close(b)
+  received.bytes
+}

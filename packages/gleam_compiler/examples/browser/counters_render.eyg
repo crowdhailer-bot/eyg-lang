@@ -1,0 +1,53 @@
+// dom.render: n counters and their total, every counter is set in each of
+// five rounds. The whole view is rendered after every change.
+(n) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let range = !fix((range, i) -> {
+    match !int_compare(i, 0) {
+      Eq(_) -> { [] }
+      | (_) -> { [i, ..range(!int_subtract(i, 1))] }
+    }
+  })
+  let sum = (values) -> {
+    !list_fold(values, 0, (value, total) -> { !int_add(total, value) })
+  }
+  let view = (values) -> {
+    let counters = !list_fold(values, [], (value, acc) -> {
+      [
+        {depth: 0, node: Element({tag: "span", attributes: []})},
+        {depth: 1, node: Text(!int_to_string(value))},
+        ..acc
+      ]
+    })
+    [
+      {depth: 0, node: Element({tag: "b", attributes: []})},
+      {depth: 1, node: Text(!int_to_string(sum(values)))},
+      ..counters
+    ]
+  }
+  let set = (values, index, next) -> {
+    let stepped = !list_fold(values, {i: 0, acc: []}, (value, state) -> {
+      let value = match !equal(state.i, index) {
+        True(_) -> { next }
+        False(_) -> { value }
+      }
+      {i: !int_add(state.i, 1), acc: [value, ..state.acc]}
+    })
+    !list_fold(stepped.acc, [], (value, acc) -> { [value, ..acc] })
+  }
+  let initial = !list_fold(range(n), [], (_, acc) -> { [0, ..acc] })
+  let _ = ok(perform Render({selector: "#counters", nodes: view(initial)}))
+  let final = !list_fold(range(5), initial, (round, values) -> {
+    !list_fold(range(n), values, (i, values) -> {
+      let values = set(values, !int_subtract(i, 1), round)
+      let _ = ok(perform Render({selector: "#counters", nodes: view(values)}))
+      values
+    })
+  })
+  !int_to_string(sum(final))
+}
