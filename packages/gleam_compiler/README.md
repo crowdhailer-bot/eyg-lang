@@ -1,58 +1,79 @@
-# eyg_compile
+# eyg_compiler
 
-[EYG](https://eyg.run) compiler that transpiles to JavaScript.
+[EYG](https://eyg.run) compiler that targets JavaScript.
 
-[![Package Version](https://img.shields.io/hexpm/v/eyg_compile)](https://hex.pm/packages/eyg_compile)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/eyg_compile/)
-
-```sh
-gleam add eyg_compiler
-```
 ```gleam
 import eyg/compiler
-import eyg/ir/tree as ir
+import eyg/compiler/evidence
 import gleam/dict
 
 pub fn main() {
   let source = ir.let_("x", ir.integer(5), ir.variable("x"))
-  let refs = dict.new()
-  compiler.to_js(source, refs)
-  // let x$0 = 5;
-  // x$0
+  // generalized evidence passing with every optimisation
+  compiler.evidence(source, dict.new(), evidence.default())
+  // effectful functions as JavaScript generators
+  compiler.generator(source, dict.new())
 }
 ```
 
-Further documentation can be found at <https://hexdocs.pm/eyg_compile>.
+The output is a function of a runtime that returns the program, run it with
+the runtime created from the same options.
+
+```js
+import * as runtime from "eyg_compiler/eyg/compiler/runtime/evidence.mjs";
+import * as browser from "eyg_compiler/eyg/compiler/platform/browser_runtime.mjs";
+
+const rt = runtime.create();
+const main = new Function("return " + code)()(rt);
+await rt.run(main, browser.effects());
+```
+
+## Pipeline
+
+1. `compiler.analyse` infers a type for every node.
+2. `anf` names every call that can yield. A call can yield if the function
+   called has an effect row that is not empty, so pure code is left alone.
+3. `evidence` or `generator` renders JavaScript.
+4. `runtime/*.mjs` implement handlers, the builtins are shared.
+5. `platform/*` define and implement effects for a host.
+
+## Evidence passing
+
+The backend follows [Generalized Evidence Passing for Effect Handlers](https://www.microsoft.com/en-us/research/uploads/prod/2021/08/genev-icfp21.pdf).
+`evidence.Options` turns each technique off so it can be measured.
+
+- Evidence: `Map` constant time lookup, `Linked` insertion ordered, `Bubble` none.
+- `tail` evaluates tail resumptive clauses in place.
+- `inline` inlines binds with join points lifted to the top of the program.
+- The runtime option `shortcut` keeps resumptions as an array of frames.
+- `compiler.unchecked` compiles without types, every call is checked.
+
+## Platforms
+
+- `platform/browser` every effect of the touch grass browser harness, and
+  `Sleep`, `Hash`, `CreateKey`, `Sign`, local storage and `Location`.
+- `platform/dom`, `platform/signals`, `platform/webrtc` experimental designs
+  for browser APIs, examples of each are in `examples/browser`.
 
 ## Development
 
 ```sh
-gleam run
 gleam test
 ```
 
-## Notes
+Tests run the spec suites, compare against the interpreter on programs from
+the `soundness` generator, and type check the browser examples, for every
+backend and option.
 
-Compilation path follows two main resources.
+Benchmarks run each case in a fresh process.
 
-- [MinCaml](https://www.kb.ecei.tohoku.ac.jp/~sumii/pub/FDPE05.pdf)
-- [Generalized Evidence Passing for Effect Handler](https://www.microsoft.com/en-us/research/uploads/prod/2021/08/genev-icfp21.pdf)
-  - Long version (https://www.microsoft.com/en-us/research/uploads/prod/2021/03/multip-tr-v4.pdf)
+```sh
+gleam run -m eyg/compiler/bench -- compile
+gleam run -m eyg/compiler/bench -- run counter10 full 2000
+gleam run -m eyg/compiler/bench -- examples
+bun install
+bun run bin/bench_browser
+bun run bin/bench_browser_apis
+```
 
-The current implementation uses a `js` version of a monad, something is an instance of an `Eff` or not.
-If not is is assumed a value. This is similar to thinking of value or `null` being an `Option`.
-
-This allows the transpiled JS to look as similar as possible to the original source.
-There is no lambda lifting or closure conversion and there is no global `yielding` variable.
-These are not necessary when relying on the dynamism of JS.
-
-Such an implementation is ineffecient as it always bubbles the effect, there is no evidence passing.
-A future version could add the evidence vector and other optimisation, however:
-- readability would be effected.
-- performance should not be sort before measurement.
-- A fast interpreter with flat AST may be faster and simpler.
-
-It's probably worth considering what compilation to tiny go or an arduino interpreter looks like.
-
-- Is there a way to check for tail resumption if handler is passed as var and not AST? 
-  This is needed if trying to optimise away bubbling in the general case
+Results are in `bench/results`, the report is in `report`.
