@@ -1,0 +1,54 @@
+// platform.browser: perform every browser effect once.
+// Run by bin/check_browser_platform, which answers dialogs and serves requests.
+(_) -> {
+  let ok = (result) -> {
+    match result {
+      Ok(value) -> { value }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  let data = !string_to_binary("payload")
+  let empty = !string_to_binary("")
+  let request = {method: GET({}), scheme: HTTPS({}), host: "platform.local", port: None({}), path: "/data", query: None({}), headers: [], body: empty}
+  let response = ok(perform Fetch(request))
+  let user = ok(perform GitHub({method: GET({}), path: "/user", query: None({}), headers: [], body: empty}))
+  let key = ok(perform CreateKey(Eddsa({})))
+  let signature = ok(perform Sign({key: key, data: data}))
+  let digest = perform Hash({algorithm: SHA256({}), bytes: data})
+  let _ = ok(perform StorageSet({key: "k", value: "v"}))
+  let stored = ok(perform StorageGet("k"))
+  let _ = ok(perform StorageDelete("k"))
+  let removed = ok(perform StorageGet("k"))
+  let _ = perform Sleep(5)
+  let _ = ok(perform Copy("copied"))
+  let pasted = ok(perform Paste({}))
+  let named = perform Prompt("name?")
+  let _ = perform Alert("hello")
+  let _ = perform Print("printed")
+  let _ = perform Download({name: "eyg.txt", content: data})
+  let visit = {scheme: HTTPS({}), host: "platform.local", port: None({}), path: "/visited", query: [{key: "a", value: "b"}]}
+  let _ = ok(perform Visit(visit))
+  let location = perform Location({})
+  let tokens = ok(perform DecodeJSON(!string_to_binary("[1, true]")))
+  let random = perform Random(10)
+  let flip = perform Flip({})
+  let now = perform Now({})
+  {
+    status: response.status,
+    github: user.status,
+    signature: !binary_size(signature),
+    digest: !binary_size(digest),
+    stored: stored,
+    removed: removed,
+    pasted: pasted,
+    named: named,
+    host: location.host,
+    tokens: !list_fold(tokens, 0, (_, n) -> { !int_add(n, 1) }),
+    random: !int_compare(random, 10),
+    flip: match flip {
+      True(_) -> { "flipped" }
+      False(_) -> { "flipped" }
+    },
+    now: !int_compare(now, 0)
+  }
+}

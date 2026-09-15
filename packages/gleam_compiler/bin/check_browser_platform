@@ -1,0 +1,94 @@
+#!/usr/bin/env bun
+// Run examples/browser/platform_check.eyg in Chromium with every browser effect.
+//
+// Run `gleam run -m eyg/compiler/bench -- examples` first.
+// The page answers dialogs, grants the clipboard, and serves the requests the
+// program makes, then checks the value returned and what the page observed.
+
+import { chromium } from "playwright";
+import { readFileSync } from "node:fs";
+
+const build = "build/dev/javascript/eyg_compiler/eyg/compiler/";
+const origin = "https://platform.local";
+const expected =
+  'R{"digest":I32,"flip":S"flipped","github":I200,"host":S"platform.local","named":TOk(S"Ada"),' +
+  '"now":TGt(R{}),"pasted":S"copied","random":TLt(R{}),"removed":TNone(R{}),"signature":I64,' +
+  '"status":I200,"stored":TSome(S"v"),"tokens":I3}';
+
+const html = `<!doctype html><body><script type="module">
+import * as evidence from "/eyg/runtime/evidence.mjs";
+import * as generator from "/eyg/runtime/generator.mjs";
+import { canonical } from "/eyg/runtime/inspect.mjs";
+import * as browser from "/eyg/platform/browser_runtime.mjs";
+window.eyg = { evidence, generator, canonical, browser };
+</script></body>`;
+
+const browser = await chromium.launch();
+let failed = false;
+for (const backend of ["full", "generator"]) {
+  const code = readFileSync(`examples/out/platform_check.${backend}.js`, "utf8");
+  const context = await browser.newContext({ acceptDownloads: true });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+  const seen = { dialogs: [], popups: [], downloads: [], github: null };
+  await context.route("**/*", (route) => {
+    const url = new URL(route.request().url());
+    if (url.host === "api.github.com") {
+      seen.github = route.request().headers()["authorization"];
+      return route.fulfill({ status: 200, contentType: "application/json", body: '{"login":"eyg"}' });
+    }
+    if (url.pathname === "/") return route.fulfill({ contentType: "text/html", body: html });
+    if (url.pathname === "/data") return route.fulfill({ status: 200, body: "data" });
+    if (url.pathname === "/visited") return route.fulfill({ contentType: "text/html", body: "visited" });
+    if (url.pathname.startsWith("/eyg/")) {
+      return route.fulfill({ contentType: "text/javascript", body: readFileSync(build + url.pathname.slice(5)) });
+    }
+    return route.fulfill({ status: 404 });
+  });
+  const page = await context.newPage();
+  page.on("dialog", (dialog) => {
+    seen.dialogs.push(dialog.type() + ":" + dialog.message());
+    return dialog.type() === "prompt" ? dialog.accept("Ada") : dialog.accept();
+  });
+  page.on("popup", (popup) => seen.popups.push(popup.url()));
+  page.on("download", (download) => seen.downloads.push(download.suggestedFilename()));
+  await page.goto(origin + "/");
+  await page.waitForFunction(() => window.eyg);
+  const result = await page.evaluate(
+    async ({ code, backend }) => {
+      const { evidence, generator, canonical, browser } = window.eyg;
+      const rt = backend === "generator" ? generator.create() : evidence.create();
+      const printed = [];
+      const platform = {
+        ...browser.effects({
+          print: (text) => printed.push(text),
+          spotless: { token: async () => "secret" },
+        }),
+        ...browser.extensions(),
+      };
+      try {
+        const f = await rt.run(new Function("return " + code)()(rt), {});
+        const value = await rt.run(() => f({}), platform);
+        return { value: canonical(value), printed };
+      } catch (error) {
+        return { error: String(error && error.message ? error.message : error), printed };
+      }
+    },
+    { code, backend },
+  );
+  await page.waitForTimeout(500);
+  await context.close();
+  const checks = {
+    value: result.value === expected,
+    printed: JSON.stringify(result.printed) === '["printed"]',
+    prompt: seen.dialogs.includes("prompt:name?"),
+    alert: seen.dialogs.includes("alert:hello"),
+    popup: seen.popups.some((url) => url === origin + "/visited?a=b"),
+    download: seen.downloads.includes("eyg.txt"),
+    token: seen.github === "Bearer secret",
+  };
+  const ok = Object.values(checks).every(Boolean);
+  failed = failed || !ok;
+  console.log(backend.padEnd(10) + (ok ? "ok" : "FAILED " + JSON.stringify({ checks, result, seen })));
+}
+await browser.close();
+process.exit(failed ? 1 : 0);

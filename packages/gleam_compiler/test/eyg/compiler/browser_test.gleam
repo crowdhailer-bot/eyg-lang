@@ -1,7 +1,22 @@
+import eyg/analysis/inference/levels_j/contextual as j
+import eyg/compiler/platform/browser
 import eyg/compiler/support
+import eyg/ir/tree as ir
+import eyg/parser
+import gleam/dict
 import gleam/list
 import gleam/string
+import simplifile
 import touch_grass/decode_json
+
+pub fn platform_check_uses_every_browser_effect_test() {
+  let assert Ok(text) = simplifile.read("examples/browser/platform_check.eyg")
+  let assert Ok(#(source, _)) = parser.from_string(text)
+  let program = ir.apply(ir.clear_annotation(source), ir.empty())
+  let context = j.with_effects(j.pure(), browser.effects())
+  let analysis = j.check_with_references(context, dict.new(), program)
+  assert [] == list.map(j.all_errors(analysis), fn(e) { string.inspect(e.1) })
+}
 
 pub fn decode_json_matches_touch_grass_test() {
   let cases = [
