@@ -1,6 +1,13 @@
 import eyg/cli/compile
 import eyg/cli/helpers
 import eyg/cli/internal/source
+import eyg/compiler
+import eyg/ir/tree as ir
+import gleam/dict
+
+fn compiled(value) {
+  compiler.to_js(ir.integer(value), dict.new())
+}
 
 pub fn compile_simple_expression_test() {
   let input = source.Code("3")
@@ -8,7 +15,7 @@ pub fn compile_simple_expression_test() {
     compile.execute(input, helpers.config)
     |> helpers.run(helpers.sandbox())
   assert Ok(0) == output
-  assert ["3"] == sandbox.stdout
+  assert [compiled(3)] == sandbox.stdout
 }
 
 pub fn compile_stdin_test() {
@@ -18,7 +25,7 @@ pub fn compile_stdin_test() {
     compile.execute(input, helpers.config)
     |> helpers.run(sandbox)
   assert Ok(0) == output
-  assert ["45"] == sandbox.stdout
+  assert [compiled(45)] == sandbox.stdout
 }
 
 pub fn compile_file_test() {
@@ -28,5 +35,5 @@ pub fn compile_file_test() {
     compile.execute(input, helpers.config)
     |> helpers.run(sandbox)
   assert Ok(0) == output
-  assert ["145"] == sandbox.stdout
+  assert [compiled(145)] == sandbox.stdout
 }
