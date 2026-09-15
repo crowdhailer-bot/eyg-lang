@@ -426,14 +426,16 @@ pub fn duplicate_row_test() {
   |> list.first
   |> should.equal(Ok(ok("{a: Integer, b: String}", "")))
 
-  let analysis = j.check(j.pure(), parse("{a: 1, a: \"\"}"))
+  let analysis =
+    j.check_with_references(j.pure(), dict.new(), parse("{a: 1, a: \"\"}"))
   j.all_errors(analysis)
   |> list.map(fn(error) { error.1 })
   |> list.first
   |> should.equal(Ok(error.DuplicateRow("a")))
 
   // The same label at two levels of nesting is a different row each time.
-  let analysis = j.check(j.pure(), parse("{a: 1, b: {a: \"\"}}"))
+  let analysis =
+    j.check_with_references(j.pure(), dict.new(), parse("{a: 1, b: {a: \"\"}}"))
   j.all_errors(analysis)
   |> should.equal([])
 }
