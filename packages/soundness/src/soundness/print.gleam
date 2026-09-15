@@ -29,9 +29,7 @@ pub fn source(node) {
     ir.Perform(label) -> "perform " <> label
     ir.Handle(label) -> "handle " <> label
     ir.Builtin(identifier) -> "!" <> identifier
-    ir.ContentReference(_)
-    | ir.ReleaseReference(..)
-    | ir.RelativeReference(_) -> "<reference>"
+    ir.Reference(_) -> "<reference>"
   }
 }
 
@@ -68,9 +66,7 @@ pub fn constructor(node) {
     ir.Perform(label) -> "ir.perform(" <> quote(label) <> ")"
     ir.Handle(label) -> "ir.handle(" <> quote(label) <> ")"
     ir.Builtin(identifier) -> "ir.builtin(" <> quote(identifier) <> ")"
-    ir.ContentReference(_)
-    | ir.ReleaseReference(..)
-    | ir.RelativeReference(_) -> "<reference>"
+    ir.Reference(_) -> "<reference>"
   }
 }
 

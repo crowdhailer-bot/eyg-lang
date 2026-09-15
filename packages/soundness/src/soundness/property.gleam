@@ -38,7 +38,7 @@ pub type Outcome {
 }
 
 pub fn check(source, fuel) {
-  let analysis = j.check(j.pure(), source)
+  let analysis = j.check_with_references(j.pure(), dict.new(), source)
   case j.all_errors(analysis) {
     [#(_meta, reason), ..] -> Rejected(string.inspect(reason))
     [] -> {
@@ -80,8 +80,6 @@ fn describe(reason) {
     break.UndefinedVariable(label) -> "undefined variable: " <> label
     break.UndefinedBuiltin(label) -> "undefined builtin: " <> label
     break.UndefinedReference(_) -> "undefined reference"
-    break.UndefinedRelease(..) -> "undefined release"
-    break.UndefinedRelative(location:) -> "undefined relative: " <> location
     break.Vacant -> "vacant"
     break.NoMatch(term:) -> "no match: " <> inspect(term)
     break.UnhandledEffect(label, _) -> "unhandled effect: " <> label
