@@ -656,6 +656,7 @@ Connect : {session: Int, token: String} -&gt; Result({}, String)</code></pre>
 </ul>
 
 <h2 id="next">Limits and next steps</h2>
+<p><a href="investigation.md">Continued investigation: correctness, pure calls, signals, lambda sets and ownership</a>. Integer overflow now raises an error; historical timings below predate that correction.</p>
 <ul>
   <li>Integers are unchecked JavaScript numbers; the interpreter raises <code>Unrepresentable</code> outside the safe range.</li>
   <li><code>!equal</code> on functions compares identity; the interpreter compares closures structurally.</li>

@@ -117,6 +117,26 @@ pub fn recursion_test() {
   )
 }
 
+pub fn integer_precision_test() {
+  agrees("!int_add(9007199254740990, 1)")
+  list.each(
+    [
+      "!int_add(9007199254740991, 1)",
+      "!int_subtract(-9007199254740991, 1)",
+      "!int_multiply(9007199254740991, 2)",
+      "!int_parse(\"9007199254740992\")",
+    ],
+    fn(text) {
+      let assert Ok(#(source, _)) = parser.from_string(text)
+      let assert Error(_) = property.evaluate(source, 100_000)
+      list.each(support.configs(), fn(config) {
+        assert support.run(source, config, [])
+          == Error("unrepresentable integer")
+      })
+    },
+  )
+}
+
 pub fn effectful_recursion_test() {
   agrees(
     "handle Tick((_, resume) -> { resume({}) }, (_) -> {

@@ -2,7 +2,7 @@
 //
 // The behaviour follows the Gleam interpreter, `eyg/interpreter/builtin`,
 // which is compiled with gleam_stdlib on JavaScript.
-// Integer overflow is not checked, the interpreter raises Unrepresentable.
+// Reject values the JS integer representation cannot preserve exactly.
 
 export const unit = Object.freeze({});
 export const nil = Object.freeze([]);
@@ -90,15 +90,15 @@ export function int_compare(a, b) {
 }
 
 export function int_add(a, b) {
-  return a + b;
+  return integer(a + b);
 }
 
 export function int_subtract(a, b) {
-  return a - b;
+  return integer(a - b);
 }
 
 export function int_multiply(a, b) {
-  return a * b;
+  return integer(a * b);
 }
 
 export function int_divide(a, b) {
@@ -110,7 +110,12 @@ export function int_absolute(a) {
 }
 
 export function int_parse(raw) {
-  return /^[-+]?(\d+)$/.test(raw) ? ok(parseInt(raw)) : Nothing;
+  return /^[-+]?(\d+)$/.test(raw) ? ok(integer(parseInt(raw))) : Nothing;
+}
+
+function integer(value) {
+  if (!Number.isSafeInteger(value)) crash("unrepresentable integer");
+  return value;
 }
 
 export function int_to_string(a) {
