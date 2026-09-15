@@ -3,12 +3,17 @@
 // as JavaScriptCore under bun. Each case runs in a new browser context.
 //
 // Run `gleam run -m eyg/compiler/bench -- compile` first, it writes every
-// compiled program to bench/out. Results are written to bench/results/chromium.json.
+// compiled program to bench/out. Results are written to
+// bench/results/chromium.json after every case. A case that crashes the page
+// or runs past the timeout is recorded as an error and the browser relaunched.
+// Cases already in the results file are skipped, pass --fresh to start over.
 
 import { chromium } from "playwright";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const runtime = "build/dev/javascript/eyg_compiler/eyg/compiler/runtime/";
+const output = "bench/results/chromium.json";
+const timeout = 240_000;
 const sizes = {
   fib: 30,
   counter: 2000,
@@ -26,59 +31,89 @@ import { canonical } from "/runtime/inspect.mjs";
 window.eyg = { evidence, generator, canonical };
 </script>`;
 
-const browser = await chromium.launch();
-const results = [];
+const fresh = process.argv.includes("--fresh");
+const results = !fresh && existsSync(output) ? JSON.parse(readFileSync(output, "utf8")).results : [];
+const done = new Set(results.map((r) => r.bench + "." + r.backend));
+
+let browser = await chromium.launch();
+const version = browser.version();
+
+function limit(promise, ms) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("timeout after " + ms / 1000 + "s")), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+async function measure(code, label, size) {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.route("http://bench.local/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/") return route.fulfill({ contentType: "text/html", body: html });
+      if (path.startsWith("/runtime/")) {
+        return route.fulfill({
+          contentType: "text/javascript",
+          body: readFileSync(runtime + path.slice("/runtime/".length)),
+        });
+      }
+      return route.fulfill({ status: 404 });
+    });
+    await page.goto("http://bench.local/");
+    await page.waitForFunction(() => window.eyg);
+    return await page.evaluate(
+      ({ code, label, size }) => {
+        const { evidence, generator, canonical } = window.eyg;
+        const options = {
+          full: {},
+          linked: { evidence: "linked" },
+          bubble: { evidence: "none" },
+          no_tail: { tail: false },
+          no_inline: {},
+          no_shortcut: { shortcut: false },
+          not_selective: {},
+        }[label];
+        const rt = label.startsWith("generator")
+          ? generator.create({ tail: label === "generator" })
+          : evidence.create(options);
+        const platform = { Random: { sync: (max) => max - 1 } };
+        try {
+          const f = rt.run(new Function("return " + code)()(rt), platform);
+          const times = [];
+          let value;
+          for (let i = 0; i < 10; i++) {
+            const start = performance.now();
+            value = rt.run(() => f(size), platform);
+            times.push(performance.now() - start);
+          }
+          return { value: canonical(value), times: times.slice(3) };
+        } catch (error) {
+          return { error: String(error && error.message ? error.message : error) };
+        }
+      },
+      { code, label, size },
+    );
+  } finally {
+    await context.close().catch(() => {});
+  }
+}
+
 for (const file of readdirSync("bench/out").sort()) {
   const [bench, label] = file.replace(/\.js$/, "").split(".");
+  if (done.has(bench + "." + label)) continue;
   const code = readFileSync("bench/out/" + file, "utf8");
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.route("http://bench.local/**", (route) => {
-    const path = new URL(route.request().url()).pathname;
-    if (path === "/") return route.fulfill({ contentType: "text/html", body: html });
-    if (path.startsWith("/runtime/")) {
-      return route.fulfill({
-        contentType: "text/javascript",
-        body: readFileSync(runtime + path.slice("/runtime/".length)),
-      });
-    }
-    return route.fulfill({ status: 404 });
-  });
-  await page.goto("http://bench.local/");
-  await page.waitForFunction(() => window.eyg);
-  const result = await page.evaluate(
-    ({ code, label, size }) => {
-      const { evidence, generator, canonical } = window.eyg;
-      const options = {
-        full: {},
-        linked: { evidence: "linked" },
-        bubble: { evidence: "none" },
-        no_tail: { tail: false },
-        no_inline: {},
-        no_shortcut: { shortcut: false },
-        not_selective: {},
-      }[label];
-      const rt = label.startsWith("generator")
-        ? generator.create({ tail: label === "generator" })
-        : evidence.create(options);
-      const platform = { Random: { sync: (max) => max - 1 } };
-      try {
-        const f = rt.run(new Function("return " + code)()(rt), platform);
-        const times = [];
-        let value;
-        for (let i = 0; i < 10; i++) {
-          const start = performance.now();
-          value = rt.run(() => f(size), platform);
-          times.push(performance.now() - start);
-        }
-        return { value: canonical(value), times: times.slice(3) };
-      } catch (error) {
-        return { error: String(error && error.message ? error.message : error) };
-      }
-    },
-    { code, label, size: sizes[bench] },
-  );
-  await context.close();
+  let result;
+  try {
+    result = await limit(measure(code, label, sizes[bench]), timeout);
+  } catch (error) {
+    result = { error: "page failed: " + String(error && error.message ? error.message : error).split("\n")[0] };
+    await limit(browser.close(), 10_000).catch(() => {});
+    browser = await chromium.launch();
+  }
   const entry = { bench, backend: label, size: sizes[bench], ...result };
   if (result.times) {
     const sorted = [...result.times].sort((a, b) => a - b);
@@ -90,7 +125,8 @@ for (const file of readdirSync("bench/out").sort()) {
       label.padEnd(18) +
       (entry.error ? "error " + entry.error : entry.median.toFixed(2).padStart(12) + " ms"),
   );
+  writeFileSync(output, JSON.stringify({ browser: version, results }, null, 1));
 }
-const version = browser.version();
-await browser.close();
-writeFileSync("bench/results/chromium.json", JSON.stringify({ browser: version, results }, null, 1));
+await limit(browser.close(), 10_000).catch(() => {});
+console.log("chromium done");
+process.exit(0);
