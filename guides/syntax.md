@@ -62,6 +62,7 @@ let b = "line one\nline two"
 ## Variables
 
 A variable is any lowercase identifier (letters, digits, and underscores, starting with a letter or underscore).
+Keywords such as `let`, `match`, `perform` and `handle` can not be used as names.
 
 ```eyg
 let _ = x
@@ -166,6 +167,8 @@ let add = (x, y) -> { !int_add(x, y) }
 add(3, 4)
 ```
 
+Unlike lists, an argument list can not end with a trailing comma, `add(3, 4,)` is a syntax error.
+
 **EYG has no loop or each construct, instead use !fix, !list_fold or libraries.**
 
 ### Recursion
@@ -198,6 +201,22 @@ Any expression followed by `(args)` applies it as a function. Chained calls are 
 let _ = f(x)
 let _ = f(x)(y)
 outer(inner(value))
+```
+
+A line that starts with `(` continues the expression on the line before as a call, even after a newline.
+To return a lambda after another expression, bind it first.
+
+```eyg
+// incorrect, parsed as f(x)(_) -> { 1 }
+let y = f(x)
+(_) -> { 1 }
+```
+
+```eyg
+// correct
+let y = f(x)
+let done = (_) -> { 1 }
+done
 ```
 
 ---
