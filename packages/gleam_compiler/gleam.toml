@@ -12,6 +12,7 @@ gleam_stdlib = ">= 0.44.0 and < 2.0.0"
 eyg_analysis = ">= 2.0.0 and < 3.0.0"
 eyg_ir = ">= 3.0.0 and < 4.0.0"
 eyg_parser = ">= 0.3.0 and < 1.0.0"
+touch_grass = ">= 0.4.0 and < 1.0.0"
 
 [dev_dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
