@@ -1,0 +1,896 @@
+<title>Compiling EYG Effects</title>
+<meta name="description" content="Generalized evidence passing and generators as JavaScript backends for EYG, measured in Bun and Chromium, with effects designed for browser APIs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<style>
+:root {
+  --ground: #fbfcf7;
+  --panel: #eff7e8;
+  --mint: #e7ffdd;
+  --ink: #2f2f2f;
+  --muted: #5d6358;
+  --rule: #dce2d4;
+  --accent: #584355;
+  --leaf: #2f8a55;
+  --clay: #b3462f;
+  --bar: #b9c2b0;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Literata", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #151515;
+    --panel: #1c231b;
+    --mint: #1f2d1f;
+    --ink: #eceee8;
+    --muted: #a5ab9f;
+    --rule: #30352d;
+    --accent: #d3adcb;
+    --leaf: #7fd39c;
+    --clay: #ec8a70;
+    --bar: #4b5246;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #151515;
+  --panel: #1c231b;
+  --mint: #1f2d1f;
+  --ink: #eceee8;
+  --muted: #a5ab9f;
+  --rule: #30352d;
+  --accent: #d3adcb;
+  --leaf: #7fd39c;
+  --clay: #ec8a70;
+  --bar: #4b5246;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.62;
+  padding: 0 20px;
+}
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--leaf); outline-offset: 3px; }
+
+.page {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 56px;
+  padding-block: 48px 96px;
+}
+@media (min-width: 1080px) {
+  .page { grid-template-columns: 210px minmax(0, 1fr); }
+}
+
+nav.contents { display: none; }
+@media (min-width: 1080px) {
+  nav.contents {
+    display: block;
+    position: sticky;
+    top: 32px;
+    align-self: start;
+    font-family: var(--display);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+}
+nav.contents p {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+nav.contents ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+nav.contents a { color: var(--ink); text-decoration: none; }
+nav.contents a:hover { color: var(--accent); }
+
+main { min-width: 0; }
+main > * { max-width: 70ch; }
+main > figure, main > .wide { max-width: 100%; }
+
+header.title { margin-bottom: 40px; }
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+h1, h2, h3 {
+  font-family: var(--display);
+  line-height: 1.1;
+  text-wrap: balance;
+  color: var(--ink);
+}
+h1 {
+  font-size: clamp(38px, 6vw, 62px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 14px 0 18px;
+  max-width: 16ch;
+}
+h1 em { font-style: normal; color: var(--accent); }
+.dek { font-size: 20px; line-height: 1.5; color: var(--muted); max-width: 60ch; margin: 0; }
+h2 {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 72px 0 16px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+  scroll-margin-top: 20px;
+}
+h3 { font-size: 21px; font-weight: 700; margin: 36px 0 8px; scroll-margin-top: 20px; }
+p { margin: 0 0 16px; }
+ul, ol { padding-left: 22px; margin: 0 0 16px; }
+li { margin-bottom: 6px; }
+strong { font-weight: 600; }
+
+code, pre, .num { font-family: var(--mono); }
+code { font-size: 0.86em; background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+pre {
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-size: 13.5px;
+  line-height: 1.55;
+  margin: 0 0 20px;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+pre .c { color: var(--muted); }
+pre .k { color: var(--accent); font-weight: 600; }
+pre .h { color: var(--leaf); font-weight: 600; }
+
+.glance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 24px 32px;
+  margin: 8px 0 8px;
+  padding: 24px 0;
+  border-block: 1px solid var(--rule);
+  max-width: 100%;
+}
+.glance div { display: grid; gap: 4px; align-content: start; }
+.glance dt { font-family: var(--mono); font-size: 26px; font-weight: 600; color: var(--leaf); font-variant-numeric: tabular-nums; }
+.glance dd { margin: 0; font-size: 15px; line-height: 1.45; color: var(--muted); }
+
+figure { margin: 28px 0 32px; }
+figcaption { font-size: 14.5px; line-height: 1.5; color: var(--muted); margin-top: 10px; max-width: 70ch; }
+figure svg { display: block; width: 100%; height: auto; max-width: 100%; }
+.diagram { color: var(--ink); background: var(--panel); border-radius: 10px; padding: 18px; overflow-x: auto; }
+.diagram svg { min-width: 640px; }
+
+.table-wrap { overflow-x: auto; margin: 20px 0 28px; max-width: 100%; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; line-height: 1.45; }
+th, td { text-align: left; vertical-align: top; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--rule); }
+th { font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td code { white-space: nowrap; }
+
+.status { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; padding: 2px 8px; border-radius: 999px; }
+.status.done { background: var(--mint); color: var(--leaf); }
+.status.not { background: color-mix(in srgb, var(--clay) 14%, transparent); color: var(--clay); }
+.status.partial { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+
+.switch { display: inline-flex; gap: 4px; padding: 4px; background: var(--panel); border-radius: 999px; margin: 8px 0 4px; }
+.switch button {
+  font: 600 14px var(--display);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.switch button[aria-pressed="true"] { background: var(--ground); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+
+.multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 28px 40px; margin-top: 16px; }
+.multiples h4 { font: 700 16px var(--display); margin: 0 0 2px; }
+.multiples p { font-size: 13.5px; color: var(--muted); margin: 0 0 8px; line-height: 1.4; }
+.chart text { font-family: var(--mono); font-size: 11px; fill: currentColor; }
+.chart { color: var(--ink); }
+.chart .axis { stroke: var(--rule); }
+.chart .grid { stroke: var(--rule); stroke-dasharray: 2 3; }
+.chart .muted { fill: var(--muted); }
+
+.aside {
+  background: var(--mint);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin: 20px 0 24px;
+  font-size: 16px;
+}
+.aside p:last-child { margin-bottom: 0; }
+
+footer { margin-top: 80px; font-size: 14px; color: var(--muted); }
+</style>
+
+<div class="page">
+<nav class="contents" aria-label="Contents">
+  <p>Contents</p>
+  <ol>
+    <li><a href="#start">Starting point</a></li>
+    <li><a href="#effects">EYG effects</a></li>
+    <li><a href="#pipeline">Pipeline</a></li>
+    <li><a href="#paper">The paper, checked</a></li>
+    <li><a href="#measure">Each technique measured</a></li>
+    <li><a href="#correct">Correctness</a></li>
+    <li><a href="#generators">Generators</a></li>
+    <li><a href="#interpreter">Against the interpreter</a></li>
+    <li><a href="#platform">Browser platform</a></li>
+    <li><a href="#apis">Effects for browser APIs</a></li>
+    <li><a href="#language">What the language taught</a></li>
+    <li><a href="#next">Limits and next steps</a></li>
+    <li><a href="#reproduce">Reproduce</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="title">
+  <div class="eyebrow">eyg-lang · packages/gleam_compiler · branch js-compiler · 15 September 2026</div>
+  <h1>Compiling EYG effects to <em>JavaScript</em></h1>
+  <p class="dek">Generalized evidence passing and JavaScript generators as two backends for one typed A-normal form. Every technique from Xie and Leijen (ICFP 2021) is implemented behind a switch, measured in Bun and Chromium against the interpreter, and used to run browser effects designed for the DOM, signals and WebRTC.</p>
+</header>
+
+<dl class="glance">
+  <div><dt data-fact="counter-full">31 ms</dt><dd>4 million tail resumptive performs with every optimisation, Bun.</dd></div>
+  <div><dt data-fact="counter10-bubble">53×</dt><dd>slower when every perform bubbles through ten unused handlers instead of finding its evidence.</dd></div>
+  <div><dt data-fact="interp">60–360×</dt><dd>faster than the EYG interpreter on the same programs.</dd></div>
+  <div><dt data-fact="gen">7–110×</dt><dd>slower with generators than with evidence passing, where generators run at all.</dd></div>
+</dl>
+
+<h2 id="start">The starting point</h2>
+<p>The <code>gleam_compiler</code> package transpiled EYG to JavaScript that looked like the source. An effectful <code>let</code> became <code>bind(value, then)</code>, a perform returned an <code>Eff</code> object, and every caller checked <code>instanceof Eff</code>. Its own README called this out: there was no evidence passing, every effect bubbled to its handler, and a faster version was future work.</p>
+<p>Porting the spec suites and a differential test against the interpreter showed it was also wrong in places that had nothing to do with effects:</p>
+<ul>
+  <li><code>!list_fold</code> called the reducer as <code>f(acc)(item)</code>; the interpreter calls <code>f(item)(acc)</code>.</li>
+  <li><code>!int_compare</code> tested <code>y &gt; x</code> twice, so it never returned <code>Gt</code>.</li>
+  <li><code>!string_starts_with</code> returned the old <code>Ok(rest)</code> shape, the spec now returns a boolean.</li>
+  <li>String literals were HTML escaped, <code>"a&lt;b"</code> compiled to <code>"a&amp;lt;b"</code>.</li>
+  <li><code>!fix</code>, binaries and handlers that do not resume immediately were not supported, and the host effects were hard coded to <code>Alert</code>, <code>Ask</code> and <code>Log</code>.</li>
+</ul>
+<p>The replacement keeps the idea that generated code should be plain JavaScript functions over plain values, and changes everything about how effects move.</p>
+
+<h2 id="effects">EYG effects in one screen</h2>
+<p>Four properties of EYG decide what a compiler has to support.</p>
+<ul>
+  <li><strong>One operation per label.</strong> <code>perform Ask({})</code> sends a value to the innermost handler for <code>Ask</code>. A handler is <code>handle Ask(clause, exec)</code> and a clause is <code>(value, resume) -&gt; { ... }</code>.</li>
+  <li><strong>Handlers and resumptions are values.</strong> A clause can be bound to a variable, passed around, or return <code>resume</code> itself. Nothing about a handler is syntax the compiler can rely on.</li>
+  <li><strong>Deep and multi-shot.</strong> Resuming reinstalls the handler, and <code>resume</code> can be called zero, one or many times.</li>
+  <li><strong>Effect rows are inferred.</strong> Every function type carries a row of the effects calling it can perform. Rows are open and generalised at <code>let</code>.</li>
+</ul>
+<pre><code><span class="k">handle</span> Choose((options, resume) -&gt; {
+  <span class="c">// multi-shot: resume once for every option</span>
+  !list_fold(options, 0, (col, acc) -&gt; { !int_add(acc, resume(col)) })
+}, (_) -&gt; { place(0, []) })</code></pre>
+
+<h2 id="pipeline">Pipeline</h2>
+<p>Both backends share analysis and normalisation. The analysis gives every node a resolved type; A-normal form uses the types to mark each call as checked or not, and the renderers only differ in what a checked call becomes.</p>
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 900 250" role="img" aria-label="EYG IR is typed by the analysis, normalised into A-normal form with checked calls marked, and rendered either by the evidence passing backend or the generator backend, each run by its own runtime with a platform of effects.">
+  <defs>
+    <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker>
+  </defs>
+  <g fill="none" stroke="currentColor" stroke-width="1.4">
+    <rect x="10" y="95" width="120" height="60" rx="8"/>
+    <rect x="190" y="95" width="150" height="60" rx="8"/>
+    <rect x="400" y="95" width="170" height="60" rx="8"/>
+    <rect x="640" y="30" width="240" height="70" rx="8" stroke="var(--leaf)" stroke-width="2"/>
+    <rect x="640" y="150" width="240" height="70" rx="8" stroke="var(--accent)" stroke-width="2"/>
+    <line x1="130" y1="125" x2="188" y2="125" marker-end="url(#a1)"/>
+    <line x1="340" y1="125" x2="398" y2="125" marker-end="url(#a1)"/>
+    <path d="M570 115 L605 115 L605 65 L638 65" marker-end="url(#a1)"/>
+    <path d="M570 135 L605 135 L605 185 L638 185" marker-end="url(#a1)"/>
+  </g>
+  <g font-family="JetBrains Mono, monospace" font-size="13" fill="currentColor" text-anchor="middle">
+    <text x="70" y="121" font-weight="600">EYG IR</text>
+    <text x="70" y="140" font-size="11">tree.Node</text>
+    <text x="265" y="121" font-weight="600">analysis</text>
+    <text x="265" y="140" font-size="11">type of every node</text>
+    <text x="485" y="121" font-weight="600">anf</text>
+    <text x="485" y="140" font-size="11">calls marked checked</text>
+    <text x="760" y="60" font-weight="600">evidence.gleam</text>
+    <text x="760" y="80" font-size="11">runtime/evidence.mjs</text>
+    <text x="760" y="180" font-weight="600">generator.gleam</text>
+    <text x="760" y="200" font-size="11">runtime/generator.mjs</text>
+  </g>
+  <g font-family="JetBrains Mono, monospace" font-size="11" fill="var(--muted)" text-anchor="middle">
+    <text x="159" y="115">source</text>
+    <text x="369" y="115">types</text>
+    <text x="540" y="55">checked call → join point</text>
+    <text x="540" y="210">checked call → yield*</text>
+    <text x="760" y="243">both run with platform/*.mjs</text>
+  </g>
+</svg>
+</div>
+<figcaption>One normal form, two renderings. A call is checked only when the row of the function called is not empty.</figcaption>
+</figure>
+
+<h2 id="paper">The paper, checked technique by technique</h2>
+<p>Xie and Leijen refine algebraic effects in steps: multi-prompt delimited control, evidence passing, bubbling yields, and a monadic translation that can be compiled to anything. The Koka C backend adds canonical evidence vectors, short-cut resumptions, bind inlining and join points. The table records which of those the EYG compiler implements and the switch that turns each off. Speedups are the median in Bun of the benchmark where the technique matters most; the next section has every benchmark in both engines.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Technique</th><th>Paper</th><th>In the EYG compiler</th><th>Switch</th><th class="n">Effect</th></tr></thead>
+  <tbody>
+    <tr><td>Markers separate finding a handler from capturing a continuation</td><td>§2.4</td><td><span class="status done">done</span> the evidence record installed by <code>handle</code> is its marker</td><td>—</td><td class="n">—</td></tr>
+    <tr><td>Evidence vector, constant time lookup</td><td>§2.5</td><td><span class="status done">done</span> object keyed by label, looked up at the perform so the engine caches it</td><td><code>Map</code></td><td class="n" data-cell="counter10:linked">2.9×</td></tr>
+    <tr><td>Evidence vector, insertion ordered</td><td>§2.5</td><td><span class="status done">done</span> linked list, used by the Mp.Eff library</td><td><code>Linked</code></td><td class="n">baseline</td></tr>
+    <tr><td>Canonical vector with a static index</td><td>§2.5, §2.11</td><td><span class="status not">not applicable</span> needs closed rows and explicit <code>open</code> coercions, see below</td><td>—</td><td class="n">—</td></tr>
+    <tr><td>Tail resumptive clauses evaluated in place, with <code>under</code> and <code>underk</code></td><td>§2.6, §3.2, §4.2</td><td><span class="status done">done</span> detected on any lambda of the right shape, including handlers passed as values</td><td><code>tail</code></td><td class="n" data-cell="counter10:no_tail">120×</td></tr>
+    <tr><td>Bubbling yields frame by frame</td><td>§2.7, §4.1</td><td><span class="status done">done</span> a yield flag and frames pushed on the way up</td><td>—</td><td class="n">—</td></tr>
+    <tr><td>No evidence at all, every perform bubbles to its handler</td><td>(baseline)</td><td><span class="status done">done</span> approximates the previous compiler</td><td><code>Bubble</code></td><td class="n" data-cell="counter10:bubble">53×</td></tr>
+    <tr><td>Short-cut resumptions</td><td>§2.8</td><td><span class="status done">done</span> resumption is an array of frames folded from the innermost</td><td><code>shortcut</code></td><td class="n" data-cell="nqueens:no_shortcut">1.5×</td></tr>
+    <tr><td>Monadic translation with a yielding flag</td><td>§2.9, §2.11</td><td><span class="status done">done</span> no Pure or Yield values, a shared <code>$s.y</code></td><td>—</td><td class="n">—</td></tr>
+    <tr><td>Bind inlining and join point sharing</td><td>§2.10</td><td><span class="status done">done</span> join points lifted to the top with free variables as arguments, code size linear</td><td><code>inline</code></td><td class="n" data-cell="counter:no_inline">2.4×</td></tr>
+    <tr><td>Type selective translation</td><td>§2.10</td><td><span class="status done">done</span> per call, from the row of the callee type</td><td><code>unchecked</code></td><td class="n" data-cell="fib:not_selective">2.2×</td></tr>
+    <tr><td>Non-scoped resumptions, generalised evidence</td><td>§2.12</td><td><span class="status done">done</span> both examples from the paper are tests</td><td>—</td><td class="n">—</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Evidence and why there is no static index</h3>
+<p>Performing looks up evidence instead of walking up the stack. The compiler emits the lookup at the perform site, <code>$s.w.Ask</code>, so V8 and JavaScriptCore cache the property access for each site rather than for a shared helper. Installing a handler copies the vector, which is why insertion order is still worth comparing: it is cheap to install and linear to search. With ten unused handlers between the loop and its reader the linked list costs three times as much, while the map is flat.</p>
+<p>Koka goes further and indexes a canonical vector at a constant offset known at compile time. That needs the row at the perform site to be closed and the vector at runtime to have exactly that shape. In EYG neither holds. Rows inside let bound functions are open, inference unifies rows rather than inserting <code>open</code> coercions that would rebuild vectors at call boundaries, and a non-scoped resumption can run under more handlers than its type mentions. A property lookup keyed by label, specialised by the engine, is the practical constant time lookup.</p>
+
+<h3>Tail resumptive clauses, and the subtle part</h3>
+<p>Most handlers resume exactly once, in tail position: a reader, a logger, a platform call. The compiler recognises any lambda of the form <code>(value) -&gt; (resume) -&gt; { ...; resume(e) }</code>, where every tail position calls <code>resume</code> and <code>resume</code> appears nowhere else, including through matches. It emits the lambda with a second version attached, the body with <code>resume(e)</code> replaced by <code>e</code>. Because the mark is on the function value, a handler bound to a variable or built by a helper is optimised too, which answers the open question in the old README.</p>
+<pre><code>$handle(<span class="h">"Ask"</span>, $tr(
+  (_) =&gt; (resume) =&gt; resume(1),   <span class="c">// the clause as written</span>
+  (_) =&gt; 1                        <span class="c">// evaluated in place by perform</span>
+), exec)</code></pre>
+<p>When the evidence has an in-place version, perform runs it immediately under the evidence vector the handler was installed in. No continuation is captured and nothing moves on the stack. The subtle case is a clause that yields to an outer handler and whose resumption is later run under different handlers. The paper shows that fixing the evidence vector at that point is well typed and wrong; <code>underk</code> has to find the evidence for the label again when resumed. The runtime does exactly that, and section 2.12.2 of the paper is one of the tests.</p>
+<pre><code><span class="k">function</span> performWith(ev, value) {
+  <span class="k">const</span> t = ev.t;
+  <span class="k">if</span> (t !== <span class="k">null</span>) {             <span class="c">// tail resumptive: run the clause here</span>
+    <span class="k">const</span> w = s.w; s.w = ev.w;
+    <span class="k">const</span> r = t(value);
+    s.w = w;
+    <span class="k">if</span> (s.y !== <span class="k">null</span>) { under(ev.l); <span class="k">return</span>; }  <span class="c">// re-find evidence on resume</span>
+    <span class="k">return</span> r;
+  }
+  s.y = { l: ev.l, m: ev, v: value, k: [] };     <span class="c">// yield to the marker</span>
+}</code></pre>
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 900 330" role="img" aria-label="With bubbling a perform travels up through ten unused handler frames and back down on resume. With evidence the perform looks up the Ask evidence directly and runs the clause in place. With generators the request is yielded through every delegating generator and replies come back down the same chain.">
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker>
+    <marker id="a2l" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--leaf)"/></marker>
+    <marker id="a2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/></marker>
+  </defs>
+  <g font-family="JetBrains Mono, monospace" font-size="13" font-weight="600" fill="currentColor" text-anchor="middle">
+    <text x="150" y="22">bubble</text>
+    <text x="450" y="22">evidence</text>
+    <text x="750" y="22">generator</text>
+  </g>
+  <g font-family="JetBrains Mono, monospace" font-size="12" fill="currentColor" text-anchor="middle">
+    <!-- stacks -->
+    <g fill="none" stroke="currentColor" stroke-width="1.2">
+      <rect x="60" y="40" width="180" height="36" rx="6"/>
+      <rect x="60" y="86" width="180" height="96" rx="6" stroke-dasharray="5 4"/>
+      <rect x="60" y="192" width="180" height="36" rx="6"/>
+      <rect x="60" y="238" width="180" height="36" rx="6"/>
+      <rect x="360" y="40" width="180" height="36" rx="6"/>
+      <rect x="360" y="86" width="180" height="96" rx="6" stroke-dasharray="5 4"/>
+      <rect x="360" y="192" width="180" height="36" rx="6"/>
+      <rect x="360" y="238" width="180" height="36" rx="6"/>
+      <rect x="660" y="40" width="180" height="36" rx="6"/>
+      <rect x="660" y="86" width="180" height="96" rx="6" stroke-dasharray="5 4"/>
+      <rect x="660" y="192" width="180" height="36" rx="6"/>
+      <rect x="660" y="238" width="180" height="36" rx="6"/>
+    </g>
+    <text x="150" y="63">handle Ask</text><text x="150" y="138">10 × handle Unused</text><text x="150" y="215">list_fold</text><text x="150" y="261">perform Ask</text>
+    <text x="450" y="63">handle Ask</text><text x="450" y="138">10 × handle Unused</text><text x="450" y="215">list_fold</text><text x="450" y="261">perform Ask</text>
+    <text x="750" y="63">loop Ask</text><text x="750" y="138">10 × loop Unused</text><text x="750" y="215">yield* list_fold</text><text x="750" y="261">yield {l, v}</text>
+  </g>
+  <g fill="none" stroke-width="1.6">
+    <path d="M252 256 L268 256 L268 58 L252 58" stroke="currentColor" marker-end="url(#a2)"/>
+    <path d="M40 58 L28 58 L28 256 L48 256" stroke="currentColor" marker-end="url(#a2)" stroke-dasharray="4 3"/>
+    <path d="M548 256 C 600 240, 600 80, 548 62" stroke="var(--leaf)" marker-end="url(#a2l)"/>
+    <path d="M852 256 L868 256 L868 58 L852 58" stroke="var(--accent)" marker-end="url(#a2a)"/>
+    <path d="M640 58 L628 58 L628 256 L648 256" stroke="var(--accent)" marker-end="url(#a2a)" stroke-dasharray="4 3"/>
+  </g>
+  <g font-family="JetBrains Mono, monospace" font-size="11" fill="var(--muted)" text-anchor="middle">
+    <text x="150" y="298">yield checked at every prompt,</text>
+    <text x="150" y="313">frames rebuilt on resume</text>
+    <text x="450" y="298">$s.w.Ask, clause runs in place,</text>
+    <text x="450" y="313">nothing captured</text>
+    <text x="750" y="298">request passes every yield*,</text>
+    <text x="750" y="313">next(x) passes back down</text>
+  </g>
+</svg>
+</div>
+<figcaption>The counter10 benchmark from the paper. Bubbling and generators pay for every frame between a perform and its handler, twice. Evidence passing pays for one property lookup.</figcaption>
+</figure>
+
+<h3>Yields, frames and short-cut resumptions</h3>
+<p>The monad of the paper is never allocated. As in Koka's C backend a function returns normally when it did not yield and sets <code>$s.y</code> when it did, in which case its return value is ignored. Every frame a yield leaves adds itself to the resumption. With short-cut resumptions the resumption is an array of frames, innermost first; resuming folds over it one frame at a time and, if a frame yields again, appends the rest of the array to the new yield. Without them each frame wraps the previous resumption in a closure, which costs an allocation per frame and a JavaScript stack frame per frame on resume. The difference shows where resumptions are long and frequent, in <code>nqueens</code> and <code>mstate</code>.</p>
+
+<h3>Bind inlining and join points</h3>
+<p>A naive monadic translation turns every effectful <code>let</code> into a bind with a closure for the rest of the block. That closure is allocated even when nothing yields, and it hides every tail call. The compiler inlines the bind instead: the fast path continues in place, and only the slow path allocates a frame. The frame calls a join point, the rest of the block lifted to the top of the program with its free variables as arguments. A join point uses a plain bind for the next checked call and jumps to the next join point, so each statement is emitted twice at most, never 2<sup>n</sup> times.</p>
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 860 210" role="img" aria-label="After a checked call the code tests the yield flag. If no yield happened the rest of the block runs inline. If a yield happened a frame that calls the lifted join point with the free variables is pushed and the function returns; the join point runs the same rest of the block when resumed.">
+  <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+  <g fill="none" stroke="currentColor" stroke-width="1.3">
+    <rect x="10" y="80" width="200" height="50" rx="8"/>
+    <rect x="270" y="80" width="150" height="50" rx="8"/>
+    <rect x="490" y="20" width="360" height="50" rx="8" stroke="var(--leaf)" stroke-width="2"/>
+    <rect x="490" y="140" width="360" height="50" rx="8"/>
+    <line x1="210" y1="105" x2="268" y2="105" marker-end="url(#a3)"/>
+    <path d="M420 95 L455 95 L455 45 L488 45" marker-end="url(#a3)"/>
+    <path d="M420 115 L455 115 L455 165 L488 165" marker-end="url(#a3)"/>
+  </g>
+  <g font-family="JetBrains Mono, monospace" font-size="12.5" fill="currentColor">
+    <text x="110" y="110" text-anchor="middle">const t = f(a)</text>
+    <text x="345" y="110" text-anchor="middle">$s.y !== null</text>
+    <text x="506" y="50">return $int_add(acc, t)</text>
+    <text x="506" y="160">$extend(t =&gt; $j_t(acc, t)); return;</text>
+    <text x="506" y="178" font-size="11" fill="var(--muted)">function $j_t(acc, t) { return $int_add(acc, t) }</text>
+  </g>
+  <g font-family="JetBrains Mono, monospace" font-size="11" fill="var(--muted)">
+    <text x="462" y="36">no · fast path, no allocation</text>
+    <text x="462" y="206">yes · slow path, one closure</text>
+  </g>
+</svg>
+</div>
+<figcaption>The inner loop of <code>counter</code> as compiled. The closure passed to <code>$extend</code> exists only when the perform yielded.</figcaption>
+</figure>
+<p>For comparison, the same loop with inlining switched off and as a generator:</p>
+<pre><code><span class="c">// inline: false, the continuation is allocated on every iteration</span>
+(acc) =&gt; $bind($performWith($s.w.Ask, $unit), (t) =&gt; $int_add(acc, t))
+
+<span class="c">// generator</span>
+(<span class="k">function*</span> (acc) { <span class="k">const</span> t = <span class="k">yield</span> {l: <span class="h">"Ask"</span>, v: $unit}; <span class="k">return</span> $int_add(acc, t); })</code></pre>
+
+<h3>Type selective translation</h3>
+<p>A call is checked only when the function called has an effect row that is not empty. The analysis records the row of every function type, so the decision is made per call rather than per function as in Koka. Two details of EYG's inference mattered. The effect annotation on a call node is the part of the row that would generalise, which can say empty for a call through a parameter; the callee's type is used instead. Variables are annotated with an opened type, so a call through a variable to a pure let bound function is still checked. That costs a flag test and a join point, and is the first thing to improve.</p>
+
+<h3>Non-scoped resumptions</h3>
+<p>Evidence passing translation, the earlier technique, fixes evidence when a program is elaborated and fails at runtime if a resumption escapes its handler. Generalised evidence passing reinstalls the prompt on the evidence current at resumption. Both examples from section 2.12 are tests: a resumption returned from an <code>Evil</code> handler and resumed under a different reader must read <code>2</code>, and the same from inside a tail resumptive clause. EYG has no recursive types, so the escaping resumption does not type check; the compiler falls back to checking every call and the tests still pass for every configuration.</p>
+
+<h2 id="measure">Each technique, measured</h2>
+<p>The benchmarks are the ones Koka's paper uses, written in EYG. <code>counter</code> performs a tail resumptive reader four million times; <code>counter1</code> and <code>counter10</code> put one and ten unused handlers in between; <code>host</code> performs a synchronous platform effect; <code>mstate</code> threads state through resumptions captured under a lambda; <code>nqueens</code> resumes once per column. <code>fib</code> has no effects and <code>polymorphic</code> calls an effect polymorphic <code>map</code> with a pure function. Each case runs in its own process or browser context, ten times, the first three dropped; bars are the median relative to every optimisation on.</p>
+<div class="switch" role="group" aria-label="Engine">
+  <button type="button" id="engine-bun" aria-pressed="true" data-engine="bun">Bun · JavaScriptCore</button>
+  <button type="button" id="engine-chromium" aria-pressed="false" data-engine="chromium">Chromium · V8</button>
+</div>
+<div class="multiples wide" id="multiples"></div>
+<p class="wide" style="max-width:70ch;font-size:14.5px;color:var(--muted);margin-top:16px">Sizes: fib 30, counters and host 2000² performs, polymorphic 1000², mstate 10 000, nqueens 9. <code>host</code> varies up to two times between runs in both engines, every run is pooled.</p>
+
+<div id="measure-notes">
+<h3>Reading the results</h3>
+<p><strong>Effects that resume once.</strong> On <code>counter</code> the tail resumptive optimisation is worth fourteen times and evidence lookup, against bubbling, eleven. Put ten unused handlers in the way and the full configuration does not move, 31 to 32 milliseconds, while the linked list costs three times as much, bubbling fifty-three times and yielding without tail resumption a hundred and twenty. This is the shape of the paper's Figure 6, and the reason tail resumption matters: most real handlers are readers, loggers and platform calls.</p>
+<p><strong>Pure code.</strong> <code>fib</code> performs no effects, so evidence and tail resumption cannot help it. Checking every call and allocating a continuation for every bind each cost more than twice as much. <code>polymorphic</code> tells the same story through an effect polymorphic <code>map</code>: its body is checked because its row is open, and the calls at a pure type are not.</p>
+<p><strong>Multi-shot resumptions.</strong> <code>nqueens</code> yields on every choice whatever the configuration, so the fast path does not help. Short-cut resumptions are worth half as much again, and bubbling is the fastest configuration: every resumption reinstalls its handler, and copying the evidence object on every reinstall costs more than bubbling past the few handlers that are there. <code>mstate</code> at 10 000 operations takes about eight milliseconds, too little to separate the configurations from noise; at 200 000 it overflows the stack in every configuration, because a resumption that is not tail resumptive re-enters the prompt from inside the previous clause.</p>
+<p><strong>Host effects.</strong> <code>host</code> performs <code>Random</code> through the platform. As a root clause it runs in place and costs about the same as the reader. It is also the noisiest benchmark, with the same configuration varying up to two times between processes as the JIT inlines differently.</p>
+<p id="v8-note"><strong>V8.</strong> Chromium tells a different story in two ways. First, anything that resumes through the prompt fails outright: bubbling and yielding without tail resumption overflow the stack on every counter, and every configuration of <code>mstate</code> overflows at 10 000 operations, where JavaScriptCore finished all of them in milliseconds. JavaScriptCore eliminates the tail calls from a clause back into its resumption; V8 does not, so on V8 the tail resumptive optimisation decides whether a loop of effects runs. Second, V8 removes much of what inlining and selectivity save by hand: on the counters, allocating a closure per bind or checking every call costs almost nothing, and on <code>fib</code> configurations with identical generated code differ by half again, which is JIT noise, not a measurement. Evidence still matters, the linked list grows from level to nearly twice as slow with ten unused handlers while the map stays flat, and generators are worst of all, eleven seconds for <code>counter</code> and a crashed renderer once handlers are nested.</p>
+</div>
+
+<h2 id="correct">Correctness</h2>
+<p>Every configuration, eight evidence passing variants and two generator variants, runs the same three suites.</p>
+<ul>
+  <li><strong>Spec suites.</strong> <code>spec/evaluation</code> core, builtins and effects, the contract every EYG implementation shares.</li>
+  <li><strong>Differential.</strong> 1 200 programs built from the type rules by the generator on the <code>find-soundness-bugs</code> branch, sizes 10, 20 and 35, including handlers, recursion and polymorphism. Every program the interpreter finishes must produce the same value compiled.</li>
+  <li><strong>Targeted.</strong> Nested handlers, clauses performing outer effects, multi-shot resumption, effectful folds and recursion, and the two non-scoped resumption examples.</li>
+</ul>
+<p>The differential test found three bugs while the backends were written: an effectful return assigned inside a match was not treated as yielding; the analysis annotates a lambda with a closed row while calls in its body keep the open row, so a generator function could not be decided from its type; and generators nested a new handler loop inside every clause, which overflowed the stack after a few thousand effects.</p>
+
+<h2 id="generators">Generators</h2>
+<h3>How the translation works</h3>
+<p>A generator function suspends at <code>yield</code> and keeps its locals, which is most of a continuation already. The generator backend turns a lambda whose body can yield into <code>function*</code>, a perform into <code>yield {l, v}</code>, and an effectful call into delegation with <code>yield*</code>. A handler is a generator that drives the handled computation:</p>
+<pre><code><span class="k">function*</span> loop(label, h, exec, gen, input, history) {
+  <span class="k">while</span> (<span class="k">true</span>) {
+    <span class="k">const</span> step = gen.next(input);
+    <span class="k">if</span> (step.done) <span class="k">return</span> step.value;
+    <span class="k">const</span> request = step.value;
+    <span class="k">if</span> (request.l !== label) { input = <span class="k">yield</span> request; <span class="k">continue</span>; }  <span class="c">// not ours, pass it up</span>
+    <span class="k">if</span> (h.t) { input = <span class="k">yield*</span> run(h.t(request.v)); <span class="k">continue</span>; }   <span class="c">// tail resumptive, stay in the loop</span>
+    <span class="k">const</span> resume = (x) =&gt; loop(label, h, exec, gen, x, …);   <span class="c">// deep, one shot</span>
+    <span class="k">return yield*</span> run(h(request.v)(resume));
+  }
+}</code></pre>
+<p>Nothing like join points or frames is needed, the compiler is a third the size of the evidence backend. The cost moves to runtime: a request travels up every <code>yield*</code> between the perform and its handler and the reply travels back down, as in the diagram above.</p>
+
+<h3>Ergonomics</h3>
+<ul>
+  <li><strong>Function colour.</strong> A generator function called like a normal function returns an iterator, not a value. EYG generalises effect rows, so the same function is used at pure and effectful types, and a callee cannot be known from the call site. Every call result is tested with <code>isGen</code>, and a pure call of a generator is driven to completion. Evidence passing has one representation for every function; the types only remove checks.</li>
+  <li><strong>Deciding a generator.</strong> The type of a lambda is not enough, the body decides. Getting this wrong is a syntax error, not a slow path.</li>
+  <li><strong>One-shot continuations.</strong> A generator cannot be cloned. A resumption used a second time replays the handled computation from the start, feeding it every reply it had. That is sound only because EYG is pure apart from effects, and it is quadratic: <code>nqueens</code> is two orders of magnitude slower.</li>
+  <li><strong>Deep handlers nest.</strong> A clause that calls <code>resume</code> starts the rest of the computation inside itself. Without the tail resumptive optimisation every perform adds a level of delegation and ten thousand effects overflow the stack. Tail clauses are evaluated in the loop, the same technique as the paper. <code>mstate</code> still overflows.</li>
+  <li><strong>Async is natural.</strong> The top level drives the outermost generator and awaits host promises between steps. The evidence runtime does the same with a yield at the root, so this is a tie.</li>
+  <li><strong>Readable output and stack traces.</strong> Generated generators read like the source, and a stack trace shows the chain of generators. The evidence output is readable on the fast path; the slow path is spread over join points.</li>
+</ul>
+<div id="generator-notes">
+<h3>Measured</h3>
+<p>In Bun, generators are seven times slower than evidence passing on <code>fib</code>, a program with no effects at all: every call result is tested with <code>isGen</code> and every effect polymorphic function allocates an iterator. On <code>polymorphic</code> the gap is eleven times. Where effects happen the cost scales with the depth of delegation: 95 times on <code>counter</code>, where each of the four million performs climbs five generators and comes back, and 110 times on <code>nqueens</code>, where every extra resumption replays the search from the start. Without tail clauses in the loop the counters overflow the stack, and <code>mstate</code>, whose clause is not tail resumptive, overflows either way.</p>
+<p>Generators cost least where the host dominates. In the browser experiments below, DOM work and network delivery hide the difference whenever a design performs a handful of effects.</p>
+</div>
+
+<h2 id="interpreter">Against the interpreter</h2>
+<p>The interpreter is a CEK machine written in Gleam, compiled to JavaScript and run by Bun. It is the reference implementation, not a fast one. The compiled programs were run at the smaller sizes the interpreter can finish.</p>
+<figure class="wide">
+<div id="interpreter-chart" class="chart"></div>
+<figcaption>Median milliseconds, logarithmic. Sizes: fib 15, counters and host 100² performs, polymorphic 100², mstate 10 000, nqueens 6. Generators overflow the stack on the counters and mstate.</figcaption>
+</figure>
+
+<h2 id="platform">Browser platform</h2>
+<p>Every effect in <code>touch_grass/harness/browser</code> has an implementation for compiled programs in <code>platform/browser_runtime.mjs</code>. The types are taken from touch grass itself, and touch grass is unchanged. Synchronous effects are tail resumptive clauses at the root of the evidence vector, so they never capture a continuation; asynchronous effects yield to the root and resume when the promise settles.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Effect</th><th>Lift → lower</th><th>Kind</th><th>Implementation</th></tr></thead>
+  <tbody>
+    <tr><td><code>Abort</code></td><td><code>String → Never</code></td><td>sync</td><td>throws, <code>run</code> rejects</td></tr>
+    <tr><td><code>Alert</code></td><td><code>String → {}</code></td><td>sync</td><td><code>window.alert</code></td></tr>
+    <tr><td><code>Copy</code></td><td><code>String → Result({}, String)</code></td><td>async</td><td>clipboard write</td></tr>
+    <tr><td><code>DecodeJSON</code></td><td><code>Binary → Result(List({term, depth}), String)</code></td><td>sync</td><td>port of the julienne tokeniser, tested against it</td></tr>
+    <tr><td><code>Download</code></td><td><code>{name, content} → {}</code></td><td>sync</td><td>object URL and anchor</td></tr>
+    <tr><td><code>Fetch</code></td><td><code>Request → Result(Response, String)</code></td><td>async</td><td><code>fetch</code>, body as bytes</td></tr>
+    <tr><td><code>Flip</code>, <code>Now</code>, <code>Random</code></td><td><code>{} → Bool</code>, <code>{} → Int</code>, <code>Int → Int</code></td><td>sync</td><td><code>Math.random</code>, <code>Date.now</code></td></tr>
+    <tr><td><code>Paste</code></td><td><code>{} → Result(String, String)</code></td><td>async</td><td>clipboard read</td></tr>
+    <tr><td><code>Print</code></td><td><code>String → {}</code></td><td>sync</td><td>console, or a function given by the page</td></tr>
+    <tr><td><code>Prompt</code></td><td><code>String → Result(String, {})</code></td><td>sync</td><td><code>window.prompt</code></td></tr>
+    <tr><td><code>Visit</code></td><td><code>Uri → Result({}, String)</code></td><td>sync</td><td><code>window.open</code></td></tr>
+    <tr><td><code>DNSimple</code>, <code>GitHub</code>, <code>Vimeo</code></td><td><code>Operation → Result(Response, String)</code></td><td>async</td><td>token from a provider the page supplies, then <code>fetch</code> to the service or hub proxy</td></tr>
+  </tbody>
+</table>
+</div>
+<p>The extensions live only in the compiler, <code>platform/browser.gleam</code>. Where the CLI already defines an effect its touch grass definition is reused, so a script moves between the two unchanged.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Effect</th><th>Lift → lower</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>Sleep</code></td><td><code>Int → {}</code></td><td>the browser harness has a TODO for it; async with a timer</td></tr>
+    <tr><td><code>Hash</code></td><td><code>{algorithm, bytes} → Binary</code></td><td>CLI definition, WebCrypto digest</td></tr>
+    <tr><td><code>CreateKey</code>, <code>Sign</code></td><td>CLI definitions</td><td>Ed25519 through WebCrypto, keys exported as the same JWK shaped record</td></tr>
+    <tr><td><code>StorageGet</code>, <code>StorageSet</code>, <code>StorageDelete</code></td><td><code>String → Result(Option(String), String)</code> …</td><td>local storage can be disabled, so every operation is fallible</td></tr>
+    <tr><td><code>Location</code></td><td><code>{} → Uri</code></td><td>the address of the page, the inverse of <code>Visit</code></td></tr>
+  </tbody>
+</table>
+</div>
+<p><code>examples/browser/platform_check.eyg</code> performs every one of these effects and <code>bin/check_browser_platform</code> runs it in Chromium with both backends, answering dialogs, granting the clipboard and serving the requests it makes.</p>
+<div id="platform-notes">
+<p>Both backends pass. The check verifies the returned record, and what the page observed: the prompt answered and the alert shown, text printed through the page's function, a download named <code>eyg.txt</code>, a popup at <code>/visited?a=b</code>, a GitHub request carrying the bearer token from the provider, a 32 byte SHA-256 digest, a 64 byte Ed25519 signature, a clipboard round trip, and storage set, read and deleted. A test type checks the same program against the effect types in <code>platform/browser.gleam</code>, so the types and implementations are checked against one program.</p>
+</div>
+
+<h2 id="apis">Designing effects for browser APIs</h2>
+<p>Three rules of EYG shape every design, and they are rules of the language, not of this compiler.</p>
+<ul>
+  <li><strong>Every value can be serialised.</strong> A DOM node, a peer connection or a signal cannot be a value. A program can refer to one by an integer handle, by a selector, or not at all.</li>
+  <li><strong>There are no recursive types.</strong> A tree cannot be typed. A DOM subtree is a flat list of nodes with their depth, the shape <code>DecodeJSON</code> already uses for JSON.</li>
+  <li><strong>Effect types are monomorphic.</strong> <code>Signal</code> cannot be generic in its value. The host designs use strings.</li>
+</ul>
+<p>Each design below is a separate platform with its own effects, types in Gleam next to the runtime, and the same task written against each in <code>examples/browser</code>. A test type checks every example against its design and nothing else. The tables are measured in Chromium, five runs after two warm up, on a fresh fixture every time, for both backends; effects is the number performed in one run.</p>
+
+<h3 id="dom-read">The DOM itself: reading</h3>
+<p>Task: sum the numbers in a table of 1 000 rows and five columns.</p>
+<pre><code><span class="c">// handles</span>
+Query     : String -&gt; Result(List(Int), String)
+ReadText  : Int -&gt; Result(String, String)
+<span class="c">// selectors</span>
+ReadText  : String -&gt; Result(String, String)
+ReadAll   : String -&gt; Result(List(String), String)
+<span class="c">// snapshot</span>
+Snapshot  : String -&gt; Result(List({depth: Int, node: Element({tag, attributes}) | Text(String)}), String)</code></pre>
+<div class="table-wrap" data-table="read"></div>
+<div id="read-notes">
+<p>Crossing into the host is cheap with evidence passing. A synchronous effect is a tail resumptive clause at the root of the evidence vector, so 5 001 handle reads cost about a microsecond each including the DOM. What is expensive is making the host answer a question badly: a selector per cell makes the page run <code>:nth-child</code> queries 5 000 times and is almost forty times slower than handles.</p>
+<p>The snapshot is one effect, but the program then walks eleven thousand records in EYG, so it is slower than reading with handles and four times slower than <code>ReadAll</code>, which asks the page the one question the program cannot answer cheaply. With generators every effect climbs the generator chain, so the design with 5 001 effects triples in cost while the single effect designs barely move.</p>
+</div>
+
+<h3 id="dom-write">Creating and editing elements</h3>
+<p>Task: create 1 000 rows of two cells, change the label of every tenth, then remove every row.</p>
+<pre><code><span class="c">// imperative, one effect per operation on handles</span>
+CreateElement : String -&gt; Result(Int, String)
+Append        : {parent: Int, child: Int} -&gt; Result({}, String)
+SetText       : {node: Int, text: String} -&gt; Result({}, String)
+<span class="c">// patch, a list of operations in one effect, New(i) refers to the i-th created node</span>
+Patch  : List(Create(String) | CreateText(String) | Append({parent: Ref, child: Ref}) | …) -&gt; Result(List(Int), String)
+<span class="c">// render, describe the children, the page reconciles</span>
+Render : {selector: String, nodes: List({depth: Int, node: Element(…) | Text(String)})} -&gt; Result({}, String)</code></pre>
+<div class="table-wrap" data-table="write"></div>
+<div id="write-notes">
+<p>The imperative design performs 11 101 effects and is still the fastest writer with evidence passing, because each one is a function call into the page. The patch builds ten thousand operation values in EYG for the page to interpret, and render builds five thousand node records twice and reconciles them. Batching is not free: it moves the work from crossing the boundary, which evidence passing made cheap, to building and reading data on both sides of it.</p>
+<p>That changes with generators, where each of the 11 101 effects is a request up the generator chain and the imperative design pays two and a half times as much. The design choice is then about the program rather than the transport. Imperative handles leak, only the removed rows release theirs. Render needs no handles and no lifetimes, and its reconciliation by position is the part a real implementation would replace with keys.</p>
+</div>
+
+<h3 id="signals">Signals</h3>
+<p>Task: 200 counters and a derived total, every counter set in each of five rounds.</p>
+<pre><code><span class="c">// host: the page keeps the graph and updates bound text itself</span>
+Signal   : String -&gt; Int
+Set      : {signal: Int, value: String} -&gt; Result({}, String)
+Derive   : {inputs: List(Int), compute: (List(String)) -&gt; <span class="h">&lt;&gt;</span> String} -&gt; Result(Int, String)
+BindText : {selector: String, signal: Int} -&gt; Result({}, String)
+<span class="c">// handlers: the graph is the state of an EYG handler, writing needs only</span>
+WriteText : {selector: String, text: String} -&gt; Result({}, String)</code></pre>
+<p>The row <code>&lt;&gt;</code> on <code>compute</code> is the design. The type of the effect requires a pure function, so the page can call it whenever an input changes, from its own event loop, without running a handler or resuming the program. Compiled EYG functions are JavaScript functions, and the row is what makes calling one from outside the program safe.</p>
+<div class="table-wrap" data-table="signals"></div>
+<div id="signals-notes">
+<p>Host signals do every update in about ten microseconds, and each one calls back into a compiled EYG function to recompute the total over two hundred values. Signals written in EYG are seventy times slower. Every signal operation is an effect handled by a monadic state handler, so it yields and captures a resumption, and the cells are a list because EYG cannot type a tree, so every operation is linear. Their effect count only includes <code>WriteText</code>; the signal operations themselves never reach the page.</p>
+<p>Rendering the whole view after every change is ten times slower than host signals. Rendering once per round is the fastest of all, because this task never needs the intermediate states on screen. Signals earn their place when updates arrive one at a time and each must show immediately; when a program can batch, a view as a value is simpler and faster.</p>
+</div>
+
+<h3 id="webrtc">WebRTC</h3>
+<p>Task: connect two peers in the same page and send 2 000 five byte messages over a data channel.</p>
+<pre><code><span class="c">// mirror: the browser API as effects, candidates gathered before a description returns</span>
+CreatePeer   : {} -&gt; Int
+CreateOffer  : Int -&gt; Result(String, String)
+CreateAnswer : {peer: Int, offer: String} -&gt; Result(String, String)
+Send         : {channel: Int, data: Binary} -&gt; Result({}, String)
+Receive      : Int -&gt; Result(Binary, String)
+<span class="c">// batch: the mirror plus</span>
+SendAll    : {channel: Int, messages: List(Binary)} -&gt; Result({}, String)
+ReceiveAll : {channel: Int, min: Int} -&gt; Result(List(Binary), String)
+<span class="c">// session: offers and answers are tokens to carry between peers</span>
+Offer   : String -&gt; Result({session: Int, token: String}, String)
+Accept  : String -&gt; Result({session: Int, token: String}, String)
+Connect : {session: Int, token: String} -&gt; Result({}, String)</code></pre>
+<div class="table-wrap" data-table="webrtc"></div>
+<div id="webrtc-notes">
+<p>All three designs take about the same time, and so do both backends. Connecting two peers and delivering the messages through the page's event loop dominates; every receive is a promise the program waits on, which yields to the host whatever the backend. Batching halves the number of effects and saves nothing measurable. The measurement includes setup, so it cannot say how much batching helps a long-lived channel.</p>
+<p>The difference is in what a program has to know. The mirror exposes offers, answers and channels as handles, faithful to the browser API and as leaky as the DOM handles. Session tokens hide SDP and ICE entirely and are strings, so they travel through <code>Copy</code> and <code>Paste</code>, a QR code, or <code>Fetch</code> to a signalling server, with the same speed.</p>
+</div>
+
+<h2 id="language">What the language taught</h2>
+<ul>
+  <li><strong>Types carry the optimisation.</strong> Row types remove most yield checks, and a pure row on an argument lets the host call back into a program. Neither needs anything beyond the types EYG already infers.</li>
+  <li><strong>Tail calls are part of the semantics of handlers.</strong> A loop whose effects resume through the handler recurses through the runtime. JavaScriptCore eliminates those tail calls and V8 does not, so on V8 the tail resumptive optimisation decides whether some programs run at all, not how fast.</li>
+  <li><strong>Serialisable values push designs toward data.</strong> Handles are forgeable integers that leak without a release effect. Snapshots and renders are ordinary values and need no lifetime.</li>
+  <li><strong>No recursive types means flat trees.</strong> It worked twice, for JSON and the DOM, and makes an efficient persistent map impossible to write in EYG, which is why the handler based signals are linear per operation.</li>
+  <li><strong>Purity pays twice.</strong> It makes selective translation sound and makes replay a correct implementation of multi-shot resumptions for generators.</li>
+</ul>
+
+<h2 id="next">Limits and next steps</h2>
+<ul>
+  <li>Integers are unchecked JavaScript numbers; the interpreter raises <code>Unrepresentable</code> outside the safe range.</li>
+  <li><code>!equal</code> on functions compares identity; the interpreter compares closures structurally.</li>
+  <li>References are not compiled, a program must be resolved to one tree first.</li>
+  <li>Calls through variables are checked even when the function is pure, because variables carry opened types. Annotating with the generalised row would remove those checks and their join points.</li>
+  <li>Resumptions that are not tail resumptive grow the stack with each operation. A trampoline in the prompt would make <code>mstate</code> run on V8.</li>
+  <li>The effect designs are experiments. Handles need a release story, render needs keyed children beyond position, and the WebRTC designs do not cover media tracks.</li>
+</ul>
+
+<h2 id="reproduce">Reproduce</h2>
+<pre><code><span class="c"># packages/gleam_compiler</span>
+gleam test
+gleam run -m eyg/compiler/bench -- compile
+gleam run -m eyg/compiler/bench -- run counter10 full 2000
+gleam run -m eyg/compiler/bench -- examples
+bun install
+bun run bin/bench_browser
+bun run bin/bench_browser_apis
+bun run bin/check_browser_platform</code></pre>
+<p>Results are in <code>bench/results</code>. Commits on <code>js-compiler</code>, oldest first: the cherry-picked soundness search, its port to eyg_ir 3, the evidence passing compiler, the generator backend, tail resumptive clauses for generators, the browser platform, the benchmarks, and the API experiments.</p>
+
+<footer>
+  <p>Ningning Xie and Daan Leijen. <a href="https://www.microsoft.com/en-us/research/uploads/prod/2021/08/genev-icfp21.pdf">Generalized Evidence Passing for Effect Handlers: Efficient Compilation of Effect Handlers to C.</a> ICFP 2021.</p>
+  <p id="engines">Bun 1.3.13, Linux x64.</p>
+</footer>
+</main>
+</div>
+
+<script src="results.js"></script>
+<script>
+(function () {
+  const R = window.EYG_RESULTS || { bun: [], chromium: { results: [] }, apis: { results: [] } };
+  const labels = {
+    full: "full", linked: "linked", bubble: "bubble", no_tail: "no tail",
+    no_inline: "no inline", no_shortcut: "no shortcut", not_selective: "unchecked",
+    generator: "generator", generator_no_tail: "gen, no tail"
+  };
+  const order = Object.keys(labels);
+  const benches = [
+    ["counter", "tail resumptive reader"],
+    ["counter1", "one unused handler between"],
+    ["counter10", "ten unused handlers between"],
+    ["host", "synchronous platform effect"],
+    ["mstate", "state captured under a lambda"],
+    ["nqueens", "multi-shot choice"],
+    ["fib", "no effects"],
+    ["polymorphic", "effect polymorphic map, pure use"]
+  ];
+  const large = { fib: 30, counter: 2000, counter1: 2000, counter10: 2000, host: 2000, polymorphic: 1000, mstate: 10000, nqueens: 9 };
+  const small = { fib: 15, counter: 100, counter1: 100, counter10: 100, host: 100, polymorphic: 100, mstate: 10000, nqueens: 6 };
+
+  const median = (xs) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s.length ? s[Math.floor(s.length / 2)] : NaN;
+  };
+
+  // Pool every run of a case, a case with only errors is an error.
+  function table(entries, sizes) {
+    const out = {};
+    for (const e of entries) {
+      if (sizes && sizes[e.bench] !== e.size) continue;
+      const key = e.bench + ":" + e.backend;
+      const cell = out[key] || (out[key] = { times: [], error: null });
+      if (e.times) cell.times.push(...e.times);
+      else if (e.error) cell.error = e.error;
+    }
+    for (const cell of Object.values(out)) cell.median = cell.times.length ? median(cell.times) : null;
+    return out;
+  }
+  const bun = table(R.bun, large);
+  const chromium = table(R.chromium.results || [], null);
+  const bunSmall = table(R.bun.filter((e) => ["interpreter", "full", "generator"].includes(e.backend)), small);
+  const engines = { bun, chromium };
+
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (name, attrs, parent) => {
+    const node = document.createElementNS(NS, name);
+    for (const k in attrs) node.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(node);
+    return node;
+  };
+  const fmt = (ms) => ms >= 100 ? Math.round(ms) + " ms" : ms >= 10 ? ms.toFixed(1) + " ms" : ms.toFixed(2) + " ms";
+  const ratio = (r) => r >= 10 ? Math.round(r) + "×" : r.toFixed(1) + "×";
+
+  function multiples(engine) {
+    const data = engines[engine];
+    const root = document.getElementById("multiples");
+    root.replaceChildren();
+    const W = 420, labelW = 96, valueW = 92, rowH = 20, top = 24;
+    const lo = Math.log10(0.5), hi = Math.log10(300);
+    const x = (r) => labelW + (Math.log10(Math.max(0.5, Math.min(300, r))) - lo) / (hi - lo) * (W - labelW - valueW);
+    for (const [bench, description] of benches) {
+      const base = data[bench + ":full"];
+      const wrap = document.createElement("div");
+      const h = document.createElement("h4");
+      h.textContent = bench;
+      const p = document.createElement("p");
+      p.textContent = description + (base && base.median != null ? " · full " + fmt(base.median) : "");
+      wrap.append(h, p);
+      const H = top + order.length * rowH + 6;
+      const svg = el("svg", { viewBox: "0 0 " + W + " " + H, class: "chart", role: "img",
+        "aria-label": bench + ": time of each configuration relative to every optimisation on, " + engine });
+      for (const t of [1, 10, 100]) {
+        el("line", { x1: x(t), x2: x(t), y1: top - 6, y2: H - 4, class: t === 1 ? "axis" : "grid" }, svg);
+        const label = el("text", { x: x(t), y: 12, "text-anchor": "middle", class: "muted" }, svg);
+        label.textContent = t + "×";
+      }
+      order.forEach((key, i) => {
+        const y = top + i * rowH;
+        const name = el("text", { x: 0, y: y + 13 }, svg);
+        name.textContent = labels[key];
+        const cell = data[bench + ":" + key];
+        const value = el("text", { x: W, y: y + 13, "text-anchor": "end" }, svg);
+        if (!cell) { value.textContent = "not run"; value.setAttribute("class", "muted"); return; }
+        if (cell.median == null) {
+          value.textContent = /stack/i.test(cell.error || "") ? "stack overflow" : "failed";
+          value.setAttribute("fill", "var(--clay)");
+          el("line", { x1: labelW, x2: W - valueW, y1: y + 9, y2: y + 9, stroke: "var(--clay)", "stroke-dasharray": "2 4", "stroke-width": 1.5 }, svg);
+          return;
+        }
+        if (!base || base.median == null) { value.textContent = fmt(cell.median); return; }
+        const r = cell.median / base.median;
+        const colour = key === "full" ? "var(--leaf)" : key.startsWith("generator") ? "var(--accent)" : "var(--bar)";
+        const x0 = x(1), x1 = x(r);
+        el("rect", { x: Math.min(x0, x1), y: y + 3, width: Math.max(2, Math.abs(x1 - x0)), height: rowH - 8, rx: 2, fill: colour }, svg);
+        value.textContent = key === "full" ? "1×" : ratio(r);
+      });
+      wrap.appendChild(svg);
+      root.appendChild(wrap);
+    }
+  }
+
+  function interpreterChart() {
+    const root = document.getElementById("interpreter-chart");
+    const W = 760, labelW = 110, valueW = 170, groupH = 58, top = 26;
+    const series = [["interpreter", "var(--bar)"], ["full", "var(--leaf)"], ["generator", "var(--accent)"]];
+    const lo = Math.log10(0.05), hi = Math.log10(3000);
+    const x = (ms) => labelW + (Math.log10(Math.max(0.05, Math.min(3000, ms))) - lo) / (hi - lo) * (W - labelW - valueW);
+    const H = top + benches.length * groupH;
+    const svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img",
+      "aria-label": "Median milliseconds for the interpreter, evidence passing and generators on each benchmark at small sizes, logarithmic scale." });
+    for (const t of [0.1, 1, 10, 100, 1000]) {
+      el("line", { x1: x(t), x2: x(t), y1: top - 8, y2: H, class: "grid" }, svg);
+      const label = el("text", { x: x(t), y: 12, "text-anchor": "middle", class: "muted" }, svg);
+      label.textContent = t + " ms";
+    }
+    benches.forEach(([bench], i) => {
+      const y0 = top + i * groupH;
+      const name = el("text", { x: 0, y: y0 + 26, "font-weight": 600 }, svg);
+      name.textContent = bench;
+      const interp = bunSmall[bench + ":interpreter"];
+      series.forEach(([key, colour], j) => {
+        const y = y0 + j * 16;
+        const cell = bunSmall[bench + ":" + key];
+        const value = el("text", { x: W - valueW + 10, y: y + 11 }, svg);
+        if (!cell || cell.median == null) {
+          value.textContent = key + " " + (cell && /stack/i.test(cell.error || "") ? "stack overflow" : "not run");
+          value.setAttribute("fill", "var(--clay)");
+          return;
+        }
+        el("rect", { x: labelW, y: y + 2, width: Math.max(2, x(cell.median) - labelW), height: 11, rx: 2, fill: colour }, svg);
+        let text = key + " " + fmt(cell.median);
+        if (key !== "interpreter" && interp && interp.median) text += " · " + ratio(interp.median / cell.median);
+        value.textContent = text;
+      });
+    });
+    root.replaceChildren(svg);
+  }
+
+  // Browser API tables
+  const apis = (R.apis && R.apis.results) || [];
+  const groups = {
+    read: ["read_handles", "read_selectors_each", "read_selectors", "read_snapshot"],
+    write: ["rows_imperative", "rows_patch", "rows_render"],
+    signals: ["counters_host", "counters_handlers", "counters_render", "counters_render_batched"],
+    webrtc: ["webrtc_mirror", "webrtc_batch", "webrtc_session"]
+  };
+  const describe = {
+    read_handles: "handles, one read per cell",
+    read_selectors_each: "selectors, one per cell",
+    read_selectors: "selectors, ReadAll",
+    read_snapshot: "snapshot",
+    rows_imperative: "imperative handles",
+    rows_patch: "patch",
+    rows_render: "render",
+    counters_host: "host signals",
+    counters_handlers: "signals in an EYG handler",
+    counters_render: "render every change",
+    counters_render_batched: "render once per round",
+    webrtc_mirror: "mirror",
+    webrtc_batch: "batch",
+    webrtc_session: "session tokens"
+  };
+  function apiTables() {
+    for (const [group, names] of Object.entries(groups)) {
+      const host = document.querySelector('[data-table="' + group + '"]');
+      if (!host) continue;
+      const t = document.createElement("table");
+      t.innerHTML = "<thead><tr><th>Design</th><th>Example</th><th class=\"n\">Effects</th><th class=\"n\">Evidence</th><th class=\"n\">Generator</th></tr></thead>";
+      const body = document.createElement("tbody");
+      for (const name of names) {
+        const full = apis.find((e) => e.example === name && e.backend === "full");
+        const gen = apis.find((e) => e.example === name && e.backend === "generator");
+        const cell = (e) => !e ? "—" : e.error ? '<span style="color:var(--clay)">' + (/stack/i.test(e.error) ? "stack overflow" : "error") + "</span>" : fmt(e.median) + (e.correct === false ? " ✗" : "");
+        const effects = full && full.effects ? full.effects.total.toLocaleString("en-GB") : gen && gen.effects ? gen.effects.total.toLocaleString("en-GB") : "—";
+        const tr = document.createElement("tr");
+        tr.innerHTML = "<td>" + describe[name] + "</td><td><code>" + name + ".eyg</code></td><td class=\"n\">" + effects + "</td><td class=\"n\">" + cell(full) + "</td><td class=\"n\">" + cell(gen) + "</td>";
+        body.appendChild(tr);
+      }
+      t.appendChild(body);
+      host.replaceChildren(t);
+    }
+  }
+
+  // Figures quoted in tables come from the data when it is present.
+  function cells() {
+    for (const node of document.querySelectorAll("[data-cell]")) {
+      const [bench, key] = node.dataset.cell.split(":");
+      const a = bun[bench + ":" + key], base = bun[bench + ":" + (key === "linked" ? "full" : "full")];
+      if (a && base && a.median != null && base.median != null) node.textContent = ratio(a.median / base.median);
+    }
+  }
+
+  for (const button of document.querySelectorAll(".switch button")) {
+    button.addEventListener("click", () => {
+      for (const b of document.querySelectorAll(".switch button")) b.setAttribute("aria-pressed", String(b === button));
+      multiples(button.dataset.engine);
+    });
+  }
+  if (R.chromium && R.chromium.browser) {
+    document.getElementById("engines").textContent = "Bun 1.3.13 (JavaScriptCore) and Chromium " + R.chromium.browser + " (V8), Linux x64.";
+  }
+  multiples("bun");
+  interpreterChart();
+  apiTables();
+  cells();
+})();
+</script>

@@ -1,0 +1,938 @@
+<title>Handlers Without Stacks</title>
+<meta name="description" content="A 40 minute talk on compiling EYG effect handlers to JavaScript with generalized evidence passing and generators, and designing browser effects on top.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<style>
+/* One visual world for projection, colours are painted explicitly. */
+:root {
+  --white: #fefefc;
+  --ink: #2f2f2f;
+  --muted: #62675d;
+  --rule: #d9dfd1;
+  --aubergine: #584355;
+  --plum: #3f2f3d;
+  --mint: #e7ffdd;
+  --leaf: #2f8a55;
+  --clay: #b3462f;
+  --bar: #bcc5b3;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Literata", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: #20241f;
+  color: var(--ink);
+  font-family: var(--body);
+  overflow: hidden;
+}
+.stage {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.deck {
+  position: relative;
+  width: min(calc(100vw - 32px), calc((100vh - 80px) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  container-type: inline-size;
+}
+.slide {
+  position: absolute;
+  inset: 0;
+  background: var(--white);
+  border-radius: 6px;
+  padding: 5cqw 6cqw 4.5cqw;
+  display: none;
+  flex-direction: column;
+  gap: 2.2cqw;
+  font-size: 1.95cqw;
+  line-height: 1.45;
+  overflow: hidden;
+}
+.slide.current { display: flex; }
+
+.kicker {
+  font-family: var(--mono);
+  font-size: 1.15cqw;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--aubergine);
+}
+h1, h2 { font-family: var(--display); margin: 0; line-height: 1.04; text-wrap: balance; color: var(--ink); }
+h1 { font-size: 7cqw; font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 3.9cqw; font-weight: 700; letter-spacing: -0.01em; max-width: 30ch; }
+h2 em, h1 em { font-style: normal; color: var(--aubergine); }
+p { margin: 0; max-width: 46ch; }
+ul { margin: 0; padding-left: 1.4em; display: grid; gap: 0.7cqw; max-width: 52ch; }
+li::marker { color: var(--leaf); }
+strong { font-weight: 600; }
+code { font-family: var(--mono); font-size: 0.85em; }
+pre {
+  margin: 0;
+  background: var(--mint);
+  border-radius: 0.8cqw;
+  padding: 1.8cqw 2.2cqw;
+  font-family: var(--mono);
+  font-size: 1.45cqw;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre;
+  overflow: hidden;
+}
+pre .c { color: var(--muted); }
+pre .k { color: var(--aubergine); font-weight: 600; }
+pre .h { color: var(--leaf); font-weight: 600; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 3.5cqw; align-items: start; flex: 1; min-height: 0; }
+.cols.wide-left { grid-template-columns: 1.35fr 1fr; }
+.grow { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
+.foot { margin-top: auto; font-family: var(--mono); font-size: 1.1cqw; color: var(--muted); }
+
+.figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4cqw; }
+.figures div { display: grid; gap: 0.4cqw; align-content: start; border-top: 0.25cqw solid var(--rule); padding-top: 1.2cqw; }
+.figures b { font-family: var(--mono); font-weight: 600; font-size: 3.6cqw; color: var(--leaf); line-height: 1; }
+.figures b.gen { color: var(--aubergine); }
+.figures b.bad { color: var(--clay); }
+.figures span { font-size: 1.5cqw; color: var(--muted); line-height: 1.35; }
+
+table { border-collapse: collapse; font-size: 1.55cqw; width: 100%; }
+th, td { text-align: left; padding: 0.7cqw 1.6cqw 0.7cqw 0; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+th { font-family: var(--display); font-size: 1.15cqw; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td.good { color: var(--leaf); font-weight: 600; }
+td.bad { color: var(--clay); }
+
+svg { width: 100%; height: auto; display: block; }
+.diagram { color: var(--ink); }
+.chart text { font-family: var(--mono); fill: currentColor; }
+
+/* section breaks */
+.slide.section { background: var(--aubergine); color: var(--mint); justify-content: flex-end; }
+.slide.section h2 { color: var(--mint); font-size: 6.2cqw; font-weight: 800; }
+.slide.section .kicker { color: #cdb7c9; }
+.slide.section p { color: #e6d9e3; font-size: 2.2cqw; }
+
+.slide.title { background: var(--mint); flex-direction: row; align-items: stretch; gap: 4cqw; }
+.title-text { display: flex; flex-direction: column; justify-content: center; gap: 2.2cqw; flex: 1; }
+.title img { width: 30cqw; height: auto; align-self: center; max-width: 100%; }
+.title .byline { font-family: var(--mono); font-size: 1.4cqw; color: var(--muted); }
+
+.chrome {
+  position: fixed;
+  left: 0; right: 0; bottom: 10px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  font: 600 13px var(--display);
+  color: #d7ddd0;
+  align-items: center;
+}
+.chrome button {
+  font: inherit;
+  color: #d7ddd0;
+  background: #30362e;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.chrome button:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+.notes {
+  display: none;
+  position: fixed;
+  right: 16px; bottom: 48px;
+  width: min(420px, 40vw);
+  max-height: 40vh;
+  overflow: auto;
+  background: #2a2f28;
+  color: #e5eadf;
+  font: 14px/1.5 var(--body);
+  padding: 14px 16px;
+  border-radius: 8px;
+}
+body.show-notes .notes.current { display: block; }
+
+/* phone and narrow screens read the deck as a document */
+@media (max-width: 700px) {
+  body { overflow: auto; background: var(--white); }
+  .stage { position: static; display: block; padding: 16px; }
+  .deck { width: 100%; aspect-ratio: auto; container-type: normal; display: grid; gap: 16px; }
+  .slide { position: relative; display: flex; aspect-ratio: auto; font-size: 16px; padding: 24px 18px; gap: 14px; border: 1px solid var(--rule); }
+  .slide h1 { font-size: 36px; } .slide h2 { font-size: 24px; } .slide.section h2 { font-size: 30px; }
+  .slide .kicker, .foot, .title .byline { font-size: 11px; }
+  .slide pre { font-size: 11px; overflow-x: auto; padding: 12px; }
+  .cols, .cols.wide-left { grid-template-columns: 1fr; }
+  .figures { grid-template-columns: 1fr; } .figures b { font-size: 28px; } .figures span { font-size: 14px; }
+  table { font-size: 13px; } th { font-size: 10px; }
+  .slide.title { flex-direction: column; } .title img { width: 50%; }
+  .slide.section p { font-size: 16px; }
+  .chrome, .notes { display: none !important; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .slide.current { animation: in 180ms ease-out; }
+  @keyframes in { from { opacity: 0.4; } to { opacity: 1; } }
+}
+</style>
+
+<div class="stage">
+<div class="deck" id="deck">
+
+<section class="slide title">
+  <div class="title-text">
+    <div class="kicker">EYG · compiling effects</div>
+    <h1>Handlers <em>without</em> stacks</h1>
+    <p>Compiling EYG effect handlers to JavaScript with generalized evidence passing, generators for comparison, and effects for the browser built on top.</p>
+    <div class="byline">packages/gleam_compiler · branch js-compiler · September 2026</div>
+  </div>
+  <img src="pea.webp" alt="Penelopea, EYG's pea mascot, holding a clipboard">
+</section>
+<aside class="notes">Forty minutes. Three parts: how evidence passing compiles handlers without capturing stacks, what generators give and cost, and what effect APIs for the browser look like once the compiler is fast. Every number is measured, Bun and Chromium, runs pooled.</aside>
+
+<section class="slide">
+  <div class="kicker">EYG in one slide</div>
+  <h2>Everything outside the program is an <em>effect</em></h2>
+  <div class="cols">
+    <ul>
+      <li>Structural types, inferred, with effect rows on every function</li>
+      <li>No mutation, no exceptions, no FFI: a script can only <code>perform</code></li>
+      <li>The runtime decides what an effect does, the CLI and the browser differ</li>
+      <li>Programs are an IR tree, hashed and shared as packages</li>
+    </ul>
+<pre><span class="c">// every effect the type allows is visible</span>
+(url) -&gt; {
+  <span class="k">let</span> response = <span class="k">perform</span> Fetch(url)
+  <span class="k">let</span> _ = <span class="k">perform</span> Print(<span class="h">"got it"</span>)
+  response.status
+}
+<span class="c">// : (Request) -&gt; &lt;Fetch, Print&gt; Int</span></pre>
+  </div>
+</section>
+<aside class="notes">The audience knows algebraic effects. The EYG specifics that matter for compilation are next.</aside>
+
+<section class="slide">
+  <div class="kicker">What the compiler has to support</div>
+  <h2>Deep, multi-shot, first class</h2>
+  <div class="cols wide-left">
+<pre><span class="k">handle</span> Choose((options, resume) -&gt; {
+  <span class="c">// resume once per option</span>
+  !list_fold(options, 0, (col, acc) -&gt; {
+    !int_add(acc, resume(col))
+  })
+}, (_) -&gt; {
+  <span class="k">let</span> col = <span class="k">perform</span> Choose(columns)
+  ...
+})</pre>
+    <ul>
+      <li>One operation per label, a clause is <code>(value, resume) -&gt; …</code></li>
+      <li>Resuming reinstalls the handler</li>
+      <li><code>resume</code> is a value: call it zero, one or many times, return it</li>
+      <li>Handlers are values too, nothing is syntax the compiler can pattern match on</li>
+      <li>Rows are open and generalised at <code>let</code></li>
+    </ul>
+  </div>
+</section>
+<aside class="notes">Handlers as values rules out the easy trick of recognising a handler literal at the handle site. The old README even asked how tail resumption could be detected if the handler is a variable. Answer later: mark the function value.</aside>
+
+<section class="slide">
+  <div class="kicker">The starting point</div>
+  <h2>A free monad that bubbles, and some older bugs</h2>
+  <div class="cols">
+<pre><span class="k">let</span> bind = (m, then) =&gt; {
+  <span class="k">if</span> (!(m <span class="k">instanceof</span> Eff)) <span class="k">return</span> then(m);
+  <span class="k">let</span> k = (x) =&gt; bind(m.k(x), then);
+  <span class="k">return new</span> Eff(m.label, m.value, k);
+};</pre>
+    <ul>
+      <li>Every effectful <code>let</code> allocates a continuation</li>
+      <li>Every perform climbs through every handler</li>
+      <li><code>list_fold</code> applied the reducer in the wrong order</li>
+      <li><code>int_compare</code> never returned <code>Gt</code></li>
+      <li>String literals were HTML escaped</li>
+    </ul>
+  </div>
+  <div class="foot">found by running the shared spec suites and a differential test against the interpreter</div>
+</section>
+<aside class="notes">Not a criticism, the README was honest that this was the simple version. The bugs were invisible because there were no tests against the spec suites. The lesson that carries: build the test harness before the optimisations.</aside>
+
+<section class="slide section">
+  <div class="kicker">Part one</div>
+  <h2>Evidence passing</h2>
+  <p>Xie and Leijen, ICFP 2021. Every technique implemented behind a switch.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">The paper as a ladder</div>
+  <h2>Split <em>finding</em> a handler from <em>capturing</em> the continuation</h2>
+  <div class="grow diagram">
+  <svg viewBox="0 0 1100 250" role="img" aria-label="Five refinements: algebraic handlers, multi-prompt with markers, evidence passing, bubbling yields, and a monadic translation, each making one transition local.">
+    <defs><marker id="d1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#2f2f2f"/></marker></defs>
+    <g fill="none" stroke="#2f2f2f" stroke-width="2">
+      <rect x="10" y="60" width="180" height="90" rx="10"/>
+      <rect x="232" y="60" width="180" height="90" rx="10"/>
+      <rect x="454" y="60" width="180" height="90" rx="10" stroke="#2f8a55" stroke-width="3"/>
+      <rect x="676" y="60" width="180" height="90" rx="10"/>
+      <rect x="898" y="60" width="190" height="90" rx="10"/>
+      <line x1="190" y1="105" x2="228" y2="105" marker-end="url(#d1)"/>
+      <line x1="412" y1="105" x2="450" y2="105" marker-end="url(#d1)"/>
+      <line x1="634" y1="105" x2="672" y2="105" marker-end="url(#d1)"/>
+      <line x1="856" y1="105" x2="894" y2="105" marker-end="url(#d1)"/>
+    </g>
+    <g font-family="JetBrains Mono, monospace" text-anchor="middle" fill="#2f2f2f">
+      <text x="100" y="100" font-size="19" font-weight="600">handlers</text>
+      <text x="100" y="126" font-size="14">search + capture</text>
+      <text x="322" y="100" font-size="19" font-weight="600">multi-prompt</text>
+      <text x="322" y="126" font-size="14">marker per handler</text>
+      <text x="544" y="100" font-size="19" font-weight="600">evidence</text>
+      <text x="544" y="126" font-size="14">no search</text>
+      <text x="766" y="100" font-size="19" font-weight="600">bubbling</text>
+      <text x="766" y="126" font-size="14">no capture</text>
+      <text x="993" y="100" font-size="19" font-weight="600">monadic</text>
+      <text x="993" y="126" font-size="14">plain functions</text>
+    </g>
+    <g font-family="JetBrains Mono, monospace" text-anchor="middle" fill="#62675d" font-size="14">
+      <text x="544" y="190">+ tail resumptive in place</text>
+      <text x="993" y="190">+ bind inlining, join points</text>
+      <text x="766" y="190">+ short-cut resumptions</text>
+      <text x="544" y="215">§2.5, §2.6</text><text x="766" y="215">§2.7, §2.8</text><text x="993" y="215">§2.9–2.11</text>
+    </g>
+  </svg>
+  </div>
+</section>
+<aside class="notes">Each step makes one non-local transition local. Once perform only looks at a vector, and yield only moves one frame, the whole thing is plain lambda calculus and compiles to anything, including JavaScript with no stack capture.</aside>
+
+<section class="slide">
+  <div class="kicker">Pipeline</div>
+  <h2>Types decide which calls are checked</h2>
+  <div class="grow diagram">
+  <svg viewBox="0 0 900 250" role="img" aria-label="EYG IR is typed by the analysis, normalised into A-normal form with checked calls marked, and rendered by the evidence or generator backend, each run by its runtime with a platform.">
+    <defs><marker id="d2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#2f2f2f"/></marker></defs>
+    <g fill="none" stroke="#2f2f2f" stroke-width="1.6">
+      <rect x="10" y="95" width="120" height="60" rx="8"/>
+      <rect x="190" y="95" width="150" height="60" rx="8"/>
+      <rect x="400" y="95" width="170" height="60" rx="8"/>
+      <rect x="640" y="30" width="240" height="70" rx="8" stroke="#2f8a55" stroke-width="2.5"/>
+      <rect x="640" y="150" width="240" height="70" rx="8" stroke="#584355" stroke-width="2.5"/>
+      <line x1="130" y1="125" x2="186" y2="125" marker-end="url(#d2)"/>
+      <line x1="340" y1="125" x2="396" y2="125" marker-end="url(#d2)"/>
+      <path d="M570 115 L605 115 L605 65 L636 65" marker-end="url(#d2)"/>
+      <path d="M570 135 L605 135 L605 185 L636 185" marker-end="url(#d2)"/>
+    </g>
+    <g font-family="JetBrains Mono, monospace" font-size="15" fill="#2f2f2f" text-anchor="middle">
+      <text x="70" y="121" font-weight="600">EYG IR</text><text x="70" y="141" font-size="12">tree.Node</text>
+      <text x="265" y="121" font-weight="600">analysis</text><text x="265" y="141" font-size="12">type per node</text>
+      <text x="485" y="121" font-weight="600">anf</text><text x="485" y="141" font-size="12">checked calls</text>
+      <text x="760" y="62" font-weight="600">evidence</text><text x="760" y="84" font-size="12">flag, frames, join points</text>
+      <text x="760" y="182" font-weight="600">generator</text><text x="760" y="204" font-size="12">function*, yield*</text>
+    </g>
+  </svg>
+  </div>
+  <p>A call is checked only if the <strong>callee's row</strong> is not empty. Both backends share everything up to rendering.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">§2.5 evidence</div>
+  <h2>Perform is a property lookup</h2>
+  <div class="cols">
+<pre><span class="c">// emitted at the perform site</span>
+$performWith($s.w.Ask, $unit)
+
+<span class="c">// handle installs evidence</span>
+ev = { l: <span class="h">"Ask"</span>, h, t, w }
+s.w = { ...w, Ask: ev }</pre>
+    <div>
+      <table>
+        <thead><tr><th>counter10, Bun</th><th class="n">ms</th><th class="n">vs full</th></tr></thead>
+        <tbody>
+          <tr><td>map evidence</td><td class="n good">32</td><td class="n good">1×</td></tr>
+          <tr><td>linked list</td><td class="n">94</td><td class="n">2.9×</td></tr>
+          <tr><td>no evidence, bubble</td><td class="n bad">1 705</td><td class="n bad">53×</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:1.5cqw">Ten unused handlers between a reader and 4 million performs. The map stays flat; the engine caches the lookup per site.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">§2.5, §2.11 not done</div>
+  <h2>No static evidence index, on purpose</h2>
+  <ul>
+    <li>Koka indexes a canonical vector at an offset known at compile time</li>
+    <li>That needs a <strong>closed row</strong> at the perform and a vector of exactly that shape</li>
+    <li>EYG rows inside let bound functions are open</li>
+    <li>Inference unifies rows, there are no <code>open</code> coercions to rebuild vectors at call boundaries</li>
+    <li>A non-scoped resumption can run under more handlers than its type names</li>
+  </ul>
+  <p>An inline cached property access by label gets most of the way, without an elaboration pass.</p>
+</section>
+<aside class="notes">Point at the insight: the static index is an artefact of subsumption being explicit in Koka's core. EYG's HM with rows does not produce those coercions.</aside>
+
+<section class="slide">
+  <div class="kicker">§2.6 tail resumptive</div>
+  <h2>Mark the <em>function</em>, not the handler</h2>
+  <div class="cols">
+<pre>$handle(<span class="h">"Ask"</span>, $tr(
+  (_) =&gt; (resume) =&gt; resume(1),
+  (_) =&gt; 1          <span class="c">// in place</span>
+), exec)
+
+<span class="k">if</span> (ev.t !== <span class="k">null</span>) {
+  <span class="k">const</span> w = s.w; s.w = ev.w;
+  <span class="k">const</span> r = ev.t(value);
+  s.w = w;
+  <span class="k">if</span> (s.y) { under(ev.l); <span class="k">return</span>; }
+  <span class="k">return</span> r;
+}</pre>
+    <div>
+      <table>
+        <thead><tr><th>Bun</th><th class="n">full</th><th class="n">no tail</th></tr></thead>
+        <tbody>
+          <tr><td>counter</td><td class="n good">31 ms</td><td class="n bad">14×</td></tr>
+          <tr><td>counter1</td><td class="n good">31 ms</td><td class="n bad">20×</td></tr>
+          <tr><td>counter10</td><td class="n good">32 ms</td><td class="n bad">120×</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:1.5cqw">Any lambda <code>(v) -&gt; (resume) -&gt; {…resume(e)}</code> with resume only in tail positions. Works for handlers bound to variables.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">§2.12.2 the subtle part</div>
+  <h2>A resumed clause must find its evidence <em>again</em></h2>
+  <div class="cols wide-left">
+<pre><span class="k">handle</span> Ask((_, k) -&gt; { k(1) }, (_) -&gt; {
+  <span class="k">handle</span> Evil((_, k) -&gt; { Suspended(k) }, (_) -&gt; {
+    <span class="k">handle</span> Tl((_, resume) -&gt; {
+      <span class="k">let</span> _ = <span class="k">perform</span> Ask({})
+      <span class="k">let</span> _ = <span class="k">perform</span> Evil({})     <span class="c">// escapes</span>
+      resume(<span class="k">perform</span> Ask({}))
+    }, (_) -&gt; { Done(<span class="k">perform</span> Tl({})) })
+  })
+})
+<span class="c">// later: resume k under a reader that answers 2</span></pre>
+    <ul>
+      <li>The clause runs in place under <code>under Tl</code></li>
+      <li>The resumption captures the <code>under</code> frame</li>
+      <li>Fixing the old vector is well typed and returns <strong>1</strong></li>
+      <li><code>underk</code> looks up <code>Tl</code> in the vector current at resume and returns <strong>2</strong></li>
+      <li>Both examples from §2.12 are tests, for every configuration</li>
+    </ul>
+  </div>
+</section>
+<aside class="notes">This example does not type check in EYG, a handler returning its resumption needs a recursive type. The compiler falls back to checking every call and still gets 2. Mention that fallback is what makes untyped programs safe.</aside>
+
+<section class="slide">
+  <div class="kicker">§2.7–2.11 yields</div>
+  <h2>No monad at runtime, a flag and a list of frames</h2>
+  <div class="cols">
+<pre><span class="c">// a yield is a field, not a value</span>
+s.y = { l, m: ev, v, k: [] }
+
+<span class="c">// each frame left behind adds itself</span>
+<span class="k">if</span> (s.y !== <span class="k">null</span>) {
+  s.y.k.push((t) =&gt; $j_t(acc, t));
+  <span class="k">return</span>;
+}
+
+<span class="c">// short-cut resumption: fold the frames</span>
+<span class="k">for</span> (frame <span class="k">of</span> k) x = frame(x)</pre>
+    <div>
+      <table>
+        <thead><tr><th>Bun</th><th class="n">full</th><th class="n">no short-cut</th></tr></thead>
+        <tbody>
+          <tr><td>nqueens 9</td><td class="n good">17 ms</td><td class="n">1.5×</td></tr>
+          <tr><td>counter</td><td class="n good">31 ms</td><td class="n">1.2×</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:1.5cqw">Composed closures allocate per frame and need a JavaScript frame per frame on resume.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">§2.10 bind inlining</div>
+  <h2>The fast path allocates <em>nothing</em></h2>
+  <div class="grow diagram">
+  <svg viewBox="0 0 860 200" role="img" aria-label="After a checked call the code tests the yield flag. Without a yield the rest runs inline. With a yield a frame calling the lifted join point is pushed and the function returns.">
+    <defs><marker id="d3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#2f2f2f"/></marker></defs>
+    <g fill="none" stroke="#2f2f2f" stroke-width="1.6">
+      <rect x="10" y="75" width="200" height="50" rx="8"/>
+      <rect x="270" y="75" width="150" height="50" rx="8"/>
+      <rect x="490" y="15" width="360" height="50" rx="8" stroke="#2f8a55" stroke-width="2.5"/>
+      <rect x="490" y="135" width="360" height="50" rx="8"/>
+      <line x1="210" y1="100" x2="266" y2="100" marker-end="url(#d3)"/>
+      <path d="M420 90 L455 90 L455 40 L486 40" marker-end="url(#d3)"/>
+      <path d="M420 110 L455 110 L455 160 L486 160" marker-end="url(#d3)"/>
+    </g>
+    <g font-family="JetBrains Mono, monospace" font-size="15" fill="#2f2f2f">
+      <text x="110" y="105" text-anchor="middle">const t = f(a)</text>
+      <text x="345" y="105" text-anchor="middle">$s.y !== null</text>
+      <text x="506" y="46">return $int_add(acc, t)</text>
+      <text x="506" y="158" font-size="14">$extend(t =&gt; $j_t(acc, t)); return</text>
+      <text x="506" y="177" font-size="12" fill="#62675d">function $j_t(acc, t) { … }  lifted</text>
+    </g>
+  </svg>
+  </div>
+  <div class="figures">
+    <div><b>2.4×</b><span>slower on counter with a closure per bind</span></div>
+    <div><b>2×</b><span>at most, each statement emitted twice: inline and in its join point</span></div>
+    <div><b>0</b><span>closures allocated unless the perform actually yielded</span></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">§2.10 selective translation</div>
+  <h2>Checked per call, from the callee's row</h2>
+  <div class="cols">
+    <ul>
+      <li>Koka skips binds for total functions; EYG decides per call</li>
+      <li>The effect annotation on a call is the part that generalises, it can read empty through a parameter, so the callee type is used</li>
+      <li>Lambdas are annotated with a closed row, calls in their body can keep the open one</li>
+      <li>Variables carry opened types, pure let bound functions are still checked: next to fix</li>
+    </ul>
+    <table>
+      <thead><tr><th>Bun</th><th class="n">full</th><th class="n">unchecked</th></tr></thead>
+      <tbody>
+        <tr><td>fib 30</td><td class="n good">16 ms</td><td class="n">2.2×</td></tr>
+        <tr><td>polymorphic</td><td class="n good">62 ms</td><td class="n">2.1×</td></tr>
+        <tr><td>nqueens 9</td><td class="n good">17 ms</td><td class="n">1.3×</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Every switch, every benchmark</div>
+  <h2>Time relative to every optimisation on</h2>
+  <div class="grow" id="matrix"></div>
+  <div class="foot" id="matrix-foot">Bun 1.3.13 · each case in a fresh process · median of 7 after 3 warm up</div>
+</section>
+<aside class="notes">Read the chart by column: tail resumption and evidence carry the counters, inlining and selectivity carry pure code, short-cut resumptions matter where resumptions are long. Bubble beats full on nqueens: every Choose yields anyway, and bubbling skips installing evidence.</aside>
+
+<section class="slide">
+  <div class="kicker">V8 is not JavaScriptCore</div>
+  <h2>On V8, tail resumption decides whether it <em>runs</em></h2>
+  <div class="cols">
+    <ul>
+      <li>A clause that resumes starts the rest of the loop inside itself</li>
+      <li>JavaScriptCore eliminates those tail calls in strict mode, V8 does not</li>
+      <li>Without tail resumption or evidence, 4 million performs overflow V8's stack</li>
+      <li><code>mstate</code> resumes under a lambda: overflows both engines at 200 000</li>
+    </ul>
+    <table>
+      <thead><tr><th>counter</th><th class="n">Bun</th><th class="n">Chromium</th></tr></thead>
+      <tbody>
+        <tr><td>full</td><td class="n good">31 ms</td><td class="n good" data-chromium="counter:full">70 ms</td></tr>
+        <tr><td>bubble</td><td class="n">353 ms</td><td class="n bad">overflow</td></tr>
+        <tr><td>no tail</td><td class="n">427 ms</td><td class="n bad">overflow</td></tr>
+        <tr><td>generator</td><td class="n" data-bun="counter:generator">2.9 s</td><td class="n" data-chromium="counter:generator">10.5 s</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Correctness</div>
+  <h2>Ten configurations, one oracle</h2>
+  <div class="figures">
+    <div><b>3</b><span>shared spec suites: core, builtins, effects</span></div>
+    <div><b>1 200</b><span>programs generated from the type rules, compared with the interpreter</span></div>
+    <div><b>10</b><span>configurations: 8 evidence variants, 2 generator variants</span></div>
+  </div>
+  <ul>
+    <li>Generator from the <code>find-soundness-bugs</code> branch: handlers, recursion, polymorphism</li>
+    <li>Found: an effectful return inside a match not treated as yielding</li>
+    <li>Found: lambda annotations too optimistic to decide a generator</li>
+    <li>Found: generators nesting a handler loop per effect</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <div class="kicker">Against the interpreter</div>
+  <h2>Two orders of magnitude</h2>
+  <div class="grow" id="interp"></div>
+  <div class="foot">The Gleam CEK interpreter under Bun, small sizes it can finish · fib 15, counters 100², mstate 10 000, nqueens 6</div>
+</section>
+
+<section class="slide section">
+  <div class="kicker">Part two</div>
+  <h2>Generators</h2>
+  <p>JavaScript already suspends functions. What does that buy?</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">The translation</div>
+  <h2>A perform is a <em>yield</em>, a call is a <em>yield*</em></h2>
+  <div class="cols">
+<pre>(<span class="k">function*</span> (acc) {
+  <span class="k">const</span> t = <span class="k">yield</span> {l: <span class="h">"Ask"</span>, v: $unit};
+  <span class="k">return</span> $int_add(acc, t);
+})
+
+<span class="k">let</span> r = f(x);
+<span class="k">if</span> ($isGen(r)) r = <span class="k">yield*</span> r;</pre>
+<pre><span class="k">function*</span> loop(label, h, gen, input) {
+  <span class="k">while</span> (<span class="k">true</span>) {
+    <span class="k">const</span> step = gen.next(input);
+    <span class="k">if</span> (step.done) <span class="k">return</span> step.value;
+    <span class="k">if</span> (step.value.l !== label) {
+      input = <span class="k">yield</span> step.value; <span class="k">continue</span>;
+    }
+    <span class="k">const</span> resume = (x) =&gt; loop(…, x);
+    <span class="k">return yield*</span> h(step.value.v)(resume);
+  }
+}</pre>
+  </div>
+  <div class="foot">No join points, no frames, no flag: the compiler is a third of the size</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Where a perform goes</div>
+  <h2>Up every <em>yield*</em>, and back down</h2>
+  <div class="grow diagram">
+  <svg viewBox="0 0 900 300" role="img" aria-label="Bubbling passes a perform through every handler frame and back. Evidence looks up the handler and runs the clause in place. Generators pass the request through every delegating generator and the reply back down.">
+    <defs>
+      <marker id="d4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#2f2f2f"/></marker>
+      <marker id="d4l" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#2f8a55"/></marker>
+      <marker id="d4a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#584355"/></marker>
+    </defs>
+    <g font-family="JetBrains Mono, monospace" font-size="16" font-weight="600" fill="#2f2f2f" text-anchor="middle">
+      <text x="150" y="22">bubble</text><text x="450" y="22">evidence</text><text x="750" y="22">generator</text>
+    </g>
+    <g fill="none" stroke="#2f2f2f" stroke-width="1.4">
+      <rect x="60" y="40" width="180" height="36" rx="6"/><rect x="60" y="86" width="180" height="96" rx="6" stroke-dasharray="5 4"/><rect x="60" y="192" width="180" height="36" rx="6"/><rect x="60" y="238" width="180" height="36" rx="6"/>
+      <rect x="360" y="40" width="180" height="36" rx="6"/><rect x="360" y="86" width="180" height="96" rx="6" stroke-dasharray="5 4"/><rect x="360" y="192" width="180" height="36" rx="6"/><rect x="360" y="238" width="180" height="36" rx="6"/>
+      <rect x="660" y="40" width="180" height="36" rx="6"/><rect x="660" y="86" width="180" height="96" rx="6" stroke-dasharray="5 4"/><rect x="660" y="192" width="180" height="36" rx="6"/><rect x="660" y="238" width="180" height="36" rx="6"/>
+    </g>
+    <g font-family="JetBrains Mono, monospace" font-size="14" fill="#2f2f2f" text-anchor="middle">
+      <text x="150" y="63">handle Ask</text><text x="150" y="138">10 × Unused</text><text x="150" y="215">list_fold</text><text x="150" y="261">perform Ask</text>
+      <text x="450" y="63">handle Ask</text><text x="450" y="138">10 × Unused</text><text x="450" y="215">list_fold</text><text x="450" y="261">perform Ask</text>
+      <text x="750" y="63">loop Ask</text><text x="750" y="138">10 × loop</text><text x="750" y="215">yield* fold</text><text x="750" y="261">yield {l, v}</text>
+    </g>
+    <g fill="none" stroke-width="2">
+      <path d="M252 256 L270 256 L270 58 L248 58" stroke="#2f2f2f" marker-end="url(#d4)"/>
+      <path d="M40 58 L26 58 L26 256 L52 256" stroke="#2f2f2f" stroke-dasharray="4 3" marker-end="url(#d4)"/>
+      <path d="M548 256 C 600 240, 600 80, 548 62" stroke="#2f8a55" marker-end="url(#d4l)"/>
+      <path d="M852 256 L870 256 L870 58 L848 58" stroke="#584355" marker-end="url(#d4a)"/>
+      <path d="M640 58 L626 58 L626 256 L652 256" stroke="#584355" stroke-dasharray="4 3" marker-end="url(#d4a)"/>
+    </g>
+  </svg>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Ergonomics</div>
+  <h2>What generators make easy, and what they make hard</h2>
+  <div class="cols">
+    <div>
+      <p style="font-weight:600;color:#2f8a55;margin-bottom:1cqw">Easy</p>
+      <ul>
+        <li>Output reads like the source</li>
+        <li>Locals survive suspension, no join points</li>
+        <li>Async hosts: drive the outer generator, await between steps</li>
+        <li>Stack traces show the generator chain</li>
+      </ul>
+    </div>
+    <div>
+      <p style="font-weight:600;color:#b3462f;margin-bottom:1cqw">Hard</p>
+      <ul>
+        <li><strong>Colour</strong>: rows generalise, so every call result needs <code>isGen</code></li>
+        <li><strong>One shot</strong>: a second resume replays from the start, sound only because EYG is pure</li>
+        <li><strong>Nesting</strong>: each resume starts a loop inside a clause, 10 000 effects overflow</li>
+        <li>The fix for nesting is the paper's tail resumptive optimisation</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Generators, measured</div>
+  <h2>The cost moves to runtime</h2>
+  <div class="figures">
+    <div><b class="gen">7×</b><span>fib, no effects at all: the <code>isGen</code> checks and iterator objects</span></div>
+    <div><b class="gen">95×</b><span>counter, every perform climbs five delegating generators</span></div>
+    <div><b class="gen">110×</b><span>nqueens, replaying for every extra resumption</span></div>
+  </div>
+  <div class="figures">
+    <div><b class="bad">overflow</b><span>counters without tail clauses in the loop</span></div>
+    <div><b class="bad">overflow</b><span>mstate at 10 000, resumption under a lambda</span></div>
+    <div><b>≈</b><span>async platform effects and DOM work, where the host dominates</span></div>
+  </div>
+</section>
+
+<section class="slide section">
+  <div class="kicker">Part three</div>
+  <h2>Effects for the browser</h2>
+  <p>Once perform is cheap, what should the API look like?</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">touch grass, for compiled programs</div>
+  <h2>Every browser effect, plus the ones it was missing</h2>
+  <div class="cols">
+    <table>
+      <thead><tr><th>Sync, in place</th><th>Async, yields to root</th></tr></thead>
+      <tbody>
+        <tr><td>Abort, Alert, DecodeJSON</td><td>Fetch, Copy, Paste</td></tr>
+        <tr><td>Download, Flip, Now</td><td>DNSimple, GitHub, Vimeo</td></tr>
+        <tr><td>Print, Prompt, Random, Visit</td><td>Sleep, Hash</td></tr>
+        <tr><td>Storage get, set, delete</td><td>CreateKey, Sign</td></tr>
+        <tr><td>Location</td><td></td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>Synchronous effects are tail resumptive clauses at the root of the evidence vector</li>
+      <li><code>DecodeJSON</code> is a port of julienne, tested token for token</li>
+      <li>Extensions reuse CLI definitions where they exist</li>
+      <li>One EYG program performs all of them in Chromium, dialogs, clipboard, downloads and all</li>
+    </ul>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Design constraints</div>
+  <h2>Three rules of the language shape every API</h2>
+  <div class="figures">
+    <div><b>serialisable</b><span>A DOM node or peer can not be a value. Handles, selectors, or describe instead.</span></div>
+    <div><b>no recursion</b><span>A tree has no type. Trees are flat lists with depth, like DecodeJSON tokens.</span></div>
+    <div><b>monomorphic</b><span>An effect has one lift and one lower type. A signal holds a string.</span></div>
+  </div>
+  <p>And one freedom: a function argument with an empty row is pure, so the host may call it.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">The DOM itself · reading · Chromium</div>
+  <h2>Sum a table of 1 000 × 5 cells</h2>
+  <div class="grow" data-api="read"></div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Creating and editing · Chromium</div>
+  <h2>11 101 effects is <em>fine</em></h2>
+  <div class="grow" data-api="write"></div>
+  <p>Create 1 000 rows, update every tenth, remove all. Root clauses make an effect a function call, so granularity is a design choice again.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">Signals · Chromium</div>
+  <h2>Let the host call a <em>pure</em> function</h2>
+  <div class="cols wide-left">
+<pre>Derive : {
+  inputs: List(Int),
+  compute: (List(String)) -&gt; <span class="h">&lt;&gt;</span> String
+} -&gt; Result(Int, String)</pre>
+    <p>The empty row is the whole design: the page recomputes derived text from its own event loop without resuming the program.</p>
+  </div>
+  <div class="grow" data-api="signals"></div>
+</section>
+
+<section class="slide">
+  <div class="kicker">WebRTC · Chromium</div>
+  <h2>The network dominates, the API shape does not</h2>
+  <div class="grow" data-api="webrtc"></div>
+  <p>Two peers in one page, 2 000 messages. Session tokens hide SDP and ICE and cost nothing, batching saves effects but not time.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">Takeaways</div>
+  <h2>What the language taught</h2>
+  <ul>
+    <li><strong>Types carry the optimisation.</strong> Rows remove checks and let hosts call back in.</li>
+    <li><strong>Tail calls are semantics.</strong> On V8, tail resumption is the difference between running and overflowing.</li>
+    <li><strong>Serialisable values push APIs toward data.</strong> Snapshots and renders need no lifetimes; handles leak.</li>
+    <li><strong>No recursive types means flat trees</strong>, and no efficient map written in EYG.</li>
+    <li><strong>Purity pays twice.</strong> Sound selective translation, and replay as multi-shot for generators.</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <div class="kicker">Next</div>
+  <h2>Where it goes from here</h2>
+  <div class="cols">
+    <ul>
+      <li>Annotate variables with the generalised row, drop checks on pure let bound calls</li>
+      <li>Trampoline non-tail resumptions so <code>mstate</code> runs on V8</li>
+      <li>Compile references, not just resolved trees</li>
+    </ul>
+    <ul>
+      <li>Release handles, or retire them for snapshots</li>
+      <li>Keyed children for render</li>
+      <li>Media tracks for WebRTC</li>
+    </ul>
+  </div>
+<pre>cd packages/gleam_compiler
+gleam test
+gleam run -m eyg/compiler/bench -- run counter10 full 2000
+bun run bin/bench_browser_apis</pre>
+  <div class="foot">Xie and Leijen, Generalized Evidence Passing for Effect Handlers, ICFP 2021 · eyg.run</div>
+</section>
+
+</div>
+</div>
+
+<div class="chrome" aria-label="Slide controls">
+  <button type="button" id="prev">Previous</button>
+  <span id="count">1 / 1</span>
+  <button type="button" id="next">Next</button>
+  <button type="button" id="notes-toggle" aria-pressed="false">Notes</button>
+</div>
+
+<script src="results.js"></script>
+<script>
+(function () {
+  const R = window.EYG_RESULTS || { bun: [], chromium: { results: [] }, apis: { results: [] } };
+  const deck = document.getElementById("deck");
+  const slides = Array.from(deck.querySelectorAll(".slide"));
+  // A notes aside belongs to the slide before it.
+  const notes = slides.map((slide) => {
+    const next = slide.nextElementSibling;
+    if (next && next.classList.contains("notes")) { document.body.appendChild(next); return next; }
+    return null;
+  });
+  let index = Math.max(0, Math.min(slides.length - 1, (parseInt(location.hash.slice(1), 10) || 1) - 1));
+  function show(i) {
+    index = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, j) => s.classList.toggle("current", j === index));
+    notes.forEach((n, j) => n && n.classList.toggle("current", j === index));
+    document.getElementById("count").textContent = (index + 1) + " / " + slides.length;
+    history.replaceState(null, "", "#" + (index + 1));
+  }
+  document.getElementById("prev").addEventListener("click", () => show(index - 1));
+  document.getElementById("next").addEventListener("click", () => show(index + 1));
+  document.getElementById("notes-toggle").addEventListener("click", (e) => {
+    const on = document.body.classList.toggle("show-notes");
+    e.currentTarget.setAttribute("aria-pressed", String(on));
+  });
+  document.addEventListener("keydown", (e) => {
+    if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); show(index + 1); }
+    if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); show(index - 1); }
+    if (e.key === "Home") show(0);
+    if (e.key === "End") show(slides.length - 1);
+    if (e.key === "n" || e.key === "N") document.getElementById("notes-toggle").click();
+  });
+  show(index);
+
+  const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };
+  const large = { fib: 30, counter: 2000, counter1: 2000, counter10: 2000, host: 2000, polymorphic: 1000, mstate: 10000, nqueens: 9 };
+  const small = { fib: 15, counter: 100, counter1: 100, counter10: 100, host: 100, polymorphic: 100, mstate: 10000, nqueens: 6 };
+  function table(entries, sizes) {
+    const out = {};
+    for (const e of entries) {
+      if (sizes && sizes[e.bench] !== e.size) continue;
+      const key = e.bench + ":" + e.backend;
+      const cell = out[key] || (out[key] = { times: [], error: null });
+      if (e.times) cell.times.push(...e.times); else if (e.error) cell.error = e.error;
+    }
+    for (const c of Object.values(out)) c.median = median(c.times);
+    return out;
+  }
+  const bun = table(R.bun, large);
+  const chromium = table((R.chromium && R.chromium.results) || [], null);
+  const bunSmall = table(R.bun, small);
+  const fmt = (ms) => ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : ms >= 100 ? Math.round(ms) + " ms" : ms >= 10 ? Math.round(ms) + " ms" : ms.toFixed(1) + " ms";
+  const ratio = (r) => r >= 10 ? Math.round(r) + "×" : r.toFixed(1) + "×";
+
+  for (const node of document.querySelectorAll("[data-bun]")) {
+    const c = bun[node.dataset.bun]; if (c && c.median != null) node.textContent = fmt(c.median);
+  }
+  for (const node of document.querySelectorAll("[data-chromium]")) {
+    const c = chromium[node.dataset.chromium];
+    if (c) node.textContent = c.median != null ? fmt(c.median) : "overflow";
+  }
+  for (const node of document.querySelectorAll("[data-ratio]")) {
+    const [b, k] = node.dataset.ratio.split(":");
+    const c = bun[b + ":" + k], f = bun[b + ":full"];
+    if (c && f && c.median != null && f.median != null) node.textContent = ratio(c.median / f.median);
+  }
+
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (name, attrs, parent) => { const n = document.createElementNS(NS, name); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; };
+
+  // heat table of slowdowns
+  (function matrix() {
+    const host = document.getElementById("matrix");
+    const cols = [["linked", "linked"], ["bubble", "bubble"], ["no_tail", "no tail"], ["no_inline", "no inline"], ["no_shortcut", "no short-cut"], ["not_selective", "unchecked"], ["generator", "generator"]];
+    const rows = ["counter", "counter1", "counter10", "host", "mstate", "nqueens", "fib", "polymorphic"];
+    const W = 1160, H = 470, left = 170, top = 50, cw = (W - left - 110) / cols.length, rh = (H - top) / rows.length;
+    const svg = el("svg", { viewBox: "0 0 " + W + " " + H, class: "chart", role: "img", "aria-label": "Slowdown of each configuration relative to full evidence passing for every benchmark in Bun." });
+    cols.forEach(([, label], i) => { const t = el("text", { x: left + i * cw + cw / 2, y: 30, "text-anchor": "middle", "font-size": 17, fill: "#62675d" }, svg); t.textContent = label; });
+    const tf = el("text", { x: W - 50, y: 30, "text-anchor": "middle", "font-size": 17, fill: "#62675d" }, svg); tf.textContent = "full";
+    rows.forEach((bench, j) => {
+      const y = top + j * rh;
+      const name = el("text", { x: 0, y: y + rh / 2 + 6, "font-size": 19, "font-weight": 600 }, svg); name.textContent = bench;
+      const base = bun[bench + ":full"];
+      const full = el("text", { x: W - 50, y: y + rh / 2 + 6, "text-anchor": "middle", "font-size": 17, fill: "#2f8a55", "font-weight": 600 }, svg);
+      full.textContent = base && base.median != null ? fmt(base.median) : "—";
+      cols.forEach(([key], i) => {
+        const x = left + i * cw;
+        const c = bun[bench + ":" + key];
+        let label = "—", fill = "#f1f4ec", ink = "#62675d";
+        if (c && c.median == null) { label = "overflow"; fill = "#f6dcd4"; ink = "#b3462f"; }
+        else if (c && base && base.median) {
+          const r = c.median / base.median;
+          label = ratio(r);
+          const t = Math.max(0, Math.min(1, Math.log10(Math.max(r, 1)) / 2.3));
+          fill = r < 1.15 ? "#e7ffdd" : key.startsWith("generator") ? "rgba(88,67,85," + (0.12 + 0.7 * t) + ")" : "rgba(179,70,47," + (0.08 + 0.72 * t) + ")";
+          ink = t > 0.55 ? "#fefefc" : "#2f2f2f";
+        }
+        el("rect", { x: x + 3, y: y + 3, width: cw - 6, height: rh - 6, rx: 6, fill }, svg);
+        const v = el("text", { x: x + cw / 2, y: y + rh / 2 + 6, "text-anchor": "middle", "font-size": 18, fill: ink }, svg);
+        v.textContent = label;
+      });
+    });
+    host.appendChild(svg);
+  })();
+
+  (function interp() {
+    const host = document.getElementById("interp");
+    const rows = ["fib", "counter", "counter10", "host", "polymorphic", "mstate", "nqueens"];
+    const W = 1160, H = 420, left = 160, right = 260, rh = H / rows.length;
+    const lo = Math.log10(0.05), hi = Math.log10(2000);
+    const x = (ms) => left + (Math.log10(Math.max(0.05, Math.min(2000, ms))) - lo) / (hi - lo) * (W - left - right);
+    const svg = el("svg", { viewBox: "0 0 " + W + " " + H, class: "chart", role: "img", "aria-label": "Interpreter against evidence passing, milliseconds on a log scale." });
+    rows.forEach((bench, j) => {
+      const y = j * rh;
+      const name = el("text", { x: 0, y: y + rh / 2 + 6, "font-size": 19, "font-weight": 600 }, svg); name.textContent = bench;
+      const i = bunSmall[bench + ":interpreter"], f = bunSmall[bench + ":full"];
+      if (i && i.median != null) el("rect", { x: left, y: y + rh * 0.18, width: x(i.median) - left, height: rh * 0.28, rx: 3, fill: "#bcc5b3" }, svg);
+      if (f && f.median != null) el("rect", { x: left, y: y + rh * 0.52, width: Math.max(3, x(f.median) - left), height: rh * 0.28, rx: 3, fill: "#2f8a55" }, svg);
+      const label = el("text", { x: W - right + 16, y: y + rh / 2 + 6, "font-size": 18 }, svg);
+      if (i && f && i.median && f.median) label.textContent = fmt(i.median) + " → " + fmt(f.median) + "  " + ratio(i.median / f.median);
+    });
+    host.appendChild(svg);
+  })();
+
+  const apis = (R.apis && R.apis.results) || [];
+  const groups = {
+    read: [["read_handles", "handles, a read per cell"], ["read_selectors_each", "a selector per cell"], ["read_selectors", "ReadAll"], ["read_snapshot", "snapshot"]],
+    write: [["rows_imperative", "imperative handles"], ["rows_patch", "patch"], ["rows_render", "render"]],
+    signals: [["counters_host", "host signals"], ["counters_handlers", "signals in a handler"], ["counters_render", "render every change"], ["counters_render_batched", "render per round"]],
+    webrtc: [["webrtc_mirror", "mirror"], ["webrtc_batch", "batch"], ["webrtc_session", "session tokens"]]
+  };
+  for (const host of document.querySelectorAll("[data-api]")) {
+    const t = document.createElement("table");
+    t.innerHTML = "<thead><tr><th>Design</th><th class=\"n\">Effects</th><th class=\"n\">Evidence</th><th class=\"n\">Generator</th></tr></thead>";
+    const body = document.createElement("tbody");
+    const rows = groups[host.dataset.api];
+    const times = rows.map(([n]) => { const e = apis.find((a) => a.example === n && a.backend === "full"); return e && e.median; }).filter((m) => m != null);
+    const best = Math.min(...times);
+    for (const [name, label] of rows) {
+      const full = apis.find((a) => a.example === name && a.backend === "full");
+      const gen = apis.find((a) => a.example === name && a.backend === "generator");
+      const tr = document.createElement("tr");
+      const cell = (e, good) => !e ? "<td class=\"n\">—</td>" : e.error ? "<td class=\"n bad\">error</td>" : "<td class=\"n" + (good ? " good" : "") + "\">" + fmt(e.median) + "</td>";
+      tr.innerHTML = "<td>" + label + "</td><td class=\"n\">" + (full && full.effects ? full.effects.total.toLocaleString("en-GB") : "—") + "</td>" + cell(full, full && full.median === best) + cell(gen, false);
+      body.appendChild(tr);
+    }
+    t.appendChild(body);
+    host.appendChild(t);
+  }
+})();
+</script>
