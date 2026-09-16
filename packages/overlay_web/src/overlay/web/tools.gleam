@@ -17,14 +17,17 @@ import gleam/bit_array
 import gleam/dict
 import gleam/dynamic/decode
 import gleam/list
+import gleam/result
 import gleam/string
 import multiformats/cid/v1
 import oas/generator/utils
 import overlay/llm/chat
 import overlay/llm/tool
 import overlay/web/artifact
+import overlay/web/puppet
 import pal/platform/browser
 import pal/system
+import touch_grass
 import touch_grass/harness/browser as harness
 import touch_grass/interface
 
@@ -129,11 +132,24 @@ fn check_single(
     |> with_scope([#("context", context.type_)])
     |> infer.with_effects(list.append(
       interface.types(harness.effects()),
-      interface.types(artifact.effects()),
+      interface.types(workspace_effects()),
     ))
     |> infer.check(source)
     |> cache.infer_sync(cache)
   infer.all_errors(analysis)
+}
+
+/// Effects for the artifact workspace, in addition to the browser harness.
+type WorkspaceEffect {
+  ArtifactEffect(artifact.Effect)
+  PuppetEffect(puppet.Request)
+}
+
+fn workspace_effects() {
+  [
+    touch_grass.map(puppet.effect(), PuppetEffect),
+    ..list.map(artifact.effects(), touch_grass.map(_, ArtifactEffect))
+  ]
 }
 
 // TODO move to infer module
@@ -254,13 +270,38 @@ fn loop(
       }
     }
     Error(#(break.UnhandledEffect(label, lift), _, env, k)) -> {
-      case interface.cast(artifact.effects(), label, lift) {
+      case interface.cast(workspace_effects(), label, lift) {
         // Artifacts are kept in the session, the program resumes immediately.
-        Ok(effect) -> {
+        Ok(ArtifactEffect(effect)) -> {
           let #(artifacts, value) = artifact.perform(ctx.artifacts, effect)
           let ctx = Context(..ctx, artifacts:)
           loop(expression.resume(value, env, k), ctx, output)
         }
+        Ok(PuppetEffect(request)) ->
+          case puppet.frame_selector(ctx.artifacts, request.page) {
+            Ok(selector) -> {
+              let id = ctx.counter
+              let effect =
+                system.RequestFrame(
+                  selector:,
+                  frames: [0],
+                  message: puppet.to_json(request),
+                  // Allow for loading the preview.
+                  timeout: request.timeout + 5000,
+                  resume: fn(reply) {
+                    let reply = result.try(reply, puppet.reply)
+                    system.Done(#(id, puppet.to_value(reply)))
+                  },
+                )
+              let effects = [effect, ..ctx.effects]
+              let ctx = Context(..ctx, counter: id + 1, effects:)
+              #(ctx, output, Handling(id, env, k))
+            }
+            Error(reason) -> {
+              let value = puppet.to_value(Error(reason))
+              loop(expression.resume(value, env, k), ctx, output)
+            }
+          }
         Error(break.UnhandledEffect(..)) ->
           case browser.cast(label, lift) {
             // Printing belongs to the result the agent reads, not only the browser
