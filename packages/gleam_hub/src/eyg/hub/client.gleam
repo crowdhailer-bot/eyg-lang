@@ -263,3 +263,52 @@ pub fn pull_packages(
   }
   continuation.return(result)
 }
+
+/// Share an artifact, the hub stores the files and serves them at `/artifact/<id>`.
+pub fn share_artifact(
+  name: String,
+  files: List(schema.ArtifactFile),
+) -> Operation(BitArray) {
+  let body = schema.artifact_encode(name, files) |> json.to_string
+  operation.post("/artifacts")
+  |> operation.set_header("content-type", "application/json")
+  |> operation.set_body(<<body:utf8>>)
+}
+
+pub fn share_artifact_response(
+  response: response.Response(BitArray),
+) -> Result(Result(String, String), client.Failure) {
+  let Response(status:, body:, ..) = response
+  case status {
+    201 ->
+      case json.parse_bits(body, schema.shared_artifact_decoder()) {
+        Ok(id) -> Ok(Ok(id))
+        Error(reason) -> Error(client.UnableToDecode(reason:))
+      }
+    400 | 413 | 422 | 429 ->
+      case json.parse_bits(body, schema.failure_decoder()) {
+        Ok(reason) -> Ok(Error(reason))
+        Error(reason) -> Error(client.UnableToDecode(reason:))
+      }
+    _ -> Error(client.UnexpectedStatus(status:))
+  }
+}
+
+pub fn get_artifact(id: String) -> Operation(BitArray) {
+  operation.get("/artifacts/" <> id)
+}
+
+pub fn get_artifact_response(
+  response: response.Response(BitArray),
+) -> Result(Result(#(String, List(schema.ArtifactFile)), Nil), client.Failure) {
+  let Response(status:, body:, ..) = response
+  case status {
+    200 ->
+      case json.parse_bits(body, schema.artifact_decoder()) {
+        Ok(artifact) -> Ok(Ok(artifact))
+        Error(reason) -> Error(client.UnableToDecode(reason:))
+      }
+    404 -> Ok(Error(Nil))
+    _ -> Error(client.UnexpectedStatus(status:))
+  }
+}

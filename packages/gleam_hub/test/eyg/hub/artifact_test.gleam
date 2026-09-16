@@ -95,3 +95,13 @@ pub fn media_types_test() {
       ArtifactFile("b.html", "text/html;charset=utf-8", <<>>),
     ])
 }
+
+pub fn ids_test() {
+  assert artifact.valid_id("0b5e3f0c-58a1-4c1e-9a53-2f0f5a8c9d11")
+  assert !artifact.valid_id("0B5E3F0C-58A1-4C1E-9A53-2F0F5A8C9D11")
+  assert !artifact.valid_id("0b5e3f0c58a14c1e9a532f0f5a8c9d11")
+  assert !artifact.valid_id("0b5e3f0c-58a1-4c1e-9a53-2f0f5a8c9d1")
+  assert !artifact.valid_id("0b5e3f0c-58a1-4c1e-9a53-2f0f5a8c9d11a")
+  assert !artifact.valid_id("../../0b5e3f0c-58a1-4c1e-9a53-2f0f5a8")
+  assert !artifact.valid_id("")
+}
