@@ -47,12 +47,60 @@ pub fn share_and_fetch_an_artifact_test() {
     == files
 }
 
+pub fn files_are_served_in_a_sandbox_test() {
+  use context <- helpers.web_context()
+  let assert Ok(Ok(id)) = share("departures", bundle(), context)
+
+  let response = get("/artifacts/" <> id <> "/files/index.html", context)
+  assert 200 == response.status
+  assert Ok("text/html; charset=utf-8")
+    == response.get_header(response, "content-type")
+  let assert Ok(policy) =
+    response.get_header(response, "content-security-policy")
+  assert string.starts_with(policy, "sandbox allow-scripts;")
+  assert string.contains(policy, "connect-src 'none'")
+  assert Ok("nosniff")
+    == response.get_header(response, "x-content-type-options")
+  assert <<"<img src=\"images/my pic.svg\">":utf8>> == response.body
+
+  let response =
+    get("/artifacts/" <> id <> "/files/images/my%20pic.svg", context)
+  assert 200 == response.status
+  assert Ok("image/svg+xml") == response.get_header(response, "content-type")
+  assert <<svg:utf8>> == response.body
+
+  assert 404 == get("/artifacts/" <> id <> "/files/secret.png", context).status
+}
+
+pub fn page_shows_the_artifact_in_a_sandboxed_frame_test() {
+  use context <- helpers.web_context()
+  let assert Ok(Ok(id)) = share("<b>Buses</b>", bundle(), context)
+
+  let response = get("/artifact/" <> id, context)
+  assert 200 == response.status
+  let assert Ok(page) = bit_array.to_string(response.body)
+  assert string.contains(
+    page,
+    "src=\"/artifacts/" <> id <> "/files/index.html\" sandbox=\"allow-scripts\"",
+  )
+  assert string.contains(page, "<h1>&lt;b&gt;Buses&lt;/b&gt;</h1>")
+  assert !string.contains(page, "<b>Buses</b>")
+  let assert Ok(policy) =
+    response.get_header(response, "content-security-policy")
+  assert string.contains(policy, "frame-ancestors 'none'")
+}
+
 pub fn unknown_artifacts_are_not_found_test() {
   use context <- helpers.web_context()
-  assert 404 == get("/artifacts/not-an-id", context).status
+  assert 404 == get("/artifact/not-an-id", context).status
   assert 404
-    == get("/artifacts/00000000-0000-0000-0000-000000000000", context).status
+    == get("/artifact/00000000-0000-0000-0000-000000000000", context).status
   assert 404 == get("/artifacts/'; DROP TABLE artifacts; --", context).status
+  assert 404
+    == get(
+      "/artifacts/00000000-0000-0000-0000-000000000000/files/index.html",
+      context,
+    ).status
 }
 
 pub fn invalid_bundles_are_rejected_test() {

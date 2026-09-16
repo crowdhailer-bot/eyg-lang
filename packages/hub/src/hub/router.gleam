@@ -43,6 +43,13 @@ pub fn route(request: wisp.Request, context: context.Context) -> wisp.Response {
       case rest, method {
         [], http.Post -> artifacts.share(request, context)
         [id], http.Get -> artifacts.get(id, context)
+        [id, "files", ..path], http.Get -> artifacts.file(id, path, context)
+        _, _ -> wisp.html_response("Nothing", 404)
+      }
+    }
+    ["artifact", ..rest] -> {
+      case rest, method {
+        [id], http.Get -> artifacts.page(id, context)
         _, _ -> wisp.html_response("Nothing", 404)
       }
     }

@@ -61,6 +61,15 @@ ORDER BY path;"
   |> pog.returning(file_decoder())
 }
 
+pub fn file(id: String, path: String) -> pog.Query(ArtifactFile) {
+  "SELECT path, media_type, content FROM artifact_files
+WHERE artifact_id = $1::uuid AND path = $2;"
+  |> pog.query()
+  |> pog.parameter(pog.text(id))
+  |> pog.parameter(pog.text(path))
+  |> pog.returning(file_decoder())
+}
+
 fn file_decoder() {
   use path <- decode.field(0, decode.string)
   use media_type <- decode.field(1, decode.string)
