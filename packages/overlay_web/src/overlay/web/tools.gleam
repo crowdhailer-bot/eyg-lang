@@ -22,6 +22,7 @@ import multiformats/cid/v1
 import oas/generator/utils
 import overlay/llm/chat
 import overlay/llm/tool
+import overlay/web/artifact
 import pal/platform/browser
 import pal/system
 import touch_grass/harness/browser as harness
@@ -33,6 +34,7 @@ pub type Context {
     counter: Int,
     effects: List(system.Effect(#(Int, state.Value(Meta)))),
     context: cache.Module(Meta),
+    artifacts: artifact.Store,
   )
 }
 
@@ -125,7 +127,10 @@ fn check_single(
   let analysis =
     infer.pure()
     |> with_scope([#("context", context.type_)])
-    |> infer.with_effects(interface.types(harness.effects()))
+    |> infer.with_effects(list.append(
+      interface.types(harness.effects()),
+      interface.types(artifact.effects()),
+    ))
     |> infer.check(source)
     |> cache.infer_sync(cache)
   infer.all_errors(analysis)
@@ -249,31 +254,41 @@ fn loop(
       }
     }
     Error(#(break.UnhandledEffect(label, lift), _, env, k)) -> {
-      case browser.cast(label, lift) {
-        // Printing belongs to the result the agent reads, not only the browser
-        // console. Keeping it here also preserves output across suspension.
-        Ok(harness.Print(message)) ->
-          loop(expression.resume(v.unit(), env, k), ctx, [message, ..output])
+      case interface.cast(artifact.effects(), label, lift) {
+        // Artifacts are kept in the session, the program resumes immediately.
         Ok(effect) -> {
-          case browser.extrinsic(effect) {
-            browser.Abort(reason) -> #(ctx, output, Aborted(reason))
-            browser.Work(system.Done(value)) ->
-              loop(expression.resume(value, env, k), ctx, output)
-            browser.Work(effect) -> {
-              let id = ctx.counter
-
-              let effect = system.map(effect, fn(v) { #(id, v) })
-              let effects = [effect, ..ctx.effects]
-              let ctx = Context(..ctx, counter: id + 1, effects:)
-              #(ctx, output, Handling(id, env, k))
-            }
-            browser.Spotless(..) -> #(
-              ctx,
-              output,
-              Aborted("Spotless integration not supported in harness"),
-            )
-          }
+          let #(artifacts, value) = artifact.perform(ctx.artifacts, effect)
+          let ctx = Context(..ctx, artifacts:)
+          loop(expression.resume(value, env, k), ctx, output)
         }
+        Error(break.UnhandledEffect(..)) ->
+          case browser.cast(label, lift) {
+            // Printing belongs to the result the agent reads, not only the browser
+            // console. Keeping it here also preserves output across suspension.
+            Ok(harness.Print(message)) ->
+              loop(expression.resume(v.unit(), env, k), ctx, [message, ..output])
+            Ok(effect) -> {
+              case browser.extrinsic(effect) {
+                browser.Abort(reason) -> #(ctx, output, Aborted(reason))
+                browser.Work(system.Done(value)) ->
+                  loop(expression.resume(value, env, k), ctx, output)
+                browser.Work(effect) -> {
+                  let id = ctx.counter
+
+                  let effect = system.map(effect, fn(v) { #(id, v) })
+                  let effects = [effect, ..ctx.effects]
+                  let ctx = Context(..ctx, counter: id + 1, effects:)
+                  #(ctx, output, Handling(id, env, k))
+                }
+                browser.Spotless(..) -> #(
+                  ctx,
+                  output,
+                  Aborted("Spotless integration not supported in harness"),
+                )
+              }
+            }
+            Error(reason) -> #(ctx, output, Exception(reason))
+          }
         Error(reason) -> #(ctx, output, Exception(reason))
       }
     }
