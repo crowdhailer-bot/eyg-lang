@@ -195,14 +195,36 @@ their final frame. Hover states and the scroll position of inner containers are
 not captured. The most recent screenshots of a tool call are shown to the model
 with its result and as thumbnails in the chat.
 
+## Shared artifacts
+
+Artifacts stay in the browser session until a person clicks share on a panel.
+The version the panel shows is posted to the hub and the panel links to
+`/artifact/<id>`. There is no effect for agents to share, publishing is always
+a person's choice.
+
+The hub checks the bundle with the same rules as `Artifact`, stores its files
+and returns a random id. `/artifact/<id>` is a page showing the artifact in a
+sandboxed frame. Files are served from `/artifacts/<id>/files/<path>`, so
+relative references work without preparation. Every file response has a
+content security policy beginning `sandbox allow-scripts`: documents get an
+opaque origin and cannot read the hub's cookies or storage, they may load the
+hub's files and data URLs, and connections, forms and other frames are blocked
+as in local previews. Only the hub's own pages may frame the files.
+`GET /artifacts/<id>` returns the bundle as JSON.
+
+Ids are capability links, the hub has no index of artifacts. Shares are
+limited per address. [Artifacts and Spring '83](../notes/artifacts-and-spring-83.md)
+compares this with a protocol for publishing small HTML documents and lists
+ideas that could follow, such as signed and content addressed artifacts.
+
 ### Verification
 
-Test effect decoding/type checking, version retention across turns and effect
-suspension, invalid bundles/rectangles, revision selection, and file diffs.
-Run browser tests against actual nested frames: scripts and bundled resources
-work, storage/parent access fail, injected CSP cannot relax restrictions, and
-self-navigation makes no network request. Drive artifacts through the puppet,
-including screenshots, and check another artifact cannot. Test layout coverage, order, odd
-dimensions, empty/singleton inputs, and zero-size rejection. Run the repository
-EYG suite before sharing modules.
-
+Test effect decoding and type checking, version retention across turns and
+effect suspension, invalid bundles and rectangles, revision selection, and file
+diffs. Run browser tests against actual nested frames: scripts and bundled
+resources work, storage and parent access fail, injected CSP cannot relax
+restrictions, and self-navigation makes no network request. Drive artifacts
+through the puppet, including screenshots, and check another artifact cannot.
+Check that shared files are sandboxed and nothing is shared without a click.
+Test layout coverage, order, odd dimensions, empty and singleton inputs, and
+zero-size rejection. Run the repository EYG suite before sharing modules.
