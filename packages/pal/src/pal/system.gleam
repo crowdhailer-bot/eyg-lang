@@ -2,6 +2,7 @@
 //// It might make sense to implement a version of the effect interface built on this
 
 import gleam/bit_array
+import gleam/dynamic.{type Dynamic}
 import gleam/fetch
 import gleam/fetchx
 import gleam/http/request
@@ -10,6 +11,7 @@ import gleam/int
 import gleam/javascript/promise.{type Promise}
 import gleam/javascript/promisex
 import gleam/json.{type Json}
+import gleam/list
 import gleam/option.{type Option}
 import gleam/result
 import gleam/string
@@ -20,12 +22,18 @@ import ogre/origin
 import plinth/browser/clipboard
 import plinth/browser/crypto
 import plinth/browser/crypto/subtle
+import plinth/browser/document
+import plinth/browser/element
 import plinth/browser/file
 import plinth/browser/file_system
 import plinth/browser/location
+import plinth/browser/message_channel
+import plinth/browser/message_event
+import plinth/browser/message_port
 import plinth/browser/web_storage
 import plinth/browser/window
 import plinth/browser/window_proxy
+import plinth/javascript/date
 import spotless
 import spotless/oauth_2_1
 import spotless/oauth_2_1/authorization
@@ -84,6 +92,24 @@ pub type Effect(m) {
     reader: Reader,
     resume: fn(Result(Option(BitArray), fetch.FetchError)) -> Effect(m),
   )
+  /// Send `message` to a frame inside an iframe of this document and wait for its reply.
+  ///
+  /// The iframe is the first element matching `selector` and `frames` are the
+  /// indexes of nested frames below it. The frame receives `{id, request}` with a
+  /// `MessagePort` in the event ports and replies by posting to that port,
+  /// no other window can read the reply.
+  ///
+  /// A frame that is still loading misses messages, so the request is sent again
+  /// with increasing delay until a reply arrives or `timeout` milliseconds pass.
+  /// Every copy has the same id, a frame should act once for each id and reply to
+  /// every port it receives for it.
+  RequestFrame(
+    selector: String,
+    frames: List(Int),
+    message: Json,
+    timeout: Int,
+    resume: fn(Result(Dynamic, String)) -> Effect(m),
+  )
   SaveFile(
     handle: file_system.DirectoryHandle,
     filename: String,
@@ -140,6 +166,10 @@ pub fn then(effect: Effect(a), func: fn(a) -> Effect(b)) -> Effect(b) {
       PostMessage(target, payload, fn(x) { then(resume(x), func) })
     Prompt(question, resume) ->
       Prompt(question, fn(x) { then(resume(x), func) })
+    RequestFrame(selector, frames, message, timeout, resume) ->
+      RequestFrame(selector, frames, message, timeout, fn(x) {
+        then(resume(x), func)
+      })
     ReadFromClipboard(resume) ->
       ReadFromClipboard(fn(x) { then(resume(x), func) })
     ReadChunk(reader, resume) ->
@@ -261,6 +291,15 @@ pub fn run(effect: Effect(m)) -> Promise(m) {
 
     PostMessage(target:, payload:, resume:) ->
       run(resume(window_proxy.post_message(target, payload, "*")))
+    RequestFrame(selector:, frames:, message:, timeout:, resume:) -> {
+      use reply <- promise.await(request_frame(
+        selector,
+        frames,
+        message,
+        timeout,
+      ))
+      run(resume(reply))
+    }
     ReadChunk(reader, resume) -> {
       use result <- promise.await(reader())
       run(resume(result))
@@ -295,6 +334,76 @@ pub fn run(effect: Effect(m)) -> Promise(m) {
       run(resume(result))
     }
   }
+}
+
+fn request_frame(selector, frames, message, timeout) {
+  let deadline = date.get_time(date.now()) + timeout
+  let id = request_id()
+  let message = json.object([#("id", json.string(id)), #("request", message)])
+  do_request_frame(selector, frames, message, deadline, 50, [])
+}
+
+fn do_request_frame(selector, frames, message, deadline, delay, sent) {
+  let sent = case frame(selector, frames) {
+    Ok(target) -> [send_request(target, message), ..sent]
+    Error(Nil) -> sent
+  }
+  let remaining = deadline - date.get_time(date.now())
+  case remaining > 0 {
+    False -> {
+      list.each(sent, fn(request) { message_port.close(request.0) })
+      promise.resolve(Error("No reply from frame " <> selector))
+    }
+    True -> {
+      let waiting =
+        promise.wait(int.min(delay, remaining))
+        |> promise.map(fn(_) { Error(Nil) })
+      let replies = list.map(sent, fn(request) { request.1 })
+      use reply <- promise.await(promise.race_list([waiting, ..replies]))
+      case reply {
+        Ok(reply) -> {
+          list.each(sent, fn(request) { message_port.close(request.0) })
+          promise.resolve(Ok(reply))
+        }
+        Error(Nil) ->
+          do_request_frame(
+            selector,
+            frames,
+            message,
+            deadline,
+            int.min(delay * 2, 1000),
+            sent,
+          )
+      }
+    }
+  }
+}
+
+fn frame(selector, frames) {
+  use iframe <- result.try(document.query_selector(selector))
+  use window <- result.try(element.content_window(iframe))
+  list.try_fold(frames, window, window_proxy.frame)
+}
+
+fn send_request(target, message) {
+  let channel = message_channel.new()
+  let port = message_channel.port1(channel)
+  let reply =
+    promise.new(fn(resolve) {
+      message_port.on_message(port, fn(event) {
+        resolve(Ok(message_event.data(event)))
+      })
+    })
+  window_proxy.post_message_with_transfer(target, message, "*", [
+    message_channel.port2(channel),
+  ])
+  #(port, reply)
+}
+
+fn request_id() {
+  let assert Ok(crypto) = window.crypto(window.self())
+  let assert Ok(bytes) = crypto.get_random_values(crypto, 16)
+  bit_array.base16_encode(bytes)
 }
 
 fn get_storage_item(
