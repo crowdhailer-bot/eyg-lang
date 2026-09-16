@@ -7,6 +7,7 @@ import gleam/javascript/array
 import gleam/list
 import gleam/result.{try}
 import gleam/string
+import overlay/public/puppet
 import overlay/web/artifact.{type Bundle}
 import overlay/web/artifact/inline
 import plinth/browser/document
@@ -22,9 +23,14 @@ pub const policy = "default-src 'none'; script-src 'unsafe-inline' data:; style-
 pub fn srcdoc(bundle: Bundle) -> String {
   case document(bundle) {
     Ok(html) -> wrapper(html)
+    // The puppet is included so an agent can read the reason.
     Error(reason) ->
       wrapper(
-        "<h2>Unable to prepare artifact</h2><pre>" <> escape(reason) <> "</pre>",
+        "<!doctype html><html><head><script>"
+        <> puppet.script
+        <> "</script></head><body><h2>Unable to prepare artifact</h2><pre>"
+        <> escape(reason)
+        <> "</pre></body></html>",
       )
   }
 }
@@ -39,7 +45,8 @@ pub fn wrapper(html: String) -> String {
   <> "\"></iframe></body></html>"
 }
 
-/// A single HTML document with every file it uses from the bundle inline.
+/// A single HTML document with every file it uses from the bundle inline,
+/// and the puppet script that performs requests from the application.
 pub fn document(bundle: Bundle) -> Result(String, String) {
   use entry <- try(
     artifact.file(bundle, "index.html")
@@ -53,6 +60,12 @@ pub fn document(bundle: Bundle) -> Result(String, String) {
     |> array.to_list
     |> list.try_each(inline_element(bundle, _)),
   )
+  // The parser always creates a head, the puppet runs before any artifact script.
+  let assert Ok(head) = element.query_selector(root, "head")
+  let script = document.create_element("script")
+  element.set_text_content(script, puppet.script)
+  let assert Ok(_) =
+    element.insert_adjacent_element(head, element.AfterBegin, script)
   Ok("<!doctype html>" <> element.outer_html(root))
 }
 
