@@ -4,7 +4,9 @@ CREATE TABLE artifacts (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT        NOT NULL,
   ip          INET        NOT NULL,
-  inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  inserted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Withdrawn artifacts are no longer served, as if they never existed.
+  withdrawn_at TIMESTAMPTZ
 );
 
 CREATE INDEX ON artifacts (ip, inserted_at);

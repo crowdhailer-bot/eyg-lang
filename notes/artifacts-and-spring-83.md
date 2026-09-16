@@ -68,6 +68,7 @@ person needs to see and undo what changed.
    22 days, and keys expire within two years to keep relationships "live" and
    engaged. Unsigned shares could expire while signed ones persist.
 5. **A denylist.** Spring requires one and proves it with an infernal key. The
-   hub will need a way to withdraw a shared artifact.
+   hub can withdraw a shared artifact, which is then not found, as Spring
+   treats expired and unknown boards alike.
 6. **Migration links.** `<link rel="next">` moves followers to a new key or
    server. A shared artifact could point to its newer version the same way.
