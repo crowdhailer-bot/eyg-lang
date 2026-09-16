@@ -13,6 +13,8 @@ import eyg/ir/utils.{push_new} as _
 import eyg/parser
 import eyg/parser/debug
 import eyg/parser/parser.{type Reason} as _
+import gleam/bit_array
+import gleam/dict
 import gleam/dynamic/decode
 import gleam/list
 import gleam/string
@@ -312,7 +314,7 @@ fn do_all_returns(
         UnknownTool(name:) -> Ok("unknown tool: " <> name)
         BadArguments(reasons) -> Ok(string.inspect(reasons))
         InvalidCode(reason) -> Ok(debug.describe(reason))
-        Successful(value) -> Ok(simple_debug.inspect(value))
+        Successful(value) -> Ok(inspect_result(value))
         Errored(errors) -> {
           list.map(errors, fn(error) { analysis_debug.reason(error.1) })
           |> string.join("\n")
@@ -343,6 +345,49 @@ pub fn report(output: List(String), result: String) -> String {
   case list.reverse(output) {
     [] -> result
     printed -> "Output:\n" <> string.concat(printed) <> "\nResult:\n" <> result
+  }
+}
+
+/// Tool results are text for the model, not a binary transport.
+/// Returning a large Fetch response, such as a video, must not encode every
+/// byte into the next model request. Only this presentation is summarized,
+/// the program works with the original value.
+pub fn inspect_result(value) -> String {
+  summarize_binaries(value) |> simple_debug.inspect
+}
+
+/// Binaries up to this size are shown in full.
+const shown_bytes = 1024
+
+fn summarize_binaries(value: v.Value(a, b)) -> v.Value(a, b) {
+  case value {
+    v.Binary(bytes) ->
+      case bit_array.byte_size(bytes) {
+        size if size > shown_bytes ->
+          v.Tagged(
+            "BinarySummary",
+            v.Record(
+              dict.from_list([
+                #("bytes", v.Integer(size)),
+                #(
+                  "note",
+                  v.String(
+                    "Bytes omitted from tool output. Use the bytes in the program that produced them, this summary cannot reconstruct them.",
+                  ),
+                ),
+              ]),
+            ),
+          )
+        _ -> value
+      }
+    v.Record(fields) ->
+      v.Record(
+        dict.map_values(fields, fn(_, child) { summarize_binaries(child) }),
+      )
+    v.LinkedList(items) -> v.LinkedList(list.map(items, summarize_binaries))
+    v.Tagged(label, inner) -> v.Tagged(label, summarize_binaries(inner))
+    v.Partial(func, args) -> v.Partial(func, list.map(args, summarize_binaries))
+    _ -> value
   }
 }
 
