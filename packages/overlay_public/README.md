@@ -8,6 +8,9 @@ the tab is closed. Ollama calls use the deployment's fixed same-origin proxy
 because Ollama Cloud does not allow browser CORS requests. Mistral calls are made
 directly from the browser.
 
+The [artifact proposal and effect contract](../../guides/overlay_artifacts.md)
+describe local sandboxed previews, version history, diffs, and EYG tiling layouts.
+
 ## Development
 
 Browser APIs are used through [plinth](https://github.com/CrowdHailer/plinth) rather
