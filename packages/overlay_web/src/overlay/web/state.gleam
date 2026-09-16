@@ -20,6 +20,7 @@ import overlay/llm/tool
 import overlay/web/artifact
 import overlay/web/context
 import overlay/web/provider_setup
+import overlay/web/puppet
 import overlay/web/tools
 import pal/system
 import touch_grass/harness/browser as harness
@@ -477,7 +478,7 @@ They do not require an API token this will be added by the platform.
 
 # Context
 
-" <> context.readme(state.context) <> artifact.instructions
+" <> context.readme(state.context) <> artifact.instructions <> puppet.instructions
 }
 
 pub fn spec() {
