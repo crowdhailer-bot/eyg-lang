@@ -13,7 +13,7 @@ overlay_web = { path = "../overlay_web" }
 pal = { path = "../pal" }
 # pamphlet = ">= 1.0.0 and < 2.0.0"
 pamphlet = { git = "https://github.com/crowdhailer/pamphlet", ref = "750623b" }
-plinth = ">= 0.10.2 and < 1.0.0"
+plinth = { path = "../plinth" }
 splitter = ">= 1.2.0 and < 2.0.0"
 
 [dev_dependencies]

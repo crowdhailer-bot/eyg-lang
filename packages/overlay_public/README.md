@@ -10,6 +10,14 @@ directly from the browser.
 
 ## Development
 
+Browser APIs are used through [plinth](https://github.com/CrowdHailer/plinth) rather
+than FFI in this package or `overlay_web`. Bindings that are not released yet are
+developed in a local clone, which `pal` and this package depend on by path.
+
+```sh
+git clone git@github.com:CrowdHailer/plinth.git ../plinth
+```
+
 ```sh
 bun run dev
 ```
