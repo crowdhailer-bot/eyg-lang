@@ -1,6 +1,8 @@
 //// Versioned documents and workspace placements. No artifact code runs here.
 
 import eyg/analysis/type_/isomorphic as t
+import eyg/hub/artifact as rules
+import eyg/hub/schema
 import eyg/interpreter/cast
 import eyg/interpreter/value as v
 import gleam/bit_array
@@ -8,7 +10,6 @@ import gleam/dict.{type Dict}
 import gleam/int
 import gleam/list
 import gleam/result.{try}
-import gleam/string
 import touch_grass/interface
 
 pub type File {
@@ -210,69 +211,11 @@ fn byte_size(bundle: Bundle) {
   })
 }
 
-fn validate(name, bundle) {
-  case string.trim(name) == "" || string.length(name) > 120 {
-    True -> Error("Artifact name must contain 1–120 characters")
-    False -> {
-      case list.length(bundle) > 128 || byte_size(bundle) > 2_097_152 {
-        True -> Error("A bundle may contain at most 128 files and 2 MiB")
-        False -> {
-          use _ <- try(validate_files(bundle, dict.new()))
-          case file(bundle, "index.html") {
-            Ok(File(media_type: "text/html", content:, ..)) ->
-              bit_array.to_string(content)
-              |> result.replace(Nil)
-              |> result.replace_error("index.html must be UTF-8")
-            _ -> Error("Bundle requires index.html with media_type text/html")
-          }
-        }
-      }
-    }
-  }
-}
-
-fn validate_files(files: Bundle, seen) {
-  case files {
-    [] -> Ok(Nil)
-    [file, ..rest] -> {
-      let segments = string.split(file.path, "/")
-      let invalid =
-        string.contains(file.path, "\\")
-        || string.contains(file.path, ":")
-        || string.contains(file.path, "?")
-        || string.contains(file.path, "#")
-        || string.contains(file.path, "%")
-        || string.contains(file.path, "\u{0000}")
-        || list.any(segments, fn(s) { s == "" || s == "." || s == ".." })
-      case invalid || dict.has_key(seen, file.path) {
-        True -> Error("Invalid or duplicate bundle path: " <> file.path)
-        False ->
-          case valid_media_type(file.media_type) {
-            False -> Error("Invalid media type: " <> file.media_type)
-            True -> validate_files(rest, dict.insert(seen, file.path, Nil))
-          }
-      }
-    }
-  }
-}
-
-/// A `type/subtype` media type without parameters, safe to write into a data URL.
-pub fn valid_media_type(media_type: String) -> Bool {
-  case string.split(media_type, "/") {
-    [type_, subtype] -> token(type_) && token(subtype)
-    _ -> False
-  }
-}
-
-fn token(value) {
-  value != ""
-  && list.all(string.to_utf_codepoints(value), fn(codepoint) {
-    let c = string.utf_codepoint_to_int(codepoint)
-    { c >= 0x30 && c <= 0x39 }
-    || { c >= 0x41 && c <= 0x5A }
-    || { c >= 0x61 && c <= 0x7A }
-    || string.contains("!#$&^_.+-", string.from_utf_codepoints([codepoint]))
+fn validate(name, bundle: Bundle) {
+  list.map(bundle, fn(file) {
+    schema.ArtifactFile(file.path, file.media_type, file.content)
   })
+  |> rules.validate(name, _)
 }
 
 pub fn show(store: Store, placement: Placement) -> Result(Store, String) {
