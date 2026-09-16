@@ -1,6 +1,8 @@
 import castor
 import eyg/analysis/type_/binding/debug as t_debug
 import eyg/hub/cache
+import eyg/hub/client
+import eyg/hub/schema
 import eyg/interpreter/simple_debug
 import eyg/interpreter/state as istate
 import eyg/interpreter/value as v
@@ -12,6 +14,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/set
 import gleam/string
 import midas/continuation
+import ogre/operation
 import ogre/origin
 import overlay/llm/chat
 import overlay/llm/provider
@@ -26,6 +29,7 @@ import pal/system
 import touch_grass/harness/browser as harness
 import touch_grass/http
 import touch_grass/interface
+import untethered/ledger/client as ledger
 
 pub type Config {
   Config(origin: origin.Origin, context: context.Source)
@@ -133,6 +137,8 @@ pub type Message {
   UserClickedShrink(Int)
   UserClosedArtifact(artifact.Item)
   UserShowedArtifact(artifact.Placement)
+  UserClickedShare(artifact.Item)
+  ArtifactShared(name: String, version: Int, result: Result(String, String))
   // run messages
   EffectHandled(task_id: Int, value: istate.Value(tools.Meta))
   CacheMessage(cache.ActionCompleted)
@@ -153,6 +159,24 @@ pub fn update(
         Ok(artifacts) -> #(State(..state, artifacts:), [])
         Error(_) -> #(state, [])
       }
+    }
+    UserClickedShare(item) ->
+      case artifact.version(state.artifacts, item) {
+        Ok(#(name, version, bundle)) -> {
+          let share = artifact.Sharing
+          let artifacts = artifact.share(state.artifacts, name, version, share)
+          let action = share_artifact(state.origin, name, version, bundle)
+          #(State(..state, artifacts:), [action])
+        }
+        Error(Nil) -> #(state, [])
+      }
+    ArtifactShared(name:, version:, result:) -> {
+      let share = case result {
+        Ok(id) -> artifact.Shared(id)
+        Error(reason) -> artifact.ShareFailed(reason)
+      }
+      let artifacts = artifact.share(state.artifacts, name, version, share)
+      #(State(..state, artifacts:), [])
     }
     ProviderSetupMessage(message) -> {
       let can_save = case state.status {
@@ -369,6 +393,27 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
   }
 
   #(State(..state, status:), effects)
+}
+
+/// Sharing moves one version of an artifact to the hub, the session keeps its copy.
+fn share_artifact(origin, name, version, bundle: artifact.Bundle) {
+  let files =
+    list.map(bundle, fn(file) {
+      schema.ArtifactFile(file.path, file.media_type, file.content)
+    })
+  let request =
+    client.share_artifact(name, files)
+    |> operation.to_request(origin)
+  use response <- system.Fetch(request)
+  let result = case response {
+    Ok(response) ->
+      case client.share_artifact_response(response) {
+        Ok(result) -> result
+        Error(failure) -> Error(ledger.describe_failure(failure))
+      }
+    Error(_) -> Error("Unable to reach the hub")
+  }
+  system.Done(ArtifactShared(name:, version:, result:))
 }
 
 fn fetch_completion(state, messages) {

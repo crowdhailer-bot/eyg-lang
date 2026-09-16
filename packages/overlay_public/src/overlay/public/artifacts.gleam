@@ -1,4 +1,5 @@
 import gleam/bit_array
+import gleam/dict
 import gleam/int
 import gleam/list
 import gleam/string
@@ -66,6 +67,7 @@ fn panel(store: art.Store, placement: art.Placement) {
           )
         _ -> element.none()
       },
+      share(store, item),
       h.button(
         [
           a.attribute("aria-label", "Close " <> art.title(item)),
@@ -82,6 +84,44 @@ fn panel(store: art.Store, placement: art.Placement) {
       art.Diff(name, from, to) -> diff(store, name, from, to)
     },
   ])
+}
+
+/// Sharing is always a choice of the person, an agent cannot share an artifact.
+fn share(store: art.Store, item) {
+  case art.version(store, item) {
+    Error(Nil) -> element.none()
+    Ok(#(name, version, _bundle)) -> {
+      let version_label = "v" <> int.to_string(version)
+      case dict.get(store.shares, #(name, version)) {
+        Error(Nil) ->
+          h.button(
+            [
+              a.title("Share " <> version_label <> " as a public link"),
+              event.on_click(state.UserClickedShare(item)),
+            ],
+            [h.text("share")],
+          )
+        Ok(art.Sharing) ->
+          h.span([a.class("artifact-share")], [h.text("sharing…")])
+        Ok(art.Shared(id)) ->
+          h.a(
+            [
+              a.class("artifact-share"),
+              a.href("/artifact/" <> id),
+              a.target("_blank"),
+              a.rel("noopener"),
+              a.title("Open the shared " <> version_label),
+            ],
+            [h.text("shared ↗")],
+          )
+        Ok(art.ShareFailed(reason)) ->
+          h.button(
+            [a.title(reason), event.on_click(state.UserClickedShare(item))],
+            [h.text("retry share")],
+          )
+      }
+    }
+  }
 }
 
 fn preview(bundle, item) {
