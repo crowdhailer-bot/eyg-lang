@@ -50,7 +50,8 @@ pub type Store {
 
 pub type Share {
   Sharing
-  Shared(id: String)
+  // The secret is needed to share a newer version, it stays in the session.
+  Shared(id: String, secret: String)
   ShareFailed(reason: String)
 }
 

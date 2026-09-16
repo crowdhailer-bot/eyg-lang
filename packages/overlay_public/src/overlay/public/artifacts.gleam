@@ -103,7 +103,7 @@ fn share(store: art.Store, item) {
           )
         Ok(art.Sharing) ->
           h.span([a.class("artifact-share")], [h.text("sharing…")])
-        Ok(art.Shared(id)) ->
+        Ok(art.Shared(id:, ..)) ->
           h.a(
             [
               a.class("artifact-share"),

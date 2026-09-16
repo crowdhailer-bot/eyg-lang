@@ -1,6 +1,7 @@
 import eyg/hub/schema.{type ArtifactFile, ArtifactFile}
 import gleam/dynamic/decode
 import gleam/list
+import gleam/option.{type Option}
 import hub/db/utils
 import pog
 
@@ -9,14 +10,15 @@ pub fn insert(
   name: String,
   files: List(ArtifactFile),
   ip: String,
+  secret_hash: BitArray,
 ) -> pog.Query(String) {
   let paths = list.map(files, fn(file) { file.path })
   let media_types = list.map(files, fn(file) { file.media_type })
   let contents = list.map(files, fn(file) { file.content })
   "WITH artifact AS (
-  INSERT INTO artifacts (name, ip)
+  INSERT INTO artifacts (name, ip, secret_hash)
   -- This casting is because pog doesn't expose an inet type
-  VALUES ($1, ($2::text)::inet)
+  VALUES ($1, ($2::text)::inet, $6)
   RETURNING id
 ), files AS (
   INSERT INTO artifact_files (artifact_id, path, media_type, content)
@@ -30,26 +32,52 @@ SELECT id::text FROM artifact;"
   |> pog.parameter(pog.array(pog.text, paths))
   |> pog.parameter(pog.array(pog.text, media_types))
   |> pog.parameter(pog.array(pog.bytea, contents))
+  |> pog.parameter(pog.bytea(secret_hash))
   |> pog.returning({
     use id <- decode.field(0, decode.string)
     decode.success(id)
   })
 }
 
+/// The id of an artifact that is still served, if the secret it was shared with matches.
+pub fn shared_with(id: String, secret_hash: BitArray) -> pog.Query(String) {
+  "SELECT id::text FROM artifacts
+WHERE id = $1::uuid AND secret_hash = $2 AND withdrawn_at IS NULL;"
+  |> pog.query()
+  |> pog.parameter(pog.text(id))
+  |> pog.parameter(pog.bytea(secret_hash))
+  |> pog.returning({
+    use id <- decode.field(0, decode.string)
+    decode.success(id)
+  })
+}
+
+/// Point an artifact to a newer version of it.
+pub fn link(id: String, next: String) -> pog.Query(Nil) {
+  "UPDATE artifacts SET next_id = $2::uuid WHERE id = $1::uuid;"
+  |> pog.query()
+  |> pog.parameter(pog.text(id))
+  |> pog.parameter(pog.text(next))
+}
+
 pub type Artifact {
-  Artifact(name: String, inserted_at: utils.DateTime)
+  Artifact(name: String, inserted_at: utils.DateTime, next: Option(String))
 }
 
 /// Query by string as ids arrive in the URL, the id must already be a valid UUID.
+/// A newer version is only given while it is served.
 pub fn get(id: String) -> pog.Query(Artifact) {
-  "SELECT name, inserted_at FROM artifacts
-WHERE id = $1::uuid AND withdrawn_at IS NULL;"
+  "SELECT artifacts.name, artifacts.inserted_at, newer.id::text FROM artifacts
+LEFT JOIN artifacts AS newer
+  ON newer.id = artifacts.next_id AND newer.withdrawn_at IS NULL
+WHERE artifacts.id = $1::uuid AND artifacts.withdrawn_at IS NULL;"
   |> pog.query()
   |> pog.parameter(pog.text(id))
   |> pog.returning({
     use name <- decode.field(0, decode.string)
     use inserted_at <- decode.field(1, utils.datetime_decoder())
-    decode.success(Artifact(name:, inserted_at:))
+    use next <- decode.field(2, decode.optional(decode.string))
+    decode.success(Artifact(name:, inserted_at:, next:))
   })
 }
 

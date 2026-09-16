@@ -645,10 +645,10 @@ pub fn sharing_moves_one_version_to_the_hub_test() {
 
   let response =
     response.new(201)
-    |> response.set_body(<<"{\"id\":\"a-uuid\"}">>)
+    |> response.set_body(<<"{\"id\":\"a-uuid\",\"secret\":\"s\"}">>)
   let assert system.Done(message) = resume(Ok(response))
   let #(s, _) = state.update(s, message)
-  assert Ok(artifact.Shared("a-uuid"))
+  assert Ok(artifact.Shared("a-uuid", "s"))
     == dict.get(s.artifacts.shares, #("map", 2))
 
   let #(s, actions) =
