@@ -70,6 +70,7 @@ pre {
 .artifact-workspace { position: sticky; top: 0; height: 100dvh; padding: 64px 12px 12px; background: #edf1f5; }
 .workspace-heading { font-size: 11px; letter-spacing: 2px; color: #536176; margin-bottom: 8px; }
 .artifact-canvas { position: relative; height: calc(100% - 25px); }
+.artifact-empty { display: grid; place-content: center; gap: 4px; height: calc(100% - 25px); border: 1px dashed rgba(0, 0, 0, 0.18); color: #666; font-size: 13px; text-align: center; }
 .artifact-panel { position: absolute; display: flex; flex-direction: column; padding: 4px; min-width: 0; min-height: 0; }
 .artifact-heading { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #15243b; color: white; font-size: 12px; }
 .artifact-heading span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -448,6 +449,7 @@ pre {
   }
 
   .artifact-workspace { position: relative; height: 80dvh; padding-top: 12px; }
+  .artifact-workspace.empty { display: none; }
 
   .hero>h1 {
     font-size: 400%;
