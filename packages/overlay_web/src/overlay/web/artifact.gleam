@@ -216,6 +216,25 @@ pub fn share(store: Store, name: String, version: Int, share: Share) -> Store {
   Store(..store, shares: dict.insert(store.shares, #(name, version), share))
 }
 
+/// The latest version shared before `version`, sharing `version` makes it the
+/// newer version of that share.
+pub fn previous_share(
+  store: Store,
+  name: String,
+  version: Int,
+) -> Result(schema.SharedArtifact, Nil) {
+  dict.to_list(store.shares)
+  |> list.filter_map(fn(entry) {
+    case entry {
+      #(#(n, v), Shared(id:, secret:)) if n == name && v < version ->
+        Ok(#(v, schema.SharedArtifact(id:, secret:)))
+      _ -> Error(Nil)
+    }
+  })
+  |> list.max(fn(a, b) { int.compare(a.0, b.0) })
+  |> result.map(fn(latest) { latest.1 })
+}
+
 pub fn file(bundle: Bundle, path: String) -> Result(File, Nil) {
   list.find(bundle, fn(file) { file.path == path })
 }

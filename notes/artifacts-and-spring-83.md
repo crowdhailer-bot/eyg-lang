@@ -71,4 +71,5 @@ person needs to see and undo what changed.
    hub can withdraw a shared artifact, which is then not found, as Spring
    treats expired and unknown boards alike.
 6. **Migration links.** `<link rel="next">` moves followers to a new key or
-   server. A shared artifact could point to its newer version the same way.
+   server. A shared artifact points to its newer version the same way, when the
+   newer version is shared with the secret returned for the earlier one.

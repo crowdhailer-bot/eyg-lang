@@ -1,4 +1,5 @@
 import eyg/hub/cache
+import eyg/hub/schema
 import eyg/interpreter/value as v
 import gleam/bit_array
 import gleam/dict
@@ -47,6 +48,22 @@ pub fn invalid_bundles_do_not_create_revisions_test() {
     let assert Error(_) = a.save(a.new(), "bad", bundle)
   })
   let assert Error(_) = a.save(a.new(), " ", bundle("a"))
+}
+
+pub fn a_share_follows_the_latest_earlier_shared_version_test() {
+  let store =
+    a.new()
+    |> a.share("map", 1, a.Shared("one", "s1"))
+    |> a.share("map", 2, a.ShareFailed("too big"))
+    |> a.share("map", 3, a.Shared("three", "s3"))
+    |> a.share("map", 4, a.Sharing)
+    |> a.share("bus", 2, a.Shared("bus", "s"))
+  assert Error(Nil) == a.previous_share(store, "map", 1)
+  assert Ok(schema.SharedArtifact("one", "s1"))
+    == a.previous_share(store, "map", 3)
+  assert Ok(schema.SharedArtifact("three", "s3"))
+    == a.previous_share(store, "map", 5)
+  assert Error(Nil) == a.previous_share(store, "bus", 2)
 }
 
 pub fn show_validates_references_and_rectangles_and_upserts_test() {
