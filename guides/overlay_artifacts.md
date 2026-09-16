@@ -72,7 +72,8 @@ overlay_public
 Neither frame grants `allow-same-origin`, popups, forms, downloads, or ancestor
 navigation. The inner document has a distinct opaque origin and cannot read
 the wrapper or application DOM, cookies, session storage, local storage, or
-IndexedDB. No message bridge is exposed.
+IndexedDB. Artifacts have no bridge to Overlay, the only channel is the one way
+puppet described under artifact control.
 
 The fixed wrapper puts its CSP before all content. It allows inline scripts and
 styles and embedded `data:` resources, denies connections, objects, workers,
@@ -137,13 +138,71 @@ bundled images, a video player with playback speed controls, and a viewer for
 `app.bsky.feed.getAuthorFeed` JSON containing `app.bsky.feed.post` records. Data
 retrieval remains in the calling program, separate from presentation.
 
+## Artifact control
+
+An agent that creates an artifact should check that it works and looks right.
+Existing effects cannot see or use a rendered document, so a third effect,
+`Puppet`, drives a shown preview. It is not specific to Overlay: any runtime
+that renders HTML, for example the CLI with a headless browser, can implement
+the same contract, and the same programs then test artifacts outside Overlay.
+
+```eyg
+perform Puppet({
+  page: Artifact("departures"),
+  locator: [Role({role: "button", name: "Refresh"})],
+  action: Click({}),
+  timeout: 5000
+})
+```
+
+`page` is a shown `Artifact(name)` or `Revision({name, version})`. A locator
+narrows from the whole document with `Css`, `Text`, `Role`, `Label`,
+`Placeholder`, `TestId`, `HasText` and `Nth` steps. Actions follow Playwright:
+interactions wait for exactly one visible, enabled element, queries return text,
+counts and flags, `Expect` retries a condition until the timeout, and
+`Screenshot` returns a PNG. `Puppet` returns `Ok(reply)` or `Error(reason)`, for
+example when a locator matches several elements. The
+[`playwright`](../eyg_packages/playwright/) package wraps the effect in
+Playwright's names: `click(get_by_role(page("departures"), "button", "Refresh"))`.
+
+### The puppet pattern
+
+A sandboxed frame without `allow-same-origin` cannot be reached by the
+application and cannot reach the application. Control is one way: a trusted
+puppet script is the first script of every prepared document.
+
+1. The application posts `{id, request}` to the artifact frame, below the
+   wrapper, with a `MessagePort` for the reply. Frames that are still loading
+   miss messages, so copies with the same id are sent with backoff.
+2. The puppet only accepts messages whose source is the application window,
+   acts once per id and posts the reply to every port it received for that id.
+3. The application reads the reply from its own port, as data. It never runs
+   code from an artifact.
+
+An artifact can interfere with its own puppet, which only affects what is
+reported about that artifact. It cannot reach another artifact's puppet
+because the source of its messages is not the application. Text and images
+read from an artifact are untrusted input to the agent, like fetched data.
+The puppet outlines each element as it acts, so the user sees the agent at work.
+
+### Screenshots
+
+Screenshots render inside the sandbox. The document is cloned with the state of
+form fields and canvases, serialized into SVG `foreignObject` and drawn to a
+canvas. Bundles carry all their styles, so styles come from the document
+itself; `:root` rules apply to the cloned `html` element and animations show
+their final frame. Hover states and the scroll position of inner containers are
+not captured. The most recent screenshots of a tool call are shown to the model
+with its result and as thumbnails in the chat.
+
 ### Verification
 
 Test effect decoding/type checking, version retention across turns and effect
 suspension, invalid bundles/rectangles, revision selection, and file diffs.
 Run browser tests against actual nested frames: scripts and bundled resources
 work, storage/parent access fail, injected CSP cannot relax restrictions, and
-self-navigation makes no network request. Test layout coverage, order, odd
+self-navigation makes no network request. Drive artifacts through the puppet,
+including screenshots, and check another artifact cannot. Test layout coverage, order, odd
 dimensions, empty/singleton inputs, and zero-size rejection. Run the repository
 EYG suite before sharing modules.
 
