@@ -265,11 +265,14 @@ pub fn pull_packages(
 }
 
 /// Share an artifact, the hub stores the files and serves them at `/artifact/<id>`.
+/// Sharing with the id and secret of a `previous` share points it to the new one.
 pub fn share_artifact(
   name: String,
   files: List(schema.ArtifactFile),
+  previous: option.Option(schema.SharedArtifact),
 ) -> Operation(BitArray) {
-  let body = schema.artifact_encode(name, files) |> json.to_string
+  let body =
+    schema.share_artifact_encode(name, files, previous) |> json.to_string
   operation.post("/artifacts")
   |> operation.set_header("content-type", "application/json")
   |> operation.set_body(<<body:utf8>>)
@@ -277,15 +280,15 @@ pub fn share_artifact(
 
 pub fn share_artifact_response(
   response: response.Response(BitArray),
-) -> Result(Result(String, String), client.Failure) {
+) -> Result(Result(schema.SharedArtifact, String), client.Failure) {
   let Response(status:, body:, ..) = response
   case status {
     201 ->
       case json.parse_bits(body, schema.shared_artifact_decoder()) {
-        Ok(id) -> Ok(Ok(id))
+        Ok(shared) -> Ok(Ok(shared))
         Error(reason) -> Error(client.UnableToDecode(reason:))
       }
-    400 | 413 | 422 | 429 ->
+    400 | 403 | 413 | 422 | 429 ->
       case json.parse_bits(body, schema.failure_decoder()) {
         Ok(reason) -> Ok(Error(reason))
         Error(reason) -> Error(client.UnableToDecode(reason:))

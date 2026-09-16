@@ -1,10 +1,14 @@
 --- migration:up
 
 CREATE TABLE artifacts (
-  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        TEXT        NOT NULL,
-  ip          INET        NOT NULL,
-  inserted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         TEXT        NOT NULL,
+  ip           INET        NOT NULL,
+  -- SHA-256 of the secret given to whoever shared the artifact.
+  secret_hash  BYTEA       NOT NULL,
+  -- A newer version, shared with this artifact's secret.
+  next_id      UUID        REFERENCES artifacts(id),
+  inserted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   -- Withdrawn artifacts are no longer served, as if they never existed.
   withdrawn_at TIMESTAMPTZ
 );

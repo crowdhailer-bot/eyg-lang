@@ -138,7 +138,11 @@ pub type Message {
   UserClosedArtifact(artifact.Item)
   UserShowedArtifact(artifact.Placement)
   UserClickedShare(artifact.Item)
-  ArtifactShared(name: String, version: Int, result: Result(String, String))
+  ArtifactShared(
+    name: String,
+    version: Int,
+    result: Result(schema.SharedArtifact, String),
+  )
   // run messages
   EffectHandled(task_id: Int, value: istate.Value(tools.Meta))
   CacheMessage(cache.ActionCompleted)
@@ -172,7 +176,7 @@ pub fn update(
       }
     ArtifactShared(name:, version:, result:) -> {
       let share = case result {
-        Ok(id) -> artifact.Shared(id)
+        Ok(schema.SharedArtifact(id:, secret:)) -> artifact.Shared(id:, secret:)
         Error(reason) -> artifact.ShareFailed(reason)
       }
       let artifacts = artifact.share(state.artifacts, name, version, share)
@@ -402,7 +406,7 @@ fn share_artifact(origin, name, version, bundle: artifact.Bundle) {
       schema.ArtifactFile(file.path, file.media_type, file.content)
     })
   let request =
-    client.share_artifact(name, files)
+    client.share_artifact(name, files, None)
     |> operation.to_request(origin)
   use response <- system.Fetch(request)
   let result = case response {

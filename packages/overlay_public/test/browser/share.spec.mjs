@@ -5,7 +5,7 @@ test('a person shares the version of an artifact they are looking at', async ({ 
   const shared = [];
   await page.route('**/artifacts', async route => {
     shared.push(route.request().postDataJSON());
-    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: '0d6f7c8e-1111-4222-8333-944445555666' }) });
+    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: '0d6f7c8e-1111-4222-8333-944445555666', secret: 'first-secret' }) });
   });
   const overlay = await agent(page);
   await overlay.show([file('index.html', 'text/html', '<h1>Departures</h1>')], 'departures');

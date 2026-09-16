@@ -1,10 +1,12 @@
 import eyg/hub/client
 import eyg/hub/schema.{ArtifactFile}
 import gleam/bit_array
+import gleam/crypto
 import gleam/http
 import gleam/http/request
 import gleam/http/response
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/string
 import hub/artifacts/data
 import hub/helpers.{dispatch}
@@ -27,8 +29,22 @@ fn bundle() {
 }
 
 fn share(name, files, context) {
-  let response = dispatch(client.share_artifact(name, files), context)
+  case share_version(name, files, None, context) {
+    Ok(Ok(shared)) -> Ok(Ok(shared.id))
+    Ok(Error(reason)) -> Ok(Error(reason))
+    Error(failure) -> Error(failure)
+  }
+}
+
+fn share_version(name, files, previous, context) {
+  let response = dispatch(client.share_artifact(name, files, previous), context)
   client.share_artifact_response(response)
+}
+
+fn page(id, context) {
+  let assert Ok(page) =
+    bit_array.to_string(get("/artifact/" <> id, context).body)
+  page
 }
 
 fn get(path, context) {
@@ -164,4 +180,48 @@ pub fn withdrawn_artifacts_are_not_found_test() {
   assert 404 == get("/artifacts/" <> id <> "/files/index.html", context).status
   let assert Ok(pog.Returned(rows: [], ..)) =
     pog.execute(data.withdraw(id), context.db)
+}
+
+pub fn a_newer_version_is_linked_from_the_previous_version_test() {
+  use context <- helpers.web_context()
+  let assert Ok(Ok(first)) = share_version("board", bundle(), None, context)
+  let assert Ok(Ok(second)) =
+    share_version("board", bundle(), Some(first), context)
+  assert first.secret != second.secret
+
+  let link = "href=\"/artifact/" <> second.id <> "\""
+  assert string.contains(page(first.id, context), "<link rel=\"next\" " <> link)
+  assert string.contains(page(first.id, context), link <> ">newer version</a>")
+  assert !string.contains(page(second.id, context), "newer version")
+
+  // A withdrawn version is not linked.
+  let assert Ok(pog.Returned(rows: [_], ..)) =
+    pog.execute(data.withdraw(second.id), context.db)
+  assert !string.contains(page(first.id, context), "newer version")
+}
+
+pub fn a_newer_version_needs_the_secret_of_the_previous_version_test() {
+  use context <- helpers.web_context()
+  let assert Ok(Ok(first)) = share_version("board", bundle(), None, context)
+  let rejected =
+    Ok(Error("The previous version is not shared with this secret"))
+
+  let guessed = schema.SharedArtifact(..first, secret: "guess")
+  assert rejected == share_version("board", bundle(), Some(guessed), context)
+  let unknown =
+    schema.SharedArtifact(
+      id: "00000000-0000-0000-0000-000000000000",
+      secret: first.secret,
+    )
+  assert rejected == share_version("board", bundle(), Some(unknown), context)
+  let invalid = schema.SharedArtifact(id: "not-an-id", secret: first.secret)
+  assert rejected == share_version("board", bundle(), Some(invalid), context)
+  assert !string.contains(page(first.id, context), "newer version")
+
+  // Only a hash of the secret is stored.
+  let assert Ok(pog.Returned(rows: [], ..)) =
+    pog.execute(data.shared_with(first.id, <<first.secret:utf8>>), context.db)
+  let hash = crypto.hash(crypto.Sha256, <<first.secret:utf8>>)
+  let assert Ok(pog.Returned(rows: [_], ..)) =
+    pog.execute(data.shared_with(first.id, hash), context.db)
 }
