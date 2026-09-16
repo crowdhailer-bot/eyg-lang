@@ -6,9 +6,11 @@ import gleam/http/request
 import gleam/http/response
 import gleam/list
 import gleam/string
+import hub/artifacts/data
 import hub/helpers.{dispatch}
 import hub/router
 import ogre/operation
+import pog
 import wisp/simulate
 
 fn html(text) {
@@ -148,4 +150,18 @@ pub fn sharing_is_rate_limited_by_address_test() {
     assert 201 == router.route(request, context).status
   })
   assert 429 == router.route(request, context).status
+}
+
+pub fn withdrawn_artifacts_are_not_found_test() {
+  use context <- helpers.web_context()
+  let assert Ok(Ok(id)) = share("departures", bundle(), context)
+  let assert Ok(pog.Returned(rows: [withdrawn], ..)) =
+    pog.execute(data.withdraw(id), context.db)
+  assert id == withdrawn
+
+  assert 404 == get("/artifact/" <> id, context).status
+  assert 404 == get("/artifacts/" <> id, context).status
+  assert 404 == get("/artifacts/" <> id <> "/files/index.html", context).status
+  let assert Ok(pog.Returned(rows: [], ..)) =
+    pog.execute(data.withdraw(id), context.db)
 }

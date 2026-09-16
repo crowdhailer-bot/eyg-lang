@@ -42,7 +42,8 @@ pub type Artifact {
 
 /// Query by string as ids arrive in the URL, the id must already be a valid UUID.
 pub fn get(id: String) -> pog.Query(Artifact) {
-  "SELECT name, inserted_at FROM artifacts WHERE id = $1::uuid;"
+  "SELECT name, inserted_at FROM artifacts
+WHERE id = $1::uuid AND withdrawn_at IS NULL;"
   |> pog.query()
   |> pog.parameter(pog.text(id))
   |> pog.returning({
@@ -54,7 +55,8 @@ pub fn get(id: String) -> pog.Query(Artifact) {
 
 pub fn files(id: String) -> pog.Query(ArtifactFile) {
   "SELECT path, media_type, content FROM artifact_files
-WHERE artifact_id = $1::uuid
+JOIN artifacts ON artifacts.id = artifact_files.artifact_id
+WHERE artifact_id = $1::uuid AND withdrawn_at IS NULL
 ORDER BY path;"
   |> pog.query()
   |> pog.parameter(pog.text(id))
@@ -63,7 +65,8 @@ ORDER BY path;"
 
 pub fn file(id: String, path: String) -> pog.Query(ArtifactFile) {
   "SELECT path, media_type, content FROM artifact_files
-WHERE artifact_id = $1::uuid AND path = $2;"
+JOIN artifacts ON artifacts.id = artifact_files.artifact_id
+WHERE artifact_id = $1::uuid AND path = $2 AND withdrawn_at IS NULL;"
   |> pog.query()
   |> pog.parameter(pog.text(id))
   |> pog.parameter(pog.text(path))
@@ -87,5 +90,18 @@ AND inserted_at > now() - interval '10 minutes';"
   |> pog.returning({
     use count <- decode.field(0, decode.int)
     decode.success(count)
+  })
+}
+
+/// Stop serving an artifact, returning its id if it was being served.
+pub fn withdraw(id: String) -> pog.Query(String) {
+  "UPDATE artifacts SET withdrawn_at = now()
+WHERE id = $1::uuid AND withdrawn_at IS NULL
+RETURNING id::text;"
+  |> pog.query()
+  |> pog.parameter(pog.text(id))
+  |> pog.returning({
+    use id <- decode.field(0, decode.string)
+    decode.success(id)
   })
 }
