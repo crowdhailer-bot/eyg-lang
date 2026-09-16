@@ -9,6 +9,7 @@ import lustre/event
 import oas/generator/utils
 import overlay/llm/chat
 import overlay/llm/tool
+import overlay/public/artifacts
 import overlay/public/cache_status
 import overlay/public/input
 import overlay/public/provider_setup as provider_view
@@ -67,13 +68,7 @@ pub fn render(model: state.State) {
           state.Ignore,
         ),
       ]),
-      // h.div([a.class("output")], [
-    //   // h.div([], [h.span([], [h.text("cell1")])]),
-    // // h.div([], [h.span([], [h.text("cell2")])]),
-    // // h.div([], [h.span([], [h.text("cell3")])]),
-    // // h.div([], [h.span([], [h.text("cell4")])]),
-    // // h.div([], [h.span([], [h.text("cell5")])]),
-    // ]),
+      artifacts.render(model.artifacts),
     ],
   )
 }
