@@ -16,6 +16,7 @@ pub const script = "
   const normalize = text => String(text ?? '').replace(/\\s+/g, ' ').trim();
   const includes = (text, part) => normalize(text).toLowerCase().includes(normalize(part).toLowerCase());
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const frame = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
 
   const roles = {
     button: 'button,input[type=button],input[type=submit],input[type=reset],summary',
@@ -143,8 +144,9 @@ pub const script = "
     });
   }
 
-  // Show where the agent acts.
+  // Show where the agent acts and when it takes screenshots, removed before screenshots.
   let marker;
+  let flash;
   async function point(element) {
     element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     const rect = element.getBoundingClientRect();
@@ -335,7 +337,95 @@ pub const script = "
       });
       return done;
     },
+    async screenshot(locator, action, timeout) {
+      const element = locator.length ? await one(locator, timeout) : null;
+      return { type: 'image', value: await screenshot(element) };
+    },
   };
+
+  // Render the document as an image: the DOM is serialized into SVG foreignObject.
+  // Styles come from the document's own style elements, bundles have no external CSS.
+  async function screenshot(element) {
+    unpoint();
+    if (marker) marker.remove();
+    if (flash) flash.remove();
+    if (document.readyState !== 'complete') await new Promise(resolve => addEventListener('load', resolve, { once: true }));
+    if (document.fonts) await document.fonts.ready;
+    await frame();
+    const root = document.documentElement;
+    const width = root.clientWidth;
+    const height = Math.max(root.scrollHeight, innerHeight);
+    const clone = root.cloneNode(true);
+    const originals = root.querySelectorAll('*');
+    const copies = clone.querySelectorAll('*');
+    for (let index = 0; index < originals.length; index++) {
+      const original = originals[index];
+      const copy = copies[index];
+      if (original instanceof HTMLCanvasElement) {
+        try {
+          const image = document.createElement('img');
+          image.src = original.toDataURL();
+          image.setAttribute('style', original.getAttribute('style') || '');
+          image.width = original.width;
+          image.height = original.height;
+          image.className = original.className;
+          copy.replaceWith(image);
+        } catch {}
+      } else if (original instanceof HTMLInputElement) {
+        if (original.type === 'checkbox' || original.type === 'radio') {
+          original.checked ? copy.setAttribute('checked', '') : copy.removeAttribute('checked');
+        } else {
+          copy.setAttribute('value', original.value);
+        }
+      } else if (original instanceof HTMLTextAreaElement) {
+        copy.textContent = original.value;
+      } else if (original instanceof HTMLOptionElement) {
+        original.selected ? copy.setAttribute('selected', '') : copy.removeAttribute('selected');
+      } else if (original instanceof HTMLScriptElement) {
+        copy.remove();
+      } else if (original instanceof HTMLStyleElement) {
+        // The SVG document is the root, the HTML element takes the place of :root.
+        copy.textContent = original.textContent.replaceAll(':root', 'html');
+      }
+    }
+    const freeze = document.createElement('style');
+    freeze.textContent = '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;animation-fill-mode:both!important;transition:none!important;caret-color:transparent!important}';
+    clone.querySelector('head')?.append(freeze);
+    clone.style.setProperty('width', `${width}px`);
+    clone.style.setProperty('height', `${height}px`);
+    const markup = new XMLSerializer().serializeToString(clone);
+    const svg = `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"${width}\" height=\"${height}\"><foreignObject x=\"0\" y=\"0\" width=\"${width}\" height=\"${height}\">${markup}</foreignObject></svg>`;
+    const image = new Image();
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    await image.decode();
+    const rect = element ? element.getBoundingClientRect() : { left: 0, top: 0, width: innerWidth, height: innerHeight };
+    const left = rect.left + scrollX;
+    const top = rect.top + scrollY;
+    const scale = Math.min(devicePixelRatio || 1, 2);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(rect.width * scale));
+    canvas.height = Math.max(1, Math.round(rect.height * scale));
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, left, top, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
+    // The image is drawn, a brief flash now shows people a screenshot was taken.
+    flash = document.createElement('div');
+    flash.setAttribute('aria-hidden', 'true');
+    flash.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;background:#fff;opacity:0.65;transition:opacity 0.6s ease 0.25s';
+    document.documentElement.append(flash);
+    requestAnimationFrame(() => requestAnimationFrame(() => { flash.style.opacity = '0'; }));
+    const shown = flash;
+    setTimeout(() => shown.remove(), 1200);
+    // Encoding off the main thread keeps the page responsive.
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
 
   async function run(request) {
     const { locator = [], action = {}, timeout = 5000 } = request || {};

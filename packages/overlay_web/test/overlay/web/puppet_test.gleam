@@ -1,10 +1,12 @@
 import eyg/hub/cache
 import eyg/interpreter/value as v
+import gleam/bit_array
 import gleam/dict
 import gleam/dynamic
 import gleam/json
 import gleam/list
 import oas/generator/utils
+import overlay/llm/chat
 import overlay/llm/tool
 import overlay/web/artifact
 import overlay/web/context
@@ -65,7 +67,9 @@ pub fn request_is_sent_to_the_preview_frame_test() {
       shown(),
       "perform Puppet({page: Artifact(\"map\"), locator: [Role({role: \"heading\", name: \"Map\"}), Nth(0)], action: Expect(ToHaveText(\"Map\")), timeout: 2000})",
     )
-  let assert [tools.Progress(call: tools.Handling(id, ..), ..)] = calls
+  let assert [
+    tools.Progress(call: tools.Handling(id, screenshot: False, ..), ..),
+  ] = calls
   let assert [
     system.RequestFrame(
       selector:,
@@ -121,6 +125,35 @@ pub fn failures_and_replies_resume_the_program_test() {
   let assert system.Done(#(_, value)) =
     resume(Ok(reply([#("type", dynamic.string("unknown"))])))
   assert v.error(v.String("Unexpected reply from artifact")) == value
+}
+
+pub fn screenshots_are_shown_to_the_agent_test() {
+  let #(ctx, calls) =
+    run(
+      shown(),
+      "let _ = perform Puppet({page: Artifact(\"map\"), locator: [], action: Screenshot({}), timeout: 100})
+5",
+    )
+  let assert [
+    tools.Progress(call: tools.Handling(id, screenshot: True, ..), ..),
+  ] = calls
+  let assert [system.RequestFrame(resume:, ..)] = ctx.effects
+  let png = <<137, 80, 78, 71>>
+  let url = "data:image/png;base64," <> bit_array.base64_encode(png, True)
+  let assert system.Done(#(_, value)) =
+    resume(
+      Ok(
+        reply([
+          #("type", dynamic.string("image")),
+          #("value", dynamic.string(url)),
+        ]),
+      ),
+    )
+  assert v.ok(v.Tagged("Image", v.Binary(png))) == value
+  let #(_, calls) = tools.effect_handled(ctx, calls, id, value)
+  let assert Ok([chat.ToolResultMessage(text: "5", images:, ..)]) =
+    tools.all_returns(calls)
+  assert [bit_array.base64_encode(png, True)] == images
 }
 
 pub fn revisions_have_their_own_frame_test() {

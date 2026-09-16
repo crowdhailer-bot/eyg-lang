@@ -68,6 +68,26 @@ let hidden = perform Puppet({page: Artifact("other"), locator: [], action: Count
   expect(content).toContain('hidden: Error("other is not shown, use Show before Puppet")');
 });
 
+test('screenshots are returned as images and shown with the tool result', async ({ page }) => {
+  const overlay = await agent(page);
+  await overlay.show([departures]);
+  const result = await overlay.run(`let shot = ${puppet('', 'Screenshot({})', 5000)}
+match shot {
+  Ok(reply) -> {
+    match reply {
+      Image(png) -> { !int_compare(!binary_size(png), 1000) }
+      | (_) -> { !never(perform Abort("not an image")) }
+    }
+  }
+  Error(reason) -> { !never(perform Abort(reason)) }
+}`);
+  expect(result.content).toBe('Gt({})');
+  expect(result.images).toHaveLength(1);
+  const png = Buffer.from(result.images[0], 'base64');
+  expect(png.subarray(1, 4).toString()).toBe('PNG');
+  await expect(page.locator('.tool-images img')).toHaveCount(1);
+});
+
 test('an artifact cannot drive the puppet of another artifact', async ({ page }) => {
   const overlay = await agent(page);
   const target = await overlay.show([file('index.html', 'text/html', '<body><button onclick="this.textContent=\'pressed\'">Target</button></body>')], 'target');
