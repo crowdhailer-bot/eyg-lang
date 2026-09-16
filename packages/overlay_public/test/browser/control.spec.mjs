@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { agent, file } from './agent.mjs';
 
 const departures = file('index.html', 'text/html', `<!doctype html><html><head><style>
@@ -105,4 +107,25 @@ perform Show({item: Artifact("attacker"), origin: {x: 500, y: 0}, size: {x: 500,
   await page.waitForTimeout(500);
   await expect(target.getByRole('button')).toHaveText('Target');
   await expect(attacker.locator('body')).not.toHaveAttribute('data-reply');
+});
+
+test('the EYG playwright library checks and drives an artifact', async ({ page }) => {
+  const library = readFileSync(resolve('../../eyg_packages/playwright/index.eyg'), 'utf8');
+  const overlay = await agent(page);
+  const inner = await overlay.show([departures]);
+  const result = await overlay.run(`let playwright = (_) -> {
+${library}
+}
+let pw = playwright({})
+let board = pw.page("test")
+let _ = pw.fill(pw.get_by_placeholder(board, "filter"), "88")
+let _ = pw.expect(pw.first(pw.locator(board, "li"))).to_be_hidden({})
+let _ = pw.check(pw.get_by_label(board, "live"))
+let _ = pw.click(pw.get_by_role(board, "button", "refresh"))
+let _ = pw.expect(pw.locator(board, "#status")).to_have_text("Refreshed n")
+let png = pw.screenshot(pw.get_by_role(board, "list", ""))
+{routes: pw.all_text_contents(pw.locator(board, "li:not([hidden])")), image: !int_compare(!binary_size(png), 100)}`);
+  expect(flat(result.content)).toBe('{image: Gt({}), routes: ["88 Clapham Common"]}');
+  expect(result.images).toHaveLength(1);
+  await expect(inner.locator('#status')).toHaveText('Refreshed n');
 });
