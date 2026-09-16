@@ -620,6 +620,49 @@ pub fn artifact_state_survives_agent_turns_and_closing_panels_test() {
   assert 2 == list.length(artifact.history(s.artifacts, "map"))
 }
 
+pub fn sharing_moves_one_version_to_the_hub_test() {
+  let save =
+    "perform Artifact({name:\"map\",bundle:[{path:\"index.html\",media_type:\"text/html\",content:!string_to_binary(\"map\")}]})"
+  let status = chat_completion("") |> with_code("one", save) |> streaming
+  let #(s, _) =
+    state.update(
+      State(..init_default(), status:),
+      state.LlmStreamFinished(Ok(Nil)),
+    )
+  let status = chat_completion("") |> with_code("two", save) |> streaming
+  let #(s, _) =
+    state.update(State(..s, status:), state.LlmStreamFinished(Ok(Nil)))
+
+  // Nothing leaves the session until a person clicks share.
+  assert dict.new() == s.artifacts.shares
+  let #(s, actions) =
+    state.update(s, state.UserClickedShare(artifact.Artifact("map")))
+  assert Ok(artifact.Sharing) == dict.get(s.artifacts.shares, #("map", 2))
+  let assert [system.Fetch(request:, resume:)] = actions
+  assert "/artifacts" == request.path
+  let assert Ok(body) = bit_array.to_string(request.body)
+  assert string.contains(body, "\"name\":\"map\"")
+
+  let response =
+    response.new(201)
+    |> response.set_body(<<"{\"id\":\"a-uuid\"}">>)
+  let assert system.Done(message) = resume(Ok(response))
+  let #(s, _) = state.update(s, message)
+  assert Ok(artifact.Shared("a-uuid"))
+    == dict.get(s.artifacts.shares, #("map", 2))
+
+  let #(s, actions) =
+    state.update(s, state.UserClickedShare(artifact.Revision("map", 1)))
+  let assert [system.Fetch(resume:, ..)] = actions
+  let response =
+    response.new(422)
+    |> response.set_body(<<"{\"reason\":\"too big\"}">>)
+  let assert system.Done(message) = resume(Ok(response))
+  let #(s, _) = state.update(s, message)
+  assert Ok(artifact.ShareFailed("too big"))
+    == dict.get(s.artifacts.shares, #("map", 1))
+}
+
 pub fn printed_output_is_returned_to_the_agent_test() {
   let code =
     "let _ = perform Print(\"first\") let _ = perform Print(\"second\") 5"

@@ -40,11 +40,22 @@ pub type Effect {
 }
 
 pub type Store {
-  Store(versions: Dict(String, List(Bundle)), panels: List(Placement))
+  Store(
+    versions: Dict(String, List(Bundle)),
+    panels: List(Placement),
+    // Artifacts stay in the session until a person shares a version.
+    shares: Dict(#(String, Int), Share),
+  )
+}
+
+pub type Share {
+  Sharing
+  Shared(id: String)
+  ShareFailed(reason: String)
 }
 
 pub fn new() -> Store {
-  Store(dict.new(), [])
+  Store(dict.new(), [], dict.new())
 }
 
 pub fn effects() -> interface.Harness(Effect, a) {
@@ -179,6 +190,29 @@ pub fn revision(
 pub fn latest(store: Store, name: String) -> Result(Bundle, String) {
   list.first(history(store, name))
   |> result.replace_error("Unknown artifact: " <> name)
+}
+
+/// The version a preview shows, `Artifact` follows the latest version.
+pub fn version(
+  store: Store,
+  item: Item,
+) -> Result(#(String, Int, Bundle), Nil) {
+  case item {
+    Artifact(name) -> {
+      let versions = history(store, name)
+      use bundle <- result.map(list.first(versions))
+      #(name, list.length(versions), bundle)
+    }
+    Revision(name, version) ->
+      revision(store, name, version)
+      |> result.map(fn(bundle) { #(name, version, bundle) })
+      |> result.replace_error(Nil)
+    History(..) | Diff(..) -> Error(Nil)
+  }
+}
+
+pub fn share(store: Store, name: String, version: Int, share: Share) -> Store {
+  Store(..store, shares: dict.insert(store.shares, #(name, version), share))
 }
 
 pub fn file(bundle: Bundle, path: String) -> Result(File, Nil) {

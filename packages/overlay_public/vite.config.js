@@ -48,6 +48,10 @@ export default defineConfig({
         target: hub,
         changeOrigin: true,
       },
+      '^/artifacts?(/|$)': {
+        target: hub,
+        changeOrigin: true,
+      },
     },
     watch: {
       usePolling: true, // needed in Docker
