@@ -1,7 +1,7 @@
 //// Rules for the files of an artifact bundle.
 ////
-//// Overlay checks them when an agent saves an artifact. They live here so a
-//// hub can check shared bundles with the same rules.
+//// Overlay checks them when an agent saves an artifact, and a hub checks them
+//// again when a bundle is shared.
 
 import eyg/hub/schema.{type ArtifactFile}
 import gleam/bit_array
@@ -87,4 +87,16 @@ fn token(value) {
     || { c >= 0x61 && c <= 0x7A }
     || string.contains("!#$&^_.+-", string.from_utf_codepoints([codepoint]))
   })
+}
+
+/// The id of a shared artifact is a lowercase UUID.
+pub fn valid_id(id: String) -> Bool {
+  string.length(id) == 36
+  && list.index_map(string.to_graphemes(id), fn(char, index) {
+    case index {
+      8 | 13 | 18 | 23 -> char == "-"
+      _ -> string.contains("0123456789abcdef", char)
+    }
+  })
+  |> list.all(fn(valid) { valid })
 }
