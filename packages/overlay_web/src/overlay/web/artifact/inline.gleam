@@ -4,6 +4,7 @@
 //// uses. References resolve relative to the file they are in, as they would
 //// if the bundle were served from a directory.
 
+import eyg/hub/artifact as rules
 import gleam/bit_array
 import gleam/list
 import gleam/result.{try}
@@ -109,7 +110,7 @@ pub fn asset(
 }
 
 pub fn data_url(file: File) -> Result(String, String) {
-  case artifact.valid_media_type(file.media_type) {
+  case rules.valid_media_type(file.media_type) {
     True ->
       Ok(
         "data:"
