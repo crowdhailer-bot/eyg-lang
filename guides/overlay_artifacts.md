@@ -212,6 +212,12 @@ hub's files and data URLs, and connections, forms and other frames are blocked
 as in local previews. Only the hub's own pages may frame the files.
 `GET /artifacts/<id>` returns the bundle as JSON.
 
+Sharing also returns a secret, which Overlay keeps in the session. Sharing a
+later version of the artifact sends the id and secret of the latest earlier
+share, and the earlier page then links to the newer version with
+`<link rel="next">`. The hub stores only a hash of the secret and refuses a
+share naming a previous version with the wrong secret.
+
 Ids are capability links, the hub has no index of artifacts. Shares are
 limited per address. [Artifacts and Spring '83](../notes/artifacts-and-spring-83.md)
 compares this with a protocol for publishing small HTML documents and lists
@@ -225,6 +231,7 @@ diffs. Run browser tests against actual nested frames: scripts and bundled
 resources work, storage and parent access fail, injected CSP cannot relax
 restrictions, and self-navigation makes no network request. Drive artifacts
 through the puppet, including screenshots, and check another artifact cannot.
-Check that shared files are sandboxed and nothing is shared without a click.
+Check that shared files are sandboxed, nothing is shared without a click and a
+newer version is only linked with the secret of the earlier share.
 Test layout coverage, order, odd dimensions, empty and singleton inputs, and
 zero-size rejection. Run the repository EYG suite before sharing modules.

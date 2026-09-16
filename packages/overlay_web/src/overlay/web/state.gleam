@@ -167,9 +167,13 @@ pub fn update(
     UserClickedShare(item) ->
       case artifact.version(state.artifacts, item) {
         Ok(#(name, version, bundle)) -> {
+          let previous =
+            artifact.previous_share(state.artifacts, name, version)
+            |> option.from_result
           let share = artifact.Sharing
           let artifacts = artifact.share(state.artifacts, name, version, share)
-          let action = share_artifact(state.origin, name, version, bundle)
+          let action =
+            share_artifact(state.origin, name, version, bundle, previous)
           #(State(..state, artifacts:), [action])
         }
         Error(Nil) -> #(state, [])
@@ -400,13 +404,14 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
 }
 
 /// Sharing moves one version of an artifact to the hub, the session keeps its copy.
-fn share_artifact(origin, name, version, bundle: artifact.Bundle) {
+/// Shared after an earlier version, it becomes the newer version of that share.
+fn share_artifact(origin, name, version, bundle: artifact.Bundle, previous) {
   let files =
     list.map(bundle, fn(file) {
       schema.ArtifactFile(file.path, file.media_type, file.content)
     })
   let request =
-    client.share_artifact(name, files, None)
+    client.share_artifact(name, files, previous)
     |> operation.to_request(origin)
   use response <- system.Fetch(request)
   let result = case response {
