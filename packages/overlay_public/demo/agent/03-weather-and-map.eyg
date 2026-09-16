@@ -1,0 +1,277 @@
+// Weather for the next 12 hours and the routes through Camden Town
+let query = "latitude=51.5392&longitude=-0.1426&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min&timezone=Europe%2FLondon&forecast_days=2"
+let forecast = context.network.text("api.open-meteo.com", "/v1/forecast", Some(query))
+
+let weather = context.studio.page({
+  title: "Camden Town weather",
+  theme: "dark",
+  styles: "
+.app { height: 100vh; gap: 14px; padding: 22px 24px; }
+.now { display: flex; align-items: center; gap: 16px; }
+.icon { width: 56px; height: 56px; flex: none; }
+.temperature { font-size: 56px; line-height: 0.9; font-weight: 650; letter-spacing: -0.06em; }
+.temperature sup { position: relative; top: -0.05em; font-size: 0.5em; font-weight: 500; color: var(--text-muted); }
+.condition { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+.details { color: var(--text-muted); font-size: 12px; }
+.range { margin-left: auto; text-align: right; color: var(--text-muted); font-size: 12px; }
+.range b { display: block; color: var(--text); font-size: 15px; font-weight: 600; }
+.chart { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 14px 16px 10px; }
+.chart header { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.chart svg { flex: 1; min-height: 0; width: 100%; overflow: visible; }
+.axis { fill: var(--text-faint); font-size: 10px; font-variant-numeric: tabular-nums; }
+.value { fill: var(--text); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.tile { padding: 10px 12px; }
+.tile .eyebrow { margin: 0 0 2px; font-size: 10px; }
+.tile strong { display: block; font-size: 17px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+@media (max-width: 620px) {
+  .app { gap: 10px; padding: 16px 18px; }
+  .icon { width: 44px; height: 44px; }
+  .temperature { font-size: 44px; }
+  .condition { font-size: 15px; }
+  .details { font-size: 11px; }
+  .range { display: none; }
+  .tiles { gap: 8px; }
+  .tile { padding: 8px 10px; }
+  .tile strong { font-size: 15px; }
+}
+@media (max-height: 460px) {
+  .tiles, .footer { display: none; }
+  .chart { padding: 10px 12px 6px; }
+}
+",
+  body: "
+<main class='app'>
+  <div>
+    <p class='eyebrow'>Weather · Camden Town</p>
+    <div class='now'>
+      <svg class='icon' id='icon' viewBox='0 0 64 64' aria-hidden='true'></svg>
+      <div>
+        <div class='temperature tabular' id='temperature'></div>
+      </div>
+      <div>
+        <div class='condition' id='condition'></div>
+        <div class='details tabular' id='details'></div>
+      </div>
+      <div class='range tabular' id='range'></div>
+    </div>
+  </div>
+  <section class='card chart' aria-label='Next 12 hours'>
+    <header><span>Next 12 hours</span><span id='legend'>°C · rain chance</span></header>
+    <svg id='chart' role='img' aria-label='Temperature and chance of rain for the next 12 hours'></svg>
+  </section>
+  <section class='tiles'>
+    <div class='card tile'><p class='eyebrow'>Sunrise</p><strong id='sunrise'></strong></div>
+    <div class='card tile'><p class='eyebrow'>Sunset</p><strong id='sunset'></strong></div>
+    <div class='card tile'><p class='eyebrow'>Rain</p><strong id='rain'></strong></div>
+  </section>
+  <footer class='footer'><span>Source: Open-Meteo</span><span class='tabular' id='retrieved'></span></footer>
+</main>
+",
+  script: "
+const weather = JSON.parse(document.getElementById('data').textContent);
+const conditions = [
+  [0, 'Clear sky', 'sun'], [1, 'Mainly clear', 'sun'], [2, 'Partly cloudy', 'partly'], [3, 'Overcast', 'cloud'],
+  [45, 'Fog', 'cloud'], [48, 'Rime fog', 'cloud'], [51, 'Light drizzle', 'rain'], [53, 'Drizzle', 'rain'], [55, 'Heavy drizzle', 'rain'],
+  [61, 'Light rain', 'rain'], [63, 'Rain', 'rain'], [65, 'Heavy rain', 'rain'], [71, 'Light snow', 'snow'], [73, 'Snow', 'snow'],
+  [75, 'Heavy snow', 'snow'], [80, 'Rain showers', 'rain'], [81, 'Rain showers', 'rain'], [82, 'Violent showers', 'rain'], [95, 'Thunderstorm', 'rain'],
+];
+const condition = code => conditions.find(([value]) => value === code) || [code, 'Unknown', 'cloud'];
+const icons = {
+  sun: `<defs><radialGradient id='g' cx='50%' cy='50%' r='50%'><stop offset='0' stop-color='#ffe29a'/><stop offset='1' stop-color='#ffb547'/></radialGradient></defs><circle cx='32' cy='32' r='14' fill='url(#g)'/>`,
+  partly: `<defs><radialGradient id='s' cx='50%' cy='50%' r='50%'><stop offset='0' stop-color='#ffe29a'/><stop offset='1' stop-color='#ffb547'/></radialGradient><linearGradient id='c' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#f4f6fb'/><stop offset='1' stop-color='#b9c0cf'/></linearGradient></defs><circle cx='24' cy='24' r='11' fill='url(#s)'/><path d='M20 50h26a10 10 0 0 0 0-20 14 14 0 0 0-26.5 4.5A8 8 0 0 0 20 50z' fill='url(#c)'/>`,
+  cloud: `<defs><linearGradient id='c' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#f4f6fb'/><stop offset='1' stop-color='#a9b1c2'/></linearGradient></defs><path d='M18 48h28a11 11 0 0 0 0-22 15 15 0 0 0-28.6 5A8.5 8.5 0 0 0 18 48z' fill='url(#c)'/>`,
+  rain: `<defs><linearGradient id='c' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#e7ebf3'/><stop offset='1' stop-color='#98a2b6'/></linearGradient></defs><path d='M18 40h28a11 11 0 0 0 0-22 15 15 0 0 0-28.6 5A8.5 8.5 0 0 0 18 40z' fill='url(#c)'/><path d='M24 46l-3 8M34 46l-3 8M44 46l-3 8' stroke='#5ec8ff' stroke-width='3' stroke-linecap='round'/>`,
+  snow: `<path d='M18 40h28a11 11 0 0 0 0-22 15 15 0 0 0-28.6 5A8.5 8.5 0 0 0 18 40z' fill='#dfe5ef'/><g fill='#cfe8ff'><circle cx='24' cy='50' r='2.5'/><circle cx='34' cy='54' r='2.5'/><circle cx='44' cy='50' r='2.5'/></g>`,
+};
+const time = iso => iso.slice(11, 16);
+const current = weather.current;
+const [, label, icon] = condition(current.weather_code);
+document.getElementById('icon').innerHTML = icons[icon];
+document.getElementById('temperature').innerHTML = `${Math.round(current.temperature_2m)}<sup>°</sup>`;
+document.getElementById('condition').textContent = label;
+document.getElementById('details').textContent =
+  `Feels ${Math.round(current.apparent_temperature)}° · Wind ${Math.round(current.wind_speed_10m)} km/h · Humidity ${current.relative_humidity_2m}%`;
+document.getElementById('range').innerHTML =
+  `<b>${Math.round(weather.daily.temperature_2m_max[0])}° / ${Math.round(weather.daily.temperature_2m_min[0])}°</b>High / low`;
+document.getElementById('sunrise').textContent = time(weather.daily.sunrise[0]);
+document.getElementById('sunset').textContent = time(weather.daily.sunset[0]);
+document.getElementById('retrieved').textContent = `Forecast for ${time(current.time)} local time`;
+
+const start = weather.hourly.time.findIndex(hour => hour >= current.time.slice(0, 13));
+const hours = weather.hourly.time.slice(start, start + 13).map((hour, index) => ({
+  hour: time(hour),
+  temperature: weather.hourly.temperature_2m[start + index],
+  rain: weather.hourly.precipitation_probability[start + index],
+}));
+document.getElementById('rain').textContent = `${Math.max(...hours.map(hour => hour.rain))}%`;
+
+function draw() {
+  const svg = document.getElementById('chart');
+  const { width, height } = svg.getBoundingClientRect();
+  const pad = { left: 10, right: 10, top: 22, bottom: 20 };
+  const bars = Math.min(38, height * 0.28);
+  const plot = height - pad.top - pad.bottom - bars - 8;
+  const x = index => pad.left + index * (width - pad.left - pad.right) / (hours.length - 1);
+  const low = Math.min(...hours.map(hour => hour.temperature)) - 1;
+  const high = Math.max(...hours.map(hour => hour.temperature)) + 1;
+  const y = value => pad.top + plot - (value - low) / (high - low) * plot;
+  const points = hours.map((hour, index) => [x(index), y(hour.temperature)]);
+  let line = `M${points[0][0]},${points[0][1]}`;
+  for (let index = 0; index < points.length - 1; index++) {
+    const [x0, y0] = points[Math.max(0, index - 1)];
+    const [x1, y1] = points[index];
+    const [x2, y2] = points[index + 1];
+    const [x3, y3] = points[Math.min(points.length - 1, index + 2)];
+    line += `C${x1 + (x2 - x0) / 6},${y1 + (y2 - y0) / 6} ${x2 - (x3 - x1) / 6},${y2 - (y3 - y1) / 6} ${x2},${y2}`;
+  }
+  const area = `${line}L${x(hours.length - 1)},${pad.top + plot}L${x(0)},${pad.top + plot}Z`;
+  const base = height - pad.bottom;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id='area' x1='0' y1='0' x2='0' y2='1'>
+        <stop offset='0' stop-color='var(--accent)' stop-opacity='0.35'/>
+        <stop offset='1' stop-color='var(--accent)' stop-opacity='0'/>
+      </linearGradient>
+    </defs>
+    ${[0.25, 0.5, 0.75].map(f => `<line x1='${pad.left}' x2='${width - pad.right}' y1='${pad.top + plot * f}' y2='${pad.top + plot * f}' stroke='var(--chart-grid)'/>`).join('')}
+    <path d='${area}' fill='url(#area)'/>
+    <path d='${line}' fill='none' stroke='var(--accent)' stroke-width='2.5' stroke-linecap='round'/>
+    ${hours.map((hour, index) => {
+      const barHeight = Math.max(2, hour.rain / 100 * bars);
+      const label = index % 2 === 0 ? `<text class='value' x='${x(index)}' y='${y(hour.temperature) - 9}' text-anchor='middle'>${Math.round(hour.temperature)}°</text>` : '';
+      const tick = index % 2 === 0 ? `<text class='axis' x='${x(index)}' y='${height - 4}' text-anchor='middle'>${index === 0 ? 'Now' : hour.hour}</text>` : '';
+      return `${label}<circle cx='${x(index)}' cy='${y(hour.temperature)}' r='${index === 0 ? 4 : 2.5}' fill='${index === 0 ? 'var(--accent)' : 'var(--bg)'}' stroke='var(--accent)' stroke-width='2'/>
+        <rect x='${x(index) - 5}' y='${base - 12 - barHeight}' width='10' height='${barHeight}' rx='3' fill='#4cc3ff' opacity='${0.25 + hour.rain / 140}'/>${tick}`;
+    }).join('')}`;
+}
+draw();
+new ResizeObserver(draw).observe(document.getElementById('chart'));
+",
+  data: forecast
+})
+
+let routes = !list_fold(["214", "88", "29", "24"], [], (line, responses) -> {
+  let path = context.concat(["/Line/", line, "/Route/Sequence/outbound"])
+  [context.network.text("api.tfl.gov.uk", path, None({})), ..responses]
+})
+
+let map = context.studio.page({
+  title: "Routes from Camden Town",
+  theme: "dark",
+  styles: "
+.app { position: relative; height: 100vh; padding: 0; overflow: hidden; }
+.overlay { position: absolute; inset: 18px 20px auto 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; pointer-events: none; }
+.overlay .title { font-size: 20px; }
+.legend { display: grid; gap: 6px; justify-items: end; pointer-events: auto; }
+.legend .chip { cursor: default; background: color-mix(in oklab, var(--bg) 70%, transparent); backdrop-filter: blur(8px); }
+.legend .chip b { color: var(--text); font-weight: 650; }
+svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dots { fill: var(--text-faint); opacity: 0.35; }
+.route-line { fill: none; stroke: var(--route); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+.route-glow { fill: none; stroke: var(--route); stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; opacity: 0.12; }
+.stop { fill: var(--bg); stroke: var(--route); stroke-width: 1.6; }
+.here { fill: var(--text); }
+.ring { fill: none; stroke: var(--text); stroke-width: 1.5; animation: ring 2.4s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes ring { from { opacity: 0.7; transform: scale(0.6); } to { opacity: 0; transform: scale(2.4); } }
+.place { fill: var(--text); font-size: 13px; font-weight: 650; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.minor { fill: var(--text-muted); font-size: 10.5px; font-weight: 500; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.scale { position: absolute; left: 20px; bottom: 16px; display: flex; flex-direction: column; gap: 4px; color: var(--text-faint); font-size: 10px; }
+.scale span { display: block; height: 4px; border: 1.5px solid var(--text-faint); border-top: 0; }
+.source { position: absolute; right: 20px; bottom: 14px; color: var(--text-faint); font-size: 10px; }
+@media (max-width: 620px) {
+  .overlay { inset: 14px 14px auto 16px; }
+  .overlay .title { font-size: 16px; }
+  .legend { position: fixed; right: 14px; bottom: 12px; display: flex; gap: 5px; }
+  .legend .chip { height: 24px; padding: 0 8px; font-size: 11px; }
+  .legend .chip span:last-child { display: none; }
+  .source { display: none; }
+  .scale { left: 16px; bottom: 12px; }
+}
+",
+  body: "
+<main class='app'>
+  <svg class='map' id='map' role='img' aria-label='Bus routes through Camden Town'></svg>
+  <div class='overlay'>
+    <div>
+      <p class='eyebrow'>Routes · TfL</p>
+      <h1 class='title'>From Camden Town</h1>
+    </div>
+    <div class='legend' id='legend'></div>
+  </div>
+  <div class='scale'><div id='scale-label'>1 km</div><span id='scale-bar'></span></div>
+  <div class='source'>Route geometry: TfL Unified API</div>
+</main>
+",
+  script: "
+const routes = JSON.parse(document.getElementById('data').textContent);
+const here = { name: 'Camden Town', lat: 51.5392, lon: -0.1426 };
+const lines = ['1', '24', '27', '29', '31', '88', '134', '214', '253', '274'];
+const hue = line => Math.round(20 + lines.indexOf(line) * 360 / lines.length) % 360;
+const svg = document.getElementById('map');
+const km = { lat: 110.574, lon: 111.32 * Math.cos(here.lat * Math.PI / 180) };
+
+const legend = document.getElementById('legend');
+for (const route of routes) {
+  const stops = route.stopPointSequences[0].stopPoint;
+  const chip = document.createElement('span');
+  chip.className = 'chip route';
+  chip.style.setProperty('--hue', hue(route.lineName));
+  chip.innerHTML = `<span class='swatch'></span><b></b><span></span>`;
+  chip.querySelector('b').textContent = route.lineName;
+  const short = name => name.split(' / ')[0];
+  chip.lastElementChild.textContent = `${short(stops[0].name)} → ${short(stops[stops.length - 1].name)}`;
+  legend.append(chip);
+}
+
+function draw() {
+  const { width, height } = svg.getBoundingClientRect();
+  const span = 2.6;
+  const scale = Math.min(width, height) / (2 * span);
+  const project = ([lon, lat]) => [
+    width / 2 + (lon - here.lon) * km.lon * scale,
+    height / 2 + 30 - (lat - here.lat) * km.lat * scale,
+  ];
+  const path = points => points.map((point, index) => `${index ? 'L' : 'M'}${project(point).map(n => n.toFixed(1)).join(',')}`).join('');
+  const dots = [];
+  for (let x = 12; x < width; x += 22) for (let y = 12; y < height; y += 22) dots.push(`M${x},${y}h.01`);
+  let markup = `<path class='dots' d='${dots.join('')}' stroke='currentColor' stroke-width='1.6' stroke-linecap='round'/>`;
+  for (const route of routes) {
+    const style = `style='--hue:${hue(route.lineName)}'`;
+    const shapes = route.lineStrings.flatMap(text => JSON.parse(text));
+    markup += `<g class='route' ${style}>${shapes.map(shape => `<path class='route-glow' d='${path(shape)}'/><path class='route-line' d='${path(shape)}'/>`).join('')}`;
+    markup += route.stopPointSequences[0].stopPoint.map(stop => {
+      const [x, y] = project([stop.lon, stop.lat]);
+      return x > -10 && x < width + 10 && y > -10 && y < height + 10 ? `<circle class='stop' cx='${x.toFixed(1)}' cy='${y.toFixed(1)}' r='2.6'/>` : '';
+    }).join('') + '</g>';
+  }
+  const [hx, hy] = project([here.lon, here.lat]);
+  const places = [['Kentish Town', 51.5503, -0.1403], ['Euston', 51.5282, -0.1337], ['Chalk Farm', 51.5441, -0.1538], ['King’s Cross', 51.5308, -0.1238], ['Regent’s Park', 51.5313, -0.1570]];
+  markup += places.map(([name, lat, lon]) => {
+    const [x, y] = project([lon, lat]);
+    return `<text class='minor' x='${x}' y='${y}' text-anchor='middle'>${name}</text>`;
+  }).join('');
+  markup += `<circle class='ring' cx='${hx}' cy='${hy}' r='9'/><circle class='here' cx='${hx}' cy='${hy}' r='5.5'/><text class='place' x='${hx + 12}' y='${hy + 4.5}'>${here.name}</text>`;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.innerHTML = markup;
+  document.getElementById('scale-bar').style.width = `${scale}px`;
+}
+draw();
+new ResizeObserver(draw).observe(svg);
+",
+  data: context.concat(["[", context.join(routes, ","), "]"])
+})
+
+let save = (name, bundle) -> {
+  match perform Artifact({name, bundle}) {
+    Ok(version) -> { version }
+    Error(reason) -> { !never(perform Abort(reason)) }
+  }
+}
+let weather_version = save("weather", weather)
+let map_version = save("map", map)
+let canvas = {origin: {x: 0, y: 0}, size: {x: 1000, y: 1000}}
+let items = [Artifact("departures"), Artifact("map"), Artifact("weather")]
+let _ = context.main_stack.show(context.main_stack.layout(items, canvas, 560))
+{weather: weather_version, map: map_version}

@@ -1,0 +1,167 @@
+// Live departures for the four bus stops at Camden Town Station
+let stops = ["490000036S", "490015041X", "490015041Y", "490015531T"]
+let arrivals = !list_fold(stops, [], (stop, responses) -> {
+  let path = context.concat(["/StopPoint/", stop, "/Arrivals"])
+  [context.network.text("api.tfl.gov.uk", path, None({})), ..responses]
+})
+
+let styles = "
+.app { height: 100vh; }
+.board { flex: 1; min-height: 0; overflow: auto; padding: 6px; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.board ol { list-style: none; margin: 0; padding: 0; }
+.departure { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 12px; transition: background-color 0.2s ease; }
+.departure:hover { background: var(--surface-raised); }
+.departure + .departure { border-top: 1px solid var(--border); border-top-left-radius: 0; border-top-right-radius: 0; }
+.where { min-width: 0; }
+.where strong { display: block; overflow: hidden; font-size: 15px; font-weight: 600; letter-spacing: -0.012em; text-overflow: ellipsis; white-space: nowrap; }
+.where span { display: block; overflow: hidden; color: var(--text-faint); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.eta { display: flex; align-items: baseline; justify-content: flex-end; gap: 3px; min-width: 64px; font-variant-numeric: tabular-nums; }
+.eta b { font-size: 22px; font-weight: 650; letter-spacing: -0.04em; }
+.eta small { color: var(--text-muted); font-size: 12px; font-weight: 500; }
+.eta.due { color: var(--positive); font-size: 14px; font-weight: 650; }
+.empty { padding: 40px 16px; color: var(--text-muted); text-align: center; }
+"
+
+let body = "
+<main class='app'>
+  <header class='header'>
+    <div>
+      <p class='eyebrow'><span class='live'></span>Live departures · TfL</p>
+      <h1 class='title'>Camden Town Station</h1>
+      <p class='subtitle tabular' id='summary'></p>
+    </div>
+    <button class='button' id='theme' type='button'>
+      <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'><circle cx='12' cy='12' r='4'/><path d='M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'/></svg>
+      <span>Light</span>
+    </button>
+  </header>
+  <nav class='chips' id='routes' aria-label='Routes'></nav>
+  <section class='card board' aria-label='Departures'><ol id='departures'></ol></section>
+  <footer class='footer'><span>Source: TfL Unified API · stops S, X, Y and T</span><span class='tabular' id='clock'></span></footer>
+</main>
+"
+
+let script = "
+const arrivals = JSON.parse(document.getElementById('data').textContent).flat();
+const london = { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' };
+const lines = [...new Set(arrivals.map(arrival => arrival.lineName))]
+  .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+const hues = new Map(lines.map((line, index) => [line, Math.round(20 + index * 360 / lines.length) % 360]));
+const selected = new Set();
+const list = document.getElementById('departures');
+const routes = document.getElementById('routes');
+
+function chip(label, line) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'chip route';
+  button.dataset.line = line || '';
+  if (line) {
+    button.style.setProperty('--hue', hues.get(line));
+    const swatch = document.createElement('span');
+    swatch.className = 'swatch';
+    button.append(swatch);
+  }
+  button.append(label);
+  button.addEventListener('click', () => {
+    if (!line) selected.clear();
+    else if (selected.has(line)) selected.delete(line);
+    else selected.add(line);
+    render();
+  });
+  routes.append(button);
+}
+chip('All routes');
+lines.forEach(line => chip(line, line));
+
+function seconds(arrival) {
+  return Math.round((Date.parse(arrival.expectedArrival) - Date.now()) / 1000);
+}
+
+function row(arrival) {
+  const item = document.createElement('li');
+  item.className = 'departure route fade-in';
+  item.style.setProperty('--hue', hues.get(arrival.lineName));
+  item.dataset.arrival = arrival.id;
+  item.dataset.line = arrival.lineName;
+  const badge = document.createElement('span');
+  badge.className = 'badge';
+  badge.textContent = arrival.lineName;
+  const where = document.createElement('div');
+  where.className = 'where';
+  const destination = document.createElement('strong');
+  destination.textContent = arrival.destinationName;
+  const detail = document.createElement('span');
+  const towards = (arrival.towards || arrival.destinationName).replaceAll(' Or ', ' or ');
+  detail.textContent = `Stop ${arrival.platformName} · towards ${towards}`;
+  where.append(destination, detail);
+  const eta = document.createElement('span');
+  eta.className = 'eta';
+  item.append(badge, where, eta);
+  return item;
+}
+
+const rows = new Map();
+function render() {
+  const now = Date.now();
+  for (const button of routes.children) {
+    const line = button.dataset.line;
+    button.setAttribute('aria-pressed', String(line ? selected.has(line) : selected.size === 0));
+  }
+  const upcoming = arrivals
+    .filter(arrival => seconds(arrival) > -30)
+    .filter(arrival => selected.size === 0 || selected.has(arrival.lineName))
+    .sort((a, b) => seconds(a) - seconds(b));
+  const keep = new Set(upcoming.map(arrival => arrival.id));
+  for (const [id, item] of rows) if (!keep.has(id)) { item.remove(); rows.delete(id); }
+  upcoming.forEach((arrival, index) => {
+    let item = rows.get(arrival.id);
+    if (!item) { item = row(arrival); rows.set(arrival.id, item); }
+    if (list.children[index] !== item) list.insertBefore(item, list.children[index] || null);
+    const left = seconds(arrival);
+    item.dataset.seconds = left;
+    const eta = item.querySelector('.eta');
+    if (left < 60) {
+      eta.className = 'eta due';
+      eta.textContent = 'Due';
+    } else {
+      eta.className = 'eta';
+      eta.innerHTML = '<b></b> <small>min</small>';
+      eta.querySelector('b').textContent = Math.floor(left / 60);
+    }
+  });
+  const shown = new Set(upcoming.map(arrival => arrival.lineName));
+  document.getElementById('summary').textContent =
+    `${upcoming.length} departures · ${shown.size} routes · updated ${new Date(Math.max(...arrivals.map(arrival => Date.parse(arrival.timestamp)))).toLocaleTimeString('en-GB', london)}`;
+  document.getElementById('clock').textContent = new Date(now).toLocaleTimeString('en-GB', { ...london, second: '2-digit' });
+}
+
+const theme = document.getElementById('theme');
+theme.addEventListener('click', () => {
+  const light = document.documentElement.dataset.theme !== 'light';
+  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  theme.querySelector('span').textContent = light ? 'Dark' : 'Light';
+});
+
+render();
+setInterval(render, 1000);
+"
+
+let bundle = context.studio.page({
+  title: "Camden Town Station departures",
+  theme: "dark",
+  styles,
+  body,
+  script,
+  data: context.concat(["[", context.join(arrivals, ","), "]"])
+})
+match perform Artifact({name: "departures", bundle}) {
+  Ok(version) -> {
+    let place = {item: Artifact("departures"), origin: {x: 0, y: 0}, size: {x: 1000, y: 1000}}
+    match perform Show(place) {
+      Ok(_) -> { {version, stops: 4} }
+      Error(reason) -> { !never(perform Abort(reason)) }
+    }
+  }
+  Error(reason) -> { !never(perform Abort(reason)) }
+}
