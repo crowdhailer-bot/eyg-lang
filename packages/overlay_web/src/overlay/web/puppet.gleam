@@ -9,6 +9,7 @@
 import eyg/analysis/type_/isomorphic as t
 import eyg/interpreter/cast
 import eyg/interpreter/value as v
+import gleam/bit_array
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/int
@@ -61,6 +62,7 @@ pub type Action {
   IsChecked
   IsEnabled
   Expect(Condition)
+  Screenshot
 }
 
 pub type Request {
@@ -79,6 +81,7 @@ pub type Reply {
   Number(Int)
   Flag(Bool)
   Missing
+  Image(BitArray)
 }
 
 pub const label = "Puppet"
@@ -131,6 +134,7 @@ pub fn effect() -> interface.Interface(Request, a) {
       #("IsChecked", t.unit),
       #("IsEnabled", t.unit),
       #("Expect", condition),
+      #("Screenshot", t.unit),
     ])
   let page =
     t.union([
@@ -145,6 +149,7 @@ pub fn effect() -> interface.Interface(Request, a) {
       #("Count", t.Integer),
       #("Flag", t.boolean),
       #("Missing", t.unit),
+      #("Image", t.Binary),
     ])
   interface.Interface(
     name: label,
@@ -240,6 +245,7 @@ fn decode_action(raw) {
     #("IsChecked", cast.as_unit(_, IsChecked)),
     #("IsEnabled", cast.as_unit(_, IsEnabled)),
     #("Expect", cast.map(decode_condition, Expect)),
+    #("Screenshot", cast.as_unit(_, Screenshot)),
   ])
 }
 
@@ -320,6 +326,7 @@ fn action_to_json(action) {
     IsEnabled -> tagged("is_enabled", [])
     Expect(condition) ->
       tagged("expect", [#("condition", condition_to_json(condition))])
+    Screenshot -> tagged("screenshot", [])
   }
 }
 
@@ -344,12 +351,26 @@ fn reply_decoder() {
       decode.field("value", decode.string, fn(reason) {
         decode.success(Error(reason))
       })
+    "image" ->
+      decode.field("value", decode.string, fn(url) {
+        case image(url) {
+          Ok(bytes) -> decode.success(Ok(Image(bytes)))
+          Error(Nil) -> decode.failure(Error("image"), "PNG data URL")
+        }
+      })
     _ -> decode.failure(Ok(Done), "reply type")
   }
 }
 
 fn ok(constructor) {
   fn(value) { decode.success(Ok(constructor(value))) }
+}
+
+fn image(url) {
+  case url {
+    "data:image/png;base64," <> encoded -> bit_array.base64_decode(encoded)
+    _ -> Error(Nil)
+  }
 }
 
 /// The value a program resumes with.
@@ -362,6 +383,7 @@ pub fn to_value(reply: Result(Reply, String)) -> v.Value(a, b) {
     Ok(Number(count)) -> v.ok(v.Tagged("Count", v.Integer(count)))
     Ok(Flag(flag)) -> v.ok(v.Tagged("Flag", v.bool(flag)))
     Ok(Missing) -> v.ok(v.Tagged("Missing", v.unit()))
+    Ok(Image(bytes)) -> v.ok(v.Tagged("Image", v.Binary(bytes)))
     Error(reason) -> v.error(v.String(reason))
   }
 }
@@ -420,6 +442,7 @@ These actions wait for exactly one visible element: Click({}), Fill(text), Press
 These wait for one element: TextContent({}), InnerText({}), InnerHtml({}), InputValue({}), GetAttribute(name).
 These return at once: Count({}), AllTextContents({}), IsVisible({}), IsChecked({}), IsEnabled({}).
 Expect(condition) retries until the timeout: ToHaveText(text), ToContainText(text), ToHaveCount(n), ToBeVisible({}), ToBeHidden({}), ToHaveValue(text), ToHaveAttribute({name, value}), ToBeChecked(True({})).
-Replies are Done({}), Text(text), Texts(list), Count(n), Flag(bool) or Missing({}).
+Replies are Done({}), Text(text), Texts(list), Count(n), Flag(bool), Missing({}) or Image(png).
+Screenshot({}) replies Image(png) of the locator or visible page, the latest screenshots are shown to you with the tool result.
 After creating an artifact, check it works and looks right with Puppet.
 "

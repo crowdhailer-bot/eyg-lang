@@ -136,7 +136,7 @@ pub fn save_before_async_effect_and_show_after_resuming_test() {
   let code =
     "let _ = perform Artifact({name: \"map\", bundle: [{path: \"index.html\", media_type: \"text/html\", content: !string_to_binary(\"map\")}]}) let _ = perform Alert(\"wait\") perform Show({item: Artifact(\"map\"),origin:{x:0,y:0},size:{x:1000,y:1000}})"
   let #(ctx, calls) = run(fresh(), code)
-  let assert [tools.Progress(call: tools.Handling(id, _, _), ..)] = calls
+  let assert [tools.Progress(call: tools.Handling(id, ..), ..)] = calls
   assert 1 == list.length(a.history(ctx.artifacts, "map"))
   let #(ctx, calls) = tools.effect_handled(ctx, calls, id, v.unit())
   let assert [tools.Progress(call: tools.Successful(_), ..)] = calls

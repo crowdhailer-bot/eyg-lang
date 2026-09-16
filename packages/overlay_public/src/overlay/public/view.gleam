@@ -187,7 +187,20 @@ fn render_chat(message: #(Int, chat.Message(tool.Call)), expanded) {
       ]
       |> list.reverse
     }
-    chat.ToolResultMessage(tool_call_id: _, text:, images: _) -> [
+    chat.ToolResultMessage(tool_call_id: _, text:, images:) -> [
+      case images {
+        [] -> element.none()
+        images ->
+          h.div(
+            [a.class("tool-images")],
+            list.map(images, fn(image) {
+              h.img([
+                a.src("data:image/png;base64," <> image),
+                a.alt("Screenshot taken by the agent"),
+              ])
+            }),
+          )
+      },
       case expand {
         True ->
           h.div(

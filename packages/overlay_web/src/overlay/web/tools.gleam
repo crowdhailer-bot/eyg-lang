@@ -55,13 +55,19 @@ pub type Call {
   Errored(List(#(Meta, error.Reason)))
   Exception(state.Reason(Meta))
   Aborted(String)
-  Handling(task_id: Int, env: state.Env(Meta), k: state.Stack(Meta))
+  // A screenshot is shown to the agent with the result of the tool call.
+  Handling(
+    task_id: Int,
+    env: state.Env(Meta),
+    k: state.Stack(Meta),
+    screenshot: Bool,
+  )
 }
 
-/// A tool call state and any output printed.
-/// Output is held most recent first.
+/// A tool call state and any output printed or screenshots taken.
+/// Output and images are held most recent first.
 pub type Progress {
-  Progress(id: String, output: List(String), call: Call)
+  Progress(id: String, output: List(String), images: List(BitArray), call: Call)
 }
 
 pub type Calls =
@@ -90,7 +96,7 @@ fn execute_single(ctx: Context, call: tool.Call) -> #(Context, Progress) {
                     source
                     |> execute(ctx.context)
                     |> loop(ctx, [])
-                  #(ctx, Progress(id:, output:, call:))
+                  #(ctx, Progress(id:, output:, images: [], call:))
                 }
                 errors -> {
                   let references = missing_references(errors)
@@ -231,7 +237,7 @@ pub fn to_fetch(
 }
 
 fn failed(id, call) {
-  Progress(id:, output: [], call:)
+  Progress(id:, output: [], images: [], call:)
 }
 
 fn cast_run(arguments) {
@@ -285,7 +291,7 @@ fn loop(
                 system.RequestFrame(
                   selector:,
                   message: puppet.to_json(request),
-                  // Allow for loading the preview.
+                  // Allow for loading the preview and rendering screenshots.
                   timeout: request.timeout + 5000,
                   resume: fn(reply) {
                     let reply = result.try(reply, puppet.reply)
@@ -294,7 +300,8 @@ fn loop(
                 )
               let effects = [effect, ..ctx.effects]
               let ctx = Context(..ctx, counter: id + 1, effects:)
-              #(ctx, output, Handling(id, env, k))
+              let screenshot = request.action == puppet.Screenshot
+              #(ctx, output, Handling(id, env, k, screenshot))
             }
             Error(reason) -> {
               let value = puppet.to_value(Error(reason))
@@ -318,7 +325,7 @@ fn loop(
                   let effect = system.map(effect, fn(v) { #(id, v) })
                   let effects = [effect, ..ctx.effects]
                   let ctx = Context(..ctx, counter: id + 1, effects:)
-                  #(ctx, output, Handling(id, env, k))
+                  #(ctx, output, Handling(id, env, k, False))
                 }
                 browser.Spotless(..) -> #(
                   ctx,
@@ -364,7 +371,7 @@ fn do_all_returns(
 ) -> Result(List(chat.Message(a)), Nil) {
   case calls {
     [] -> Ok(list.reverse(acc))
-    [Progress(id:, output:, call:), ..calls] -> {
+    [Progress(id:, output:, images:, call:), ..calls] -> {
       let message = case call {
         UnknownTool(name:) -> Ok("unknown tool: " <> name)
         BadArguments(reasons) -> Ok(string.inspect(reasons))
@@ -385,7 +392,7 @@ fn do_all_returns(
             chat.ToolResultMessage(
               tool_call_id: id,
               text: report(output, text),
-              images: [],
+              images: attached(images),
             )
           do_all_returns(calls, [message, ..acc])
         }
@@ -393,6 +400,13 @@ fn do_all_returns(
       }
     }
   }
+}
+
+/// The most recent screenshots, base64 encoded for the model to see.
+fn attached(images) {
+  list.take(images, 3)
+  |> list.reverse
+  |> list.map(bit_array.base64_encode(_, True))
 }
 
 /// Return everything printed before the final result of the tool call.
@@ -447,7 +461,7 @@ fn summarize_binaries(value: v.Value(a, b)) -> v.Value(a, b) {
 }
 
 pub fn pulled(ctx: Context, progress: Progress) -> #(Context, Progress) {
-  let Progress(id:, output:, call:) = progress
+  let Progress(id:, output:, images:, call:) = progress
 
   case call {
     Pulling(source) -> {
@@ -460,7 +474,7 @@ pub fn pulled(ctx: Context, progress: Progress) -> #(Context, Progress) {
             // output should always be empty going into this loop.
             // Maybe output should move into a running state of call
             |> loop(ctx, output)
-          #(ctx, Progress(id:, output:, call:))
+          #(ctx, Progress(id:, output:, images:, call:))
         }
         errors -> {
           // Don't check for needs pull here as we've aready done that.
@@ -488,7 +502,7 @@ pub fn check_fetching(
   ctx: Context,
   progress: Progress,
 ) -> #(Context, Progress) {
-  let Progress(id:, output:, call:) = progress
+  let Progress(id:, output:, images:, call:) = progress
   case call {
     Fetching(cids:, source:) -> {
       let cids = list.filter(cids, still_fetching(_, ctx.cache))
@@ -502,7 +516,7 @@ pub fn check_fetching(
                 // output should always be empty going into this loop.
                 // Maybe output should move into a running state of call
                 |> loop(ctx, output)
-              #(ctx, Progress(id:, output:, call:))
+              #(ctx, Progress(id:, output:, images:, call:))
             }
             errors -> #(ctx, failed(id, Errored(errors)))
           }
@@ -542,12 +556,19 @@ fn apply_effect(
   finished_id: Int,
   value: state.Value(Meta),
 ) {
-  let Progress(id:, output:, call:) = progress
+  let Progress(id:, output:, images:, call:) = progress
   case call {
-    Handling(task_id:, env:, k:) if task_id == finished_id -> {
+    Handling(task_id:, env:, k:, screenshot:) if task_id == finished_id -> {
+      let images = case screenshot, value {
+        True, v.Tagged("Ok", v.Tagged("Image", v.Binary(image))) -> [
+          image,
+          ..images
+        ]
+        _, _ -> images
+      }
       let #(ctx, output, call) =
         loop(expression.resume(value, env, k), ctx, output)
-      #(ctx, Progress(id:, output:, call:))
+      #(ctx, Progress(id:, output:, images:, call:))
     }
     _ -> #(ctx, progress)
   }
