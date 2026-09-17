@@ -179,4 +179,6 @@ pub fn criteria_are_reported_separately_and_together_test() {
   let text = calibration.markdown([polite, file, every])
   assert string.contains(text, "| is polite | 1 | 100% | 0% |")
   assert string.contains(text, "| every criterion | 2 | 50% | 0% |")
+  // Two labels are not a calibration, and the report says so.
+  assert string.contains(text, "Fewer than twenty trials decided a criterion")
 }

@@ -202,5 +202,16 @@ failed, the share it failed. Kappa is agreement beyond chance.
 | Criterion | Decided | You passed | You failed | Kappa | Unknown | Not judged |
 | --- | --- | --- | --- | --- | --- | --- |
 " <> string.join(rows, "\n") <> "
-"
+" <> caution(agreements)
+}
+
+/// Thirty trials is the usual advice, and a judge measured on five has not
+/// been measured.
+fn caution(agreements) {
+  case list.any(agreements, fn(agreement) { decided(agreement) < 20 }) {
+    False -> ""
+    True ->
+      "\nFewer than twenty trials decided a criterion here, which shows where"
+      <> " to look rather than how well the judge does. Grade more.\n"
+  }
 }
