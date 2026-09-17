@@ -1,0 +1,29 @@
+{
+  description: "Search the guides for access policies and explain how to restrict effects.",
+  tags: ["guides"],
+  prompts: [
+    "How can a script be allowed to fetch web pages but not write files? Show me how."
+  ],
+  checks: [
+    Fetches("/guides/effect-access-policies"),
+    Says("deny"),
+    Judged("The answer runs the script's work through an access policy from the overlay package that denies WriteFile while Fetch stays allowed, and shows the code for it.")
+  ],
+  reference: [
+    [
+      Run("match perform Fetch({method: GET({}), scheme: HTTPS({}), host: \"eyg.run\", port: None({}), path: \"/guides/effect-access-policies.md\", query: None({}), headers: [], body: !string_to_binary(\"\")}) {
+  Ok({body}) -> { !string_from_binary(body) }
+  Error(reason) -> { Error({}) }
+}"),
+      Say("Run the script with an access policy that allows everything except writing files:
+
+```eyg
+let access = @overlay.access
+let policy = {write_file: access.deny(\"writing files is not allowed\"), ..access.allow_all}
+access.apply(policy, (_) -> { my_script({}) })
+```
+
+Fetch is allowed and WriteFile returns an error.")
+    ]
+  ]
+}
