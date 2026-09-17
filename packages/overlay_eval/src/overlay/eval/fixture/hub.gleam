@@ -6,6 +6,7 @@
 
 import eyg/hub/publisher
 import eyg/ir/dag_json
+import eyg/ir/tree as ir
 import filepath
 import gleam/bit_array
 import gleam/dict.{type Dict}
@@ -14,7 +15,7 @@ import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/json
 import gleam/list
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
 import multiformats/cid/v1
@@ -49,8 +50,28 @@ pub fn publish(hub: Hub, package: String, loaded: module.Loaded) -> Hub {
   Hub(..add(hub, loaded), releases: list.append(hub.releases, [release]))
 }
 
+/// Pin package references to the hub's releases: a name to its latest
+/// release and a version to that release.
+pub fn resolve(hub: Hub) -> module.Resolve {
+  fn(package, version) {
+    let releases =
+      list.filter(hub.releases, fn(release) { release.package == package })
+    let release = case version {
+      None -> list.last(releases)
+      Some(version) ->
+        list.find(releases, fn(release) { release.version == version })
+    }
+    result.map(release, fn(release) {
+      ir.Release(package:, version: release.version, module: release.module)
+    })
+  }
+}
+
 /// Publish every package in a directory, a package is a directory with an
 /// `index.eyg` or `index.eyg.json` module named after the directory.
+///
+/// Packages are published after the packages they reference, and references
+/// are pinned to those releases, as `eyg share` pins them.
 pub fn publish_directory(hub: Hub, root: String) -> Result(Hub, String) {
   use names <- result.try(
     simplifile.read_directory(root)
@@ -58,25 +79,63 @@ pub fn publish_directory(hub: Hub, root: String) -> Result(Hub, String) {
       "unable to list " <> root <> ": " <> simplifile.describe_error(reason)
     }),
   )
-  list.sort(names, string.compare)
-  |> list.try_fold(hub, fn(hub, name) {
-    let directory = filepath.join(root, name)
-    let index = case simplifile.is_file(filepath.join(directory, "index.eyg")) {
-      Ok(True) -> Ok(filepath.join(directory, "index.eyg"))
-      _ ->
-        case simplifile.is_file(filepath.join(directory, "index.eyg.json")) {
-          Ok(True) -> Ok(filepath.join(directory, "index.eyg.json"))
-          _ -> Error(Nil)
+  use packages <- result.try(
+    list.sort(names, string.compare)
+    |> list.try_fold([], fn(packages, name) {
+      let directory = filepath.join(root, name)
+      case index(directory) {
+        Ok(path) -> {
+          use loaded <- result.map(module.load(path))
+          [#(name, path, module.packages(loaded)), ..packages]
         }
-    }
-    case index {
-      Ok(path) -> {
-        use loaded <- result.map(module.load(path))
-        publish(hub, name, loaded)
+        Error(Nil) -> Ok(packages)
       }
-      Error(Nil) -> Ok(hub)
+    })
+    |> result.map(list.reverse),
+  )
+  let names = list.map(packages, fn(package) { package.0 })
+  publish_in_order(hub, packages, names)
+}
+
+fn index(directory) {
+  case simplifile.is_file(filepath.join(directory, "index.eyg")) {
+    Ok(True) -> Ok(filepath.join(directory, "index.eyg"))
+    _ ->
+      case simplifile.is_file(filepath.join(directory, "index.eyg.json")) {
+        Ok(True) -> Ok(filepath.join(directory, "index.eyg.json"))
+        _ -> Error(Nil)
+      }
+  }
+}
+
+fn publish_in_order(hub: Hub, waiting, names) {
+  case waiting {
+    [] -> Ok(hub)
+    _ -> {
+      let published = list.map(hub.releases, fn(release) { release.package })
+      // A package is ready once every package it uses from this directory is out.
+      let ready = fn(package: #(String, String, List(String))) {
+        list.all(package.2, fn(used) {
+          used == package.0
+          || list.contains(published, used)
+          || !list.contains(names, used)
+        })
+      }
+      let #(next, rest) = case list.partition(waiting, ready) {
+        // Packages that use each other are published in name order.
+        #([], [first, ..rest]) -> #([first], rest)
+        split -> split
+      }
+      use hub <- result.try(
+        list.try_fold(next, hub, fn(hub, package) {
+          let #(name, path, _) = package
+          use loaded <- result.map(module.load_pinned(path, resolve(hub)))
+          publish(hub, name, loaded)
+        }),
+      )
+      publish_in_order(hub, rest, names)
     }
-  })
+  }
 }
 
 /// Answer a request if it is for the hub API.

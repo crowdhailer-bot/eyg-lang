@@ -1,9 +1,12 @@
 import eyg/hub/client
 import eyg/hub/publisher
 import eyg/ir/dag_json
+import eyg/ir/tree as ir
+import gleam/dict
 import gleam/json
 import gleam/list
-import gleam/option.{Some}
+import gleam/option.{None, Some}
+import multiformats/cid/v1
 import ogre/operation
 import ogre/origin
 import overlay/eval/fixture/hub
@@ -30,11 +33,12 @@ fn pull(hub, since) {
 
 pub fn directories_with_an_index_are_published_test() {
   let hub = fixture()
-  assert ["greeting", "numbers"]
+  // amplify uses greeting, so it is published after it.
+  assert ["greeting", "numbers", "amplify"]
     == list.map(hub.releases, fn(release) { release.package })
 
   let entries = pull(hub, 0)
-  assert [1, 2] == list.map(entries, fn(entry) { entry.cursor })
+  assert [1, 2, 3] == list.map(entries, fn(entry) { entry.cursor })
   let releases =
     list.map(entries, fn(entry) {
       let assert Ok(payload) = json.parse(entry.payload, publisher.decoder())
@@ -43,8 +47,9 @@ pub fn directories_with_an_index_are_published_test() {
   let assert [
     publisher.Release("greeting", 1, _),
     publisher.Release("numbers", 1, _),
+    publisher.Release("amplify", 1, _),
   ] = releases
-  assert [] == pull(hub, 2)
+  assert [] == pull(hub, 3)
 }
 
 pub fn modules_are_fetched_by_content_id_test() {
@@ -79,4 +84,25 @@ pub fn other_requests_are_not_for_the_hub_test() {
     operation.get("/guides/syntax.md")
     |> operation.to_request(origin.https("eyg.test"))
   assert Error(Nil) == hub.handle(hub.new(), request)
+}
+
+pub fn packages_are_published_after_the_packages_they_use_test() {
+  let hub = fixture()
+  let assert Ok(greeting) =
+    list.find(hub.releases, fn(release) { release.package == "greeting" })
+  let assert Ok(amplify) =
+    list.find(hub.releases, fn(release) { release.package == "amplify" })
+  let assert Ok(block) = dict.get(hub.blocks, v1.to_string(amplify.module))
+  let assert Ok(source) = json.parse_bits(block, dag_json.decoder(Nil))
+  assert [ir.Pinned(ir.Release("greeting", 1, greeting.module))]
+    == ir.list_references(source)
+}
+
+pub fn references_resolve_to_releases_test() {
+  let hub = fixture()
+  let resolve = hub.resolve(hub)
+  let assert Ok(ir.Release("numbers", 1, _)) = resolve("numbers", None)
+  let assert Ok(ir.Release("numbers", 1, _)) = resolve("numbers", Some(1))
+  assert Error(Nil) == resolve("numbers", Some(2))
+  assert Error(Nil) == resolve("missing", None)
 }

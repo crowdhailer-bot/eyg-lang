@@ -185,11 +185,16 @@ pub fn environment(root: String) -> Result(Environment, String) {
   ])
 }
 
-fn context(path: String) -> Result(#(session.Context, String), String) {
+fn context(
+  environment: Environment,
+  path: String,
+) -> Result(#(session.Context, String), String) {
   case path {
     "none" -> Ok(#(session.NoContext, "none"))
     _ -> {
-      use loaded <- result.map(module.load(path))
+      // Contexts are shared with their packages pinned, as `eyg share` does.
+      let resolve = hub.resolve(environment.hub)
+      use loaded <- result.map(module.load_pinned(path, resolve))
       #(session.Module(loaded), path)
     }
   }
@@ -199,7 +204,9 @@ fn prepare(suite_path: String, options: Options) {
   use environment <- result.try(environment(options.root))
   use suite <- result.try(suite.load(suite_path, environment.hub))
   let suite = suite.tagged(suite, list.reverse(options.tags))
-  use contexts <- result.map(list.try_map(options.contexts, context))
+  use contexts <- result.map(
+    list.try_map(options.contexts, context(environment, _)),
+  )
   #(environment, suite, contexts)
 }
 
