@@ -11,6 +11,7 @@ let index = [
   {slug: "file-resolution", title: "File resolution", summary: "How relative paths and imports resolve.", keywords: "path relative import resolve directory"},
   {slug: "effect-access-policies", title: "Effect access policies", summary: "Allow, mock or deny effects for a function with access policies.", keywords: "access policy permission allow deny mock sandbox security"},
   {slug: "writing-tests-with-aok", title: "Writing tests with aok", summary: "Write and run tests for EYG packages.", keywords: "test tests assert aok"},
+  {slug: "evaluating-overlay-agents", title: "Evaluating Overlay agents", summary: "Write and run evals for Overlay agents and the contexts they work in.", keywords: "eval evals evaluate benchmark grade judge task check context measure"},
   {slug: "embedding-eyg-in-gleam-programs", title: "Embedding EYG in Gleam programs", summary: "Run EYG from Gleam and give programs effects.", keywords: "gleam embed interpreter host effects"},
   {slug: "managing-signatories", title: "Managing signatories", summary: "Create and protect identities for publishing packages.", keywords: "publish signatory identity key package release"},
   {slug: "install-a-prebuilt-binary", title: "Install a prebuilt binary", summary: "Install the eyg CLI.", keywords: "install cli binary download"},
