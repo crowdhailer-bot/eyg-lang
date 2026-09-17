@@ -1,0 +1,80 @@
+let {assert} = import "../aok/index.eyg"
+let context = import "./index.eyg"
+let search = import "./search.eyg"
+
+let names = (found) -> { search.map(found, (library) -> { library.name }) }
+let slugs = (found) -> { search.map(found, (guide) -> { guide.slug }) }
+
+let serve = (status, text) -> {
+  (request, resume) -> {
+    let _ = assert.equal_string("eyg.run", request.host)
+    resume(Ok({status, headers: [], body: !string_to_binary(text), path: request.path}))
+  }
+}
+
+[
+  {name: "words are lowercase and split on punctuation",
+   test: (_) -> { assert.equal(search.words("Parse JSON, then @http!"), ["parse", "json", "then", "http"]) }},
+  {name: "single letters and common words are not words",
+   test: (_) -> { assert.equal(search.words("how do I read a file"), ["read", "file"]) }},
+  {name: "score counts query words that start a word of the text",
+   test: (_) -> { assert.equal(search.score("Parse JSON files", ["json", "file", "par", "arse"]), 3) }},
+  {name: "rank orders by score and keeps the earlier item on a tie",
+   test: (_) -> {
+     let items = [{name: "a", text: "one"}, {name: "b", text: "one two"}, {name: "c", text: "one"}]
+     let found = search.rank(items, (item) -> { item.text }, "one two", 3)
+     assert.equal(search.map(found, (item) -> { item.name }), ["b", "a", "c"])
+   }},
+  {name: "rank leaves out items without a match and keeps to the limit",
+   test: (_) -> {
+     let items = [{text: "one"}, {text: "two"}, {text: "one two"}]
+     let found = search.rank(items, (item) -> { item.text }, "two", 1)
+     assert.equal(found, [{text: "two"}])
+   }},
+  {name: "json is found for parsing an api response",
+   test: (_) -> {
+     let found = names(context.libraries.search("parse the JSON body of an api response"))
+     assert.equal(found, ["json", "http"])
+   }},
+  {name: "edit is found for replacing text in a file",
+   test: (_) -> {
+     let {head} = assert.ok(!list_pop(context.libraries.search("replace text in a file")))
+     assert.equal_string("edit", head.name)
+   }},
+  {name: "access policies are found for denying file writes",
+   test: (_) -> {
+     let {head} = assert.ok(!list_pop(context.libraries.search("deny file writes with a policy")))
+     assert.equal_string("overlay", head.name)
+   }},
+  {name: "nothing is found for an unrelated query",
+   test: (_) -> { assert.equal(context.libraries.search("zebra"), []) }},
+  {name: "the syntax guide is found for match expressions",
+   test: (_) -> {
+     let {head} = assert.ok(!list_pop(context.guides.search("how do I write a match expression")))
+     assert.equal_string("eyg-syntax-guide", head.slug)
+   }},
+  {name: "the effects reference is found for reading files on the cli",
+   test: (_) -> {
+     let {head} = assert.ok(!list_pop(context.guides.search("read a file with the cli")))
+     assert.equal_string("cli-effects-reference", head.slug)
+   }},
+  {name: "guides are read from eyg.run",
+   test: (_) -> {
+     let result = handle Fetch(serve(200, "# JSON"), (_) -> { context.guides.read("json") })
+     assert.equal(result, Ok("# JSON"))
+   }},
+  {name: "a missing guide is an error",
+   test: (_) -> {
+     let result = handle Fetch(serve(404, "Not found"), (_) -> { context.guides.read("nope") })
+     assert.equal(result, Error("no guide with the slug nope"))
+   }},
+  {name: "every library has an example and every guide a summary",
+   test: (_) -> {
+     let _ = !list_fold(context.libraries.all, {}, (library, _) -> {
+       assert.false(!equal(library.example, ""))
+     })
+     !list_fold(context.guides.all, {}, (guide, _) -> {
+       assert.false(!equal(guide.summary, ""))
+     })
+   }}
+]
