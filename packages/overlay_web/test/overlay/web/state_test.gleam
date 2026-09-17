@@ -1,5 +1,6 @@
 import eyg/hub/cache
 import eyg/hub/publisher
+import eyg/interpreter/value as v
 import eyg/ir/dag_json
 import eyg/ir/tree as ir
 import gleam/bit_array
@@ -261,6 +262,26 @@ pub fn eval_aborted_test() {
   let assert Ok([_system, _agent_message, message]) =
     json.parse_bits(request.body, helpers.ollama_messages_decoder())
   assert #("tool", "STOP") == message
+}
+
+pub fn finished_runs_keep_computed_values_test() {
+  let status =
+    chat_completion("")
+    |> with_code("first", "!int_add(2, 3)")
+    |> with_code("second", "perform Alert(\"Hello World\")")
+    |> streaming
+  let state = State(..init_default(), status:)
+  let #(state, actions) = state.update(state, state.LlmStreamFinished(Ok(Nil)))
+  // Nothing is kept until every call of the completion has finished.
+  assert [] == state.runs
+  let assert [system.Alert("Hello World", resume:)] = actions
+  let assert system.Done(message) = resume()
+  let #(state, _actions) = state.update(state, message)
+  let assert [second, first] = state.runs
+  assert "first" == first.id
+  assert tools.Successful(v.Integer(5)) == first.call
+  assert "second" == second.id
+  assert tools.Successful(v.unit()) == second.call
 }
 
 pub fn side_effect_test() {
