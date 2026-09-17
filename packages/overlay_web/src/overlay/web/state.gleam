@@ -445,11 +445,11 @@ This environment has the following effects
     |> list.map(fn(effect) {
       let #(name, #(lift_type, lower_type)) = effect
 
-      "-"
+      "- "
       <> name
       <> "("
       <> t_debug.mono(lift_type)
-      <> "_ -> "
+      <> ") -> "
       <> t_debug.mono(lower_type)
     })
     |> string.join("\n"),

@@ -323,6 +323,14 @@ pub fn file_effects_need_a_workspace_test() {
   assert !string.contains(prompt, "ReadFile")
 }
 
+pub fn system_prompt_lists_effect_types_test() {
+  let #(_state, actions) = submit_first_prompt("hello")
+  let assert [system.FetchStreamResponse(request:, resume: _)] = actions
+  let assert Ok([#("system", prompt), ..]) =
+    json.parse_bits(request.body, helpers.ollama_messages_decoder())
+  assert string.contains(prompt, "\n- Alert(String) -> {}\n")
+}
+
 pub fn side_effect_test() {
   let id = "abc"
   let code = "perform Alert(\"Hello World\")"
