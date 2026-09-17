@@ -54,3 +54,14 @@ The freshness of a context is a unit test, not an eval: every package the
 librarian lists is published, every guide on the site is in its index and every
 slug in its index is on the site, and every path on the maintainer's source map
 exists. Spend the eval on whether an agent given the context does better work.
+
+## Still to do
+
+- **Tokens and cost per trial.** A report counts model calls, which is a proxy.
+  Ollama and Mistral both report usage on the last chunk of a stream, and a
+  context is paid for on every request, so what a context costs belongs next to
+  what it gains.
+- **Trials in parallel**, once there is a way to stay inside a provider's rate
+  limit.
+- **A budget for a whole run.** `--timeout` bounds one stalled request. A run
+  across a matrix of models has no ceiling on its own.
