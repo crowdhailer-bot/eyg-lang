@@ -9,6 +9,7 @@ import eyg/ir/dag_json
 import eyg/ir/tree as ir
 import eyg/parser
 import filepath
+import gleam/bit_array
 import gleam/crypto
 import gleam/dict.{type Dict}
 import gleam/json
@@ -24,18 +25,33 @@ pub type Loaded {
   Loaded(cid: v1.Cid, blocks: Dict(String, BitArray))
 }
 
-/// Load the module at a path.
+/// Load the module at a path on disk.
 pub fn load(path: String) -> Result(Loaded, String) {
-  use #(cid, blocks, _paths) <- result.map(do_load(
-    expand(path),
-    [],
-    dict.new(),
-    dict.new(),
-  ))
-  Loaded(cid:, blocks:)
+  load_with(expand(path), disk)
 }
 
-/// Load a module from source, relative imports resolve from `directory`.
+/// Load a module from files held in memory, such as a workspace. Paths are
+/// relative to the root of the files.
+pub fn load_from(
+  files: List(#(String, BitArray)),
+  path: String,
+) -> Result(Loaded, String) {
+  let read = fn(path) {
+    let path = case path {
+      "/" <> path -> path
+      path -> path
+    }
+    case list.key_find(files, path) {
+      Ok(contents) ->
+        bit_array.to_string(contents)
+        |> result.replace_error(path <> " is not text")
+      Error(Nil) -> Error("there is no file at " <> path)
+    }
+  }
+  load_with("/" <> expand(path), read)
+}
+
+/// Load a module from source, relative imports resolve from `directory` on disk.
 pub fn from_source(code: String, directory: String) -> Result(Loaded, String) {
   use source <- result.try(parse(code, "source"))
   use #(cid, blocks, _paths) <- result.map(store(
@@ -44,6 +60,7 @@ pub fn from_source(code: String, directory: String) -> Result(Loaded, String) {
     [],
     dict.new(),
     dict.new(),
+    disk,
   ))
   Loaded(cid:, blocks:)
 }
@@ -53,24 +70,37 @@ pub fn cid(source: ir.Node(a)) -> v1.Cid {
   cid.from_tree(source, sha256)(fn(cid) { cid })
 }
 
-fn do_load(path, visited, blocks, paths) {
+fn load_with(path, read) {
+  use #(cid, blocks, _paths) <- result.map(do_load(
+    path,
+    [],
+    dict.new(),
+    dict.new(),
+    read,
+  ))
+  Loaded(cid:, blocks:)
+}
+
+fn disk(path) {
+  simplifile.read(path)
+  |> result.map_error(fn(reason) {
+    "unable to read " <> path <> ": " <> simplifile.describe_error(reason)
+  })
+}
+
+fn do_load(path, visited, blocks, paths, read) {
   case list.contains(visited, path) {
     True -> Error("import cycle through " <> path)
     False -> {
-      use code <- result.try(
-        simplifile.read(path)
-        |> result.map_error(fn(reason) {
-          "unable to read " <> path <> ": " <> simplifile.describe_error(reason)
-        }),
-      )
+      use code <- result.try(read(path))
       use source <- result.try(parse(code, path))
       let directory = filepath.directory_name(path)
-      store(source, directory, [path, ..visited], blocks, paths)
+      store(source, directory, [path, ..visited], blocks, paths, read)
     }
   }
 }
 
-fn store(source, directory, visited, blocks, paths) {
+fn store(source, directory, visited, blocks, paths, read) {
   let locations =
     ir.list_references(source)
     |> list.filter_map(fn(reference) {
@@ -92,6 +122,7 @@ fn store(source, directory, visited, blocks, paths) {
             visited,
             blocks,
             paths,
+            read,
           ))
           let paths = dict.insert(paths, path, cid)
           #(dict.insert(mapping, location, cid), blocks, paths)

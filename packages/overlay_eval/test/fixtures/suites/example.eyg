@@ -8,6 +8,8 @@
   },
   greet: import "./greet.eyg",
   note: import "./note.eyg",
+  project: import "./project.eyg",
+  quiet: import "./quiet.eyg",
   fact: {
     description: "Fetch a fact",
     prompts: ["Tell me a cat fact"],

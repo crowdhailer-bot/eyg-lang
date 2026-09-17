@@ -60,6 +60,15 @@ pub type Check {
   FileContains(path: String, text: String)
   // The workspace ends without a file at this path.
   NoFile(path: String)
+  // A file of the workspace is a module with a value this EYG function returns
+  // True for.
+  FileSatisfies(path: String, description: String, predicate: Value)
+  // A file in this directory of the workspace contains this text.
+  AnyFileContains(directory: String, text: String)
+  // No file in this directory of the workspace contains this text.
+  NoFileContains(directory: String, text: String)
+  // The workspace ends exactly as it started.
+  WorkspaceUnchanged
   // A model judges that the transcript meets the criterion.
   Judged(criterion: String)
 }
@@ -79,6 +88,13 @@ pub fn describe(check: Check) -> String {
     FileContains(path:, text:) ->
       "leaves " <> path <> " containing \"" <> text <> "\""
     NoFile(path:) -> "leaves no file at " <> path
+    FileSatisfies(path:, description:, ..) ->
+      "leaves " <> path <> " with a value that " <> description
+    AnyFileContains(directory:, text:) ->
+      "leaves a file in " <> directory <> " containing \"" <> text <> "\""
+    NoFileContains(directory:, text:) ->
+      "leaves no file in " <> directory <> " containing \"" <> text <> "\""
+    WorkspaceUnchanged -> "leaves the workspace unchanged"
     Judged(criterion:) -> "judged: " <> criterion
   }
 }
@@ -216,6 +232,27 @@ fn check(value) {
       Ok(FileContains(path:, text:))
     }),
     #("NoFile", fn(value) { result.map(cast.as_string(value), NoFile) }),
+    #("FileSatisfies", fn(value) {
+      use path <- result.try(cast.field("path", cast.as_string, value))
+      use description <- result.try(cast.field(
+        "description",
+        cast.as_string,
+        value,
+      ))
+      use predicate <- result.try(cast.field("check", Ok, value))
+      Ok(FileSatisfies(path:, description:, predicate:))
+    }),
+    #("AnyFileContains", fn(value) {
+      use directory <- result.try(cast.field("directory", cast.as_string, value))
+      use text <- result.try(cast.field("text", cast.as_string, value))
+      Ok(AnyFileContains(directory:, text:))
+    }),
+    #("NoFileContains", fn(value) {
+      use directory <- result.try(cast.field("directory", cast.as_string, value))
+      use text <- result.try(cast.field("text", cast.as_string, value))
+      Ok(NoFileContains(directory:, text:))
+    }),
+    #("WorkspaceUnchanged", fn(_) { Ok(WorkspaceUnchanged) }),
     #("Judged", fn(value) { result.map(cast.as_string(value), Judged) }),
   ])
 }

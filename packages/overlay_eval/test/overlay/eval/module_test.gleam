@@ -44,3 +44,14 @@ pub fn missing_and_cyclic_imports_fail_test() {
   let assert Error(reason) = module.load("test/fixtures/cycle/a.eyg")
   assert string.starts_with(reason, "import cycle through ")
 }
+
+pub fn workspace_modules_load_from_memory_test() {
+  let files = [
+    #("src/greet.eyg", <<"let w = import \"./words.eyg\" w.hello">>),
+    #("src/words.eyg", <<"{hello: \"Hello\"}">>),
+  ]
+  let assert Ok(loaded) = module.load_from(files, "src/greet.eyg")
+  assert 2 == dict.size(loaded.blocks)
+  let assert Error(reason) = module.load_from(files, "src/missing.eyg")
+  assert string.contains(reason, "there is no file at src/missing.eyg")
+}

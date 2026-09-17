@@ -68,7 +68,7 @@ pub fn run(
     |> duration.to_seconds
     |> fn(seconds) { seconds *. 1000.0 }
     |> float.truncate
-  use graded <- promise.map(grade.task(task, transcript, judge))
+  use graded <- promise.map(grade.task(task, transcript, environment.hub, judge))
   Trial(
     task: task.name,
     number:,

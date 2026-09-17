@@ -68,6 +68,10 @@ pub fn runs_have_every_trial_in_order_test() {
       #("greet", 2),
       #("note", 1),
       #("note", 2),
+      #("project", 1),
+      #("project", 2),
+      #("quiet", 1),
+      #("quiet", 2),
     ]
     == list.map(oracle.trials, fn(trial) { #(trial.task, trial.number) })
 }
@@ -77,7 +81,7 @@ pub fn summaries_estimate_pass_rates_by_task_test() {
   let passed = summary.summarise(oracle)
   assert 1.0 == passed.rate.mean
   assert 0.0 == passed.rate.standard_error
-  assert 4 == passed.rate.samples
+  assert 6 == passed.rate.samples
   let assert [add, ..] = passed.tasks
   assert 2 == add.passes
   assert 1.0 == add.pass_power_k
@@ -85,14 +89,19 @@ pub fn summaries_estimate_pass_rates_by_task_test() {
 
   let failed = summary.summarise(null)
   assert 0.0 == failed.rate.mean
-  let assert [#("arithmetic", _), #("libraries", _), #("notes", _)] =
-    failed.tags
+  let assert [
+    #("arithmetic", _),
+    #("libraries", _),
+    #("notes", _),
+    #("workspace", _),
+  ] = failed.tags
   // Checks that failed in both trials are counted twice.
   let assert [summary.Failure(count: 2, ..), ..] = failed.failures
 
   let comparison = summary.compare(passed, failed)
   assert 1.0 == comparison.difference.mean
-  assert ["add", "fact", "greet", "note"] == comparison.improved
+  assert ["add", "fact", "greet", "note", "project", "quiet"]
+    == comparison.improved
   assert [] == comparison.regressed
 }
 

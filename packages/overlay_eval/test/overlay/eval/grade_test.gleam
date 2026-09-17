@@ -34,7 +34,7 @@ fn find(suite: suite.Suite, name) {
 pub fn suites_decode_tasks_in_name_order_test() {
   let #(_, suite, _) = fixtures()
   assert "example" == suite.name
-  assert ["add", "fact", "greet", "note"]
+  assert ["add", "fact", "greet", "note", "project", "quiet"]
     == list.map(suite.tasks, fn(task) { task.name })
 
   let add = find(suite, "add")

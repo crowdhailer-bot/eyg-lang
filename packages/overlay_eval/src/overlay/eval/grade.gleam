@@ -17,8 +17,10 @@ import gleam/result
 import gleam/string
 import midas/continuation
 import overlay/eval/evaluate
+import overlay/eval/fixture/hub.{type Hub}
 import overlay/eval/judge
 import overlay/eval/model.{type Model}
+import overlay/eval/module
 import overlay/eval/task.{type Check, type Task}
 import overlay/eval/transcript.{type Transcript}
 
@@ -37,11 +39,12 @@ pub type Graded {
 pub fn task(
   task: Task,
   transcript: Transcript,
+  hub: Hub,
   judge: Option(Model),
 ) -> Promise(List(Graded)) {
   list.fold(task.checks, promise.resolve([]), fn(done, check) {
     use done <- promise.await(done)
-    use verdict <- promise.map(check_with(check, transcript, judge))
+    use verdict <- promise.map(check_with(task, check, transcript, hub, judge))
     list.append(done, [Graded(check:, verdict:)])
   })
 }
@@ -74,8 +77,10 @@ pub fn score(graded: List(Graded)) -> Float {
 }
 
 fn check_with(
+  task: Task,
   check: Check,
   transcript: Transcript,
+  hub: Hub,
   judge: Option(Model),
 ) -> Promise(Verdict) {
   case check, judge {
@@ -90,12 +95,17 @@ fn check_with(
     }
     task.Judged(..), None ->
       promise.resolve(Unknown("no judge was given for judged checks"))
-    _, _ -> promise.resolve(deterministic(check, transcript))
+    _, _ -> promise.resolve(deterministic(task, check, transcript, hub))
   }
 }
 
 /// Grade a check without a model, judged checks are unknown.
-pub fn deterministic(check: Check, transcript: Transcript) -> Verdict {
+pub fn deterministic(
+  task: Task,
+  check: Check,
+  transcript: Transcript,
+  hub: Hub,
+) -> Verdict {
   let runs =
     list.index_map(transcript.runs(transcript), fn(run, i) { #(i + 1, run) })
   case check {
@@ -253,8 +263,93 @@ pub fn deterministic(check: Check, transcript: Transcript) -> Verdict {
             Error(Nil) -> Pass("there is no file at " <> path)
           }
       }
+    task.FileSatisfies(path:, description:, predicate:) ->
+      case transcript.workspace {
+        None -> Fail("the session had no workspace")
+        Some(files) -> {
+          let accepted = {
+            use loaded <- result.try(module.load_from(files, path))
+            use value <- result.try(evaluate.module(loaded, hub))
+            evaluate.call(predicate, value)
+          }
+          case accepted {
+            Ok(v.Tagged("True", _)) ->
+              Pass(path <> " has a value that " <> description)
+            Ok(_) -> Fail(path <> " does not have a value that " <> description)
+            Error(reason) -> Fail(path <> " could not be evaluated: " <> reason)
+          }
+        }
+      }
+    task.AnyFileContains(directory:, text:) ->
+      case transcript.workspace {
+        None -> Fail("the session had no workspace")
+        Some(files) ->
+          case list.find(in_directory(files, directory), contains(_, text)) {
+            Ok(#(path, _)) -> Pass(path <> " contains \"" <> text <> "\"")
+            Error(Nil) ->
+              Fail("no file in " <> directory <> " contains \"" <> text <> "\"")
+          }
+      }
+    task.NoFileContains(directory:, text:) ->
+      case transcript.workspace {
+        None -> Fail("the session had no workspace")
+        Some(files) ->
+          case list.find(in_directory(files, directory), contains(_, text)) {
+            Ok(#(path, _)) -> Fail(path <> " contains \"" <> text <> "\"")
+            Error(Nil) ->
+              Pass("no file in " <> directory <> " contains \"" <> text <> "\"")
+          }
+      }
+    task.WorkspaceUnchanged ->
+      case transcript.workspace, task.workspace {
+        Some(after), Some(before) ->
+          case
+            after == list.sort(before, fn(a, b) { string.compare(a.0, b.0) })
+          {
+            True -> Pass("the workspace is unchanged")
+            False -> Fail("the workspace changed: " <> changes(before, after))
+          }
+        _, _ -> Fail("the session had no workspace")
+      }
     task.Judged(..) -> Unknown("judged checks need a model")
   }
+}
+
+fn in_directory(files: List(#(String, BitArray)), directory: String) {
+  let prefix = case string.ends_with(directory, "/") {
+    True -> directory
+    False -> directory <> "/"
+  }
+  list.filter(files, fn(file) { string.starts_with(file.0, prefix) })
+}
+
+fn contains(file: #(String, BitArray), text) {
+  case bit_array.to_string(file.1) {
+    Ok(contents) -> string.contains(contents, text)
+    Error(Nil) -> False
+  }
+}
+
+fn changes(
+  before: List(#(String, BitArray)),
+  after: List(#(String, BitArray)),
+) {
+  let added =
+    list.filter_map(after, fn(file) {
+      case list.key_find(before, file.0) {
+        Error(Nil) -> Ok("added " <> file.0)
+        Ok(contents) if contents != file.1 -> Ok("changed " <> file.0)
+        Ok(_) -> Error(Nil)
+      }
+    })
+  let removed =
+    list.filter_map(before, fn(file) {
+      case list.key_find(after, file.0) {
+        Error(Nil) -> Ok("removed " <> file.0)
+        Ok(_) -> Error(Nil)
+      }
+    })
+  string.join(list.append(added, removed), ", ")
 }
 
 fn find_computed(
