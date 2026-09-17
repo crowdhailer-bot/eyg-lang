@@ -26,6 +26,7 @@ javascript_mutable_reference = ">= 1.0.0 and < 2.0.0"
 midas = ">= 3.0.0 and < 4.0.0"
 multiformats = ">= 4.0.0 and < 5.0.0"
 oas_generator_utils = ">= 1.1.0 and < 2.0.0"
+shellout = ">= 1.8.0 and < 2.0.0"
 ogre = ">= 1.1.0 and < 2.0.0"
 overlay_llm = ">= 0.2.0 and < 1.0.0"
 overlay_web = { path = "../overlay_web" }

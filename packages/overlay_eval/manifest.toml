@@ -43,6 +43,7 @@ packages = [
   { name = "overlay_web", version = "0.0.0", build_tools = ["gleam"], requirements = ["castor", "eyg_analysis", "eyg_hub", "eyg_interpreter", "eyg_ir", "eyg_parser", "gleam_fetch", "gleam_http", "gleam_javascript", "gleam_json", "gleam_stdlib", "javascript_mutable_reference", "midas", "multiformats", "oas_generator_utils", "ogre", "overlay_llm", "pal", "spotless", "touch_grass", "untethered"], source = "local", path = "../overlay_web" },
   { name = "pal", version = "0.0.0", build_tools = ["gleam"], requirements = ["eyg_analysis", "eyg_hub", "eyg_interpreter", "eyg_ir", "gleam_crypto", "gleam_fetch", "gleam_http", "gleam_javascript", "gleam_json", "gleam_stdlib", "gleam_x", "midas", "multiformats", "ogre", "plinth", "spotless", "touch_grass", "untethered"], source = "local", path = "../pal" },
   { name = "plinth", version = "0.11.0", build_tools = ["gleam"], requirements = ["gleam_javascript", "gleam_json", "gleam_stdlib"], otp_app = "plinth", source = "hex", outer_checksum = "D30FDE8FC11EB76538AB498ACFF5399D0AE27993C74D63BE05AFE8CE80C4C839" },
+  { name = "shellout", version = "1.8.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "shellout", source = "hex", outer_checksum = "C416356D45151F298108C9DB9CD1EDE0313F620B5EDBB5766CD7237659D87841" },
   { name = "simplifile", version = "2.7.0", build_tools = ["gleam"], requirements = ["filepath", "gleam_stdlib"], otp_app = "simplifile", source = "hex", outer_checksum = "A2727627B063E87351934C7F7F008F2D1FDB16F6DE0B8C79F9E46459CFC9C164" },
   { name = "snag", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "snag", source = "hex", outer_checksum = "274F41D6C3ECF99F7686FDCE54183333E41D2C1CA5A3A673F9A8B2C7A4401077" },
   { name = "spotless", version = "7.0.0", build_tools = ["gleam"], requirements = ["gleam_http", "gleam_json", "gleam_stdlib", "midas", "non_empty_list", "ogre", "snag"], otp_app = "spotless", source = "hex", outer_checksum = "8AB2D5A26D6393F76343743019AEE0DDC2D3210F5650150E8BBA899C71FA09F8" },
@@ -75,6 +76,7 @@ ogre = { version = ">= 1.1.0 and < 2.0.0" }
 overlay_llm = { version = ">= 0.2.0 and < 1.0.0" }
 overlay_web = { path = "../overlay_web" }
 pal = { path = "../pal" }
+shellout = { version = ">= 1.8.0 and < 2.0.0" }
 simplifile = { version = ">= 2.4.0 and < 3.0.0" }
 touch_grass = { version = ">= 0.2.11 and < 1.0.0" }
 untethered = { path = "../untethered" }
