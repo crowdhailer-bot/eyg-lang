@@ -1,0 +1,159 @@
+//// Local EYG modules as a hub stores them.
+////
+//// Relative imports are replaced by the content id of the module they import,
+//// as `eyg share` does, so a module and everything it imports can be served
+//// by a hub fixture and referenced by content id.
+
+import eyg/ir/cid
+import eyg/ir/dag_json
+import eyg/ir/tree as ir
+import eyg/parser
+import filepath
+import gleam/crypto
+import gleam/dict.{type Dict}
+import gleam/json
+import gleam/list
+import gleam/result
+import gleam/string
+import midas/continuation
+import multiformats/cid/v1
+import simplifile
+
+/// A module and every module it imports, stored as dag-json blocks by content id.
+pub type Loaded {
+  Loaded(cid: v1.Cid, blocks: Dict(String, BitArray))
+}
+
+/// Load the module at a path.
+pub fn load(path: String) -> Result(Loaded, String) {
+  use #(cid, blocks, _paths) <- result.map(do_load(
+    expand(path),
+    [],
+    dict.new(),
+    dict.new(),
+  ))
+  Loaded(cid:, blocks:)
+}
+
+/// Load a module from source, relative imports resolve from `directory`.
+pub fn from_source(code: String, directory: String) -> Result(Loaded, String) {
+  use source <- result.try(parse(code, "source"))
+  use #(cid, blocks, _paths) <- result.map(store(
+    source,
+    expand(directory),
+    [],
+    dict.new(),
+    dict.new(),
+  ))
+  Loaded(cid:, blocks:)
+}
+
+/// The content id of a module tree.
+pub fn cid(source: ir.Node(a)) -> v1.Cid {
+  cid.from_tree(source, sha256)(fn(cid) { cid })
+}
+
+fn do_load(path, visited, blocks, paths) {
+  case list.contains(visited, path) {
+    True -> Error("import cycle through " <> path)
+    False -> {
+      use code <- result.try(
+        simplifile.read(path)
+        |> result.map_error(fn(reason) {
+          "unable to read " <> path <> ": " <> simplifile.describe_error(reason)
+        }),
+      )
+      use source <- result.try(parse(code, path))
+      let directory = filepath.directory_name(path)
+      store(source, directory, [path, ..visited], blocks, paths)
+    }
+  }
+}
+
+fn store(source, directory, visited, blocks, paths) {
+  let locations =
+    ir.list_references(source)
+    |> list.filter_map(fn(reference) {
+      case reference {
+        ir.Relative(location:) -> Ok(location)
+        _ -> Error(Nil)
+      }
+    })
+    |> list.unique
+  use #(mapping, blocks, paths) <- result.try(
+    list.try_fold(locations, #(dict.new(), blocks, paths), fn(acc, location) {
+      let #(mapping, blocks, paths) = acc
+      let path = resolve(directory, location)
+      case dict.get(paths, path) {
+        Ok(cid) -> Ok(#(dict.insert(mapping, location, cid), blocks, paths))
+        Error(Nil) -> {
+          use #(cid, blocks, paths) <- result.map(do_load(
+            path,
+            visited,
+            blocks,
+            paths,
+          ))
+          let paths = dict.insert(paths, path, cid)
+          #(dict.insert(mapping, location, cid), blocks, paths)
+        }
+      }
+    }),
+  )
+  let block = dag_json.to_block(replace_relative(source, mapping))
+  let cid = cid.from_block(block, sha256)(fn(cid) { cid })
+  Ok(#(cid, dict.insert(blocks, v1.to_string(cid), block), paths))
+}
+
+fn replace_relative(source, mapping) {
+  ir.rewrite_with(source, Nil, fn(acc, node) {
+    let #(exp, meta) = node
+    case exp {
+      ir.Reference(ir.Relative(location:)) ->
+        case dict.get(mapping, location) {
+          Ok(cid) ->
+            continuation.return(#(acc, #(ir.Reference(ir.Content(cid)), meta)))
+          Error(Nil) -> continuation.return(#(acc, #(exp, meta)))
+        }
+      _ -> continuation.return(#(acc, #(exp, meta)))
+    }
+  })(fn(result) { result.1 })
+}
+
+/// Modules are dag-json or EYG source, a shebang line is ignored.
+fn parse(code, path) -> Result(ir.Node(Nil), String) {
+  case json.parse(code, dag_json.decoder(Nil)) {
+    Ok(source) -> Ok(source)
+    Error(_) ->
+      case parser.all_from_string(strip_shebang(code)) {
+        Ok(source) -> Ok(ir.clear_annotation(source))
+        Error(reason) ->
+          Error("unable to parse " <> path <> ": " <> string.inspect(reason))
+      }
+  }
+}
+
+fn strip_shebang(code) {
+  case string.starts_with(code, "#!") {
+    True ->
+      case string.split_once(code, "\n") {
+        Ok(#(_, rest)) -> rest
+        Error(Nil) -> ""
+      }
+    False -> code
+  }
+}
+
+fn resolve(directory, location) {
+  case filepath.is_absolute(location) {
+    True -> expand(location)
+    False -> expand(filepath.join(directory, location))
+  }
+}
+
+fn expand(path) {
+  filepath.expand(path) |> result.unwrap(path)
+}
+
+fn sha256(bytes) {
+  continuation.return(crypto.hash(crypto.Sha256, bytes))
+}
