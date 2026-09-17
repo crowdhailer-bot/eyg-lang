@@ -38,6 +38,9 @@ pub type State {
     context: context.Status,
     status: AgentStatus,
     history: List(chat.Message(tool.Call)),
+    // Finished tool calls, most recent first. The history holds the text the
+    // model is sent, runs keep the values programs computed.
+    runs: List(tools.Progress),
     input: String,
     input_error: Option(String),
     origin: origin.Origin,
@@ -74,6 +77,7 @@ pub fn new(config: Config) -> State {
     context: status,
     status: Waiting,
     history: [],
+    runs: [],
     input: "",
     input_error: None,
     origin: origin,
@@ -338,15 +342,14 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
   let effects = list.append(cache_effects, effects)
 
   // I think here we do the switch on pulling. 
-  let #(status, effects) = case tools.all_returns(calls) {
-    Error(Nil) -> #(Executing(calls), effects)
-    Ok(messages) -> #(Asking(messages), [
-      fetch_completion(state, messages),
-      ..effects
-    ])
+  case tools.all_returns(calls) {
+    Error(Nil) -> #(State(..state, status: Executing(calls)), effects)
+    Ok(messages) -> {
+      let runs = list.fold(calls, state.runs, fn(runs, call) { [call, ..runs] })
+      let state = State(..state, status: Asking(messages), runs:)
+      #(state, [fetch_completion(state, messages), ..effects])
+    }
   }
-
-  #(State(..state, status:), effects)
 }
 
 fn fetch_completion(state, messages) {
