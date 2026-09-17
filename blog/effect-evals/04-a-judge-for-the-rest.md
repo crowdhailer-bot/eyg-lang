@@ -69,6 +69,24 @@ passed, how many did the judge pass; of the trials you failed, how many did it
 fail. Keep those two numbers apart. Raw agreement on an imbalanced set flatters
 a judge that says pass to everything.
 
+```sh
+# every judged check of a run, for you to grade
+gleam run -m overlay/eval -- calibrate evals/contexts/<run>/run.json > labels.json
+gleam run -m overlay/eval -- calibrate evals/contexts/<run>/run.json labels.json
+```
+
+```
+| Criterion | Decided | You passed | You failed | Kappa | Unknown | Not judged |
+| --- | --- | --- | --- | --- | --- | --- |
+| The reply greets Ada by name | 30 | 93% | 82% | 0.76 | 1 | 0 |
+```
+
+The template deliberately leaves the judge's verdicts out. Shown them first, a
+labeller drifts towards the instrument they are supposed to be checking, and
+the calibration measures nothing. Kappa is there for the same reason as the two
+separate shares: a judge that passes everything agrees with a labeller who
+passed nine trials in ten, and scores zero.
+
 If a judge cannot be brought into line on a criterion, the criterion is
 probably vague. Rewrite it as something a careful reader could check, or find a
 deterministic check that covers most of it and judge only the remainder.

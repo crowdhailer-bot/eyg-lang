@@ -4,6 +4,7 @@
 //// gleam run -m overlay/eval -- run <suite.eyg> [options]
 //// gleam run -m overlay/eval -- validate <suite.eyg> [options]
 //// gleam run -m overlay/eval -- compare <run.json> <run.json>
+//// gleam run -m overlay/eval -- calibrate <run.json> [labels.json]
 //// ```
 ////
 //// See the README for options.
@@ -24,6 +25,7 @@ import gleam/time/calendar
 import gleam/time/timestamp
 import javascript/mutable_reference
 import overlay/eval/agent
+import overlay/eval/calibration
 import overlay/eval/cassette
 import overlay/eval/environment.{type Environment}
 import overlay/eval/fixture/hub
@@ -80,6 +82,8 @@ pub fn main() -> Promise(Nil) {
     ["validate", suite, ..rest] ->
       with_options(rest, fn(options) { validate(suite, options) })
     ["compare", first, second] -> promise.resolve(compare(first, second))
+    ["calibrate", run] -> promise.resolve(labels(run))
+    ["calibrate", run, labels] -> promise.resolve(calibrate(run, labels))
     _ -> {
       io.println(usage)
       promise.resolve(Nil)
@@ -92,6 +96,7 @@ const usage = "Run evals of Overlay agents and contexts.
   gleam run -m overlay/eval -- run <suite.eyg> [options]
   gleam run -m overlay/eval -- validate <suite.eyg> [options]
   gleam run -m overlay/eval -- compare <run.json> <run.json>
+  gleam run -m overlay/eval -- calibrate <run.json> [labels.json]
 
 Options:
   --context <path>   an EYG module to use as the context, repeat to compare
@@ -526,18 +531,68 @@ pub fn validate_task(
 }
 
 fn compare(first: String, second: String) -> Nil {
-  let read = fn(path) {
-    simplifile.read(path)
-    |> result.map_error(simplifile.describe_error)
-    |> result.try(fn(text) {
-      json.parse(text, report.log_decoder())
-      |> result.replace_error(path <> " is not a run log")
-    })
-  }
+  let read = read_log(_, report.log_decoder())
   case read(first), read(second) {
     Ok(first), Ok(second) -> io.println(report.comparison(first, second))
     Error(reason), _ | _, Error(reason) -> io.println_error(reason)
   }
+}
+
+/// Write out every judged check of a run for a person to grade.
+///
+/// The judge's own verdicts are left out on purpose: seeing them first is how
+/// a labeller ends up agreeing with the instrument they are calibrating.
+fn labels(path: String) -> Nil {
+  case read_log(path, report.judged_decoder()) {
+    Error(reason) -> io.println_error(reason)
+    Ok([]) -> io.println_error(path <> " has no judged checks")
+    Ok(judged) -> {
+      let lines =
+        list.map(judged, fn(judged: report.Judged) {
+          "  "
+          <> json.to_string(
+            json.object([
+              #("task", json.string(judged.task)),
+              #("trial", json.int(judged.trial)),
+              #("criterion", json.string(judged.criterion)),
+              #("verdict", json.string("")),
+            ]),
+          )
+        })
+      io.println("[\n" <> string.join(lines, ",\n") <> "\n]")
+      io.println_error(
+        int.to_string(list.length(judged))
+        <> " judged checks. Read the trial reports beside the run log, write"
+        <> " pass or fail as each verdict, then compare with:\n\n  gleam run"
+        <> " -m overlay/eval -- calibrate "
+        <> path
+        <> " <labels.json>",
+      )
+    }
+  }
+}
+
+/// Compare a judge with a person.
+fn calibrate(path: String, labels: String) -> Nil {
+  case
+    read_log(path, report.judged_decoder()),
+    read_log(labels, calibration.labels_decoder())
+  {
+    Ok(judged), Ok(labels) ->
+      io.println(calibration.markdown(calibration.compare(judged, labels)))
+    Error(reason), _ | _, Error(reason) -> io.println_error(reason)
+  }
+}
+
+fn read_log(path, decoder) {
+  simplifile.read(path)
+  |> result.map_error(simplifile.describe_error)
+  |> result.try(fn(text) {
+    json.parse(text, decoder)
+    |> result.replace_error(
+      path <> " is not a run log, or a labels file of pass and fail verdicts",
+    )
+  })
 }
 
 fn write(path: String, contents: String) -> Nil {

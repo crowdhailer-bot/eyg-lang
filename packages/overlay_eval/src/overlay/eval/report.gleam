@@ -404,3 +404,37 @@ fn one_line(text) {
     False -> text
   }
 }
+
+/// A judged check of one trial, as written in a log.
+pub type Judged {
+  Judged(task: String, trial: Int, criterion: String, verdict: String)
+}
+
+/// Every judged check of a log, to calibrate a judge against your own labels.
+pub fn judged_decoder() -> decode.Decoder(List(Judged)) {
+  use trials <- decode.field(
+    "trials",
+    decode.list({
+      use task <- decode.field("task", decode.string)
+      use trial <- decode.field("number", decode.int)
+      use checks <- decode.field(
+        "checks",
+        decode.list({
+          use check <- decode.field("check", decode.string)
+          use verdict <- decode.field("verdict", decode.string)
+          decode.success(#(check, verdict))
+        }),
+      )
+      decode.success(
+        list.filter_map(checks, fn(check) {
+          case check.0 {
+            "judged: " <> criterion ->
+              Ok(Judged(task:, trial:, criterion:, verdict: check.1))
+            _ -> Error(Nil)
+          }
+        }),
+      )
+    }),
+  )
+  decode.success(list.flatten(trials))
+}

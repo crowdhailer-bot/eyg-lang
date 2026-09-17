@@ -39,7 +39,8 @@ gleam run -m overlay/eval -- run suites/contexts.eyg \
 | `--record <path>` / `--replay <path>` | Record model exchanges to cassettes, or answer from them. `--lenient` replays after a session has changed. |
 
 A run writes `run.json`, `summary.md` and a markdown file for each trial.
-`compare a/run.json b/run.json` prints the paired difference of two logs.
+`compare a/run.json b/run.json` prints the paired difference of two logs, and
+`calibrate run.json` measures a judge against your own grading.
 
 ## Write a task
 
@@ -113,6 +114,33 @@ depend on), the share of checks passed, model calls and how many programs
 failed to run. The suite reports the mean over tasks with a 95% interval; trials
 of one task are not independent, so the error is computed from per task means.
 Comparisons pair tasks across runs, which removes the variation between tasks.
+
+## Calibrate a judge
+
+A judge is a measuring instrument, so measure it before believing it.
+
+```sh
+# every judged check of a run, without the judge's verdicts
+gleam run -m overlay/eval -- calibrate evals/contexts/<run>/run.json > labels.json
+
+# read the trial reports, write pass or fail as each verdict, then
+gleam run -m overlay/eval -- calibrate evals/contexts/<run>/run.json labels.json
+```
+
+The template leaves the judge's own verdicts out on purpose: a labeller who
+sees them first ends up agreeing with the instrument being calibrated. The
+report keeps the two numbers that matter apart, because raw agreement flatters a
+judge that passes everything on a set where most trials pass.
+
+| Criterion | Decided | You passed | You failed | Kappa | Unknown | Not judged |
+| --- | --- | --- | --- | --- | --- | --- |
+| The reply greets Ada by name | 30 | 93% | 82% | 0.76 | 1 | 0 |
+
+`You passed` is the share of your passes the judge passed and `You failed` the
+share of your fails it failed. Kappa is agreement beyond chance: a judge that
+answers pass to everything scores 0 however much it agrees. A criterion that
+cannot be brought into line is usually vague rather than unlucky, so rewrite it,
+or find a deterministic check for most of it and judge the remainder.
 
 ## Cassettes
 

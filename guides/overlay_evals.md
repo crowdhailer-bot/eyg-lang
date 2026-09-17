@@ -66,7 +66,10 @@ Use a model from a different family to the agent under eval, since judges
 prefer their own family's writing, and never judge what a value already proves.
 Before trusting a judge, grade thirty trials yourself and compare: count how
 often it agrees with you on the ones you passed and on the ones you failed,
-separately. Raw agreement hides the imbalance.
+separately. Raw agreement hides the imbalance. `calibrate run.json` writes every
+judged check for you to grade, without showing you the judge's verdicts, and
+`calibrate run.json labels.json` reports both shares with Cohen's kappa
+alongside.
 
 ## Balance the set
 
