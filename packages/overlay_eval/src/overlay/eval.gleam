@@ -51,6 +51,8 @@ pub type Options {
     model: String,
     judge: Option(String),
     trials: Int,
+    // Seconds a model has to answer a request, 0 for as long as it takes.
+    timeout: Int,
     tags: List(String),
     root: String,
     out: String,
@@ -66,6 +68,7 @@ pub fn default_options() -> Options {
     model: "scripted:oracle",
     judge: None,
     trials: 1,
+    timeout: 300,
     tags: [],
     root: "../..",
     out: "evals",
@@ -106,6 +109,8 @@ Options:
                      mistral:<name> (MISTRAL_API_KEY)
   --judge <model>    the model for judged checks, as --model
   --trials <n>       trials of each task, default 1
+  --timeout <n>      seconds a model has to answer a request, default 300,
+                     0 waits for as long as it takes
   --tag <tag>        only run tasks with the tag, repeat for more tags
   --root <path>      the repository with eyg_packages and guides, default ../..
   --out <path>       where reports are written, default evals
@@ -140,6 +145,11 @@ pub fn parse(args: List(String), options: Options) -> Result(Options, String) {
       case int.parse(trials) {
         Ok(trials) if trials > 0 -> parse(rest, Options(..options, trials:))
         _ -> Error("--trials needs a positive number, not " <> trials)
+      }
+    ["--timeout", timeout, ..rest] ->
+      case int.parse(timeout) {
+        Ok(timeout) if timeout >= 0 -> parse(rest, Options(..options, timeout:))
+        _ -> Error("--timeout needs seconds, or 0 to wait, not " <> timeout)
       }
     ["--tag", tag, ..rest] ->
       parse(rest, Options(..options, tags: [tag, ..options.tags]))
@@ -375,6 +385,12 @@ fn run_context(
 }
 
 fn exchange(model: Model, options: Options, recorders, path) -> Model {
+  // A provider that stalls would otherwise hold the run open indefinitely.
+  let model = case model, options.timeout {
+    model.Provider(llm:, transport:), seconds if seconds > 0 ->
+      model.Provider(llm:, transport: model.with_timeout(transport, seconds))
+    _, _ -> model
+  }
   case model, options.record, options.replay {
     model.Provider(llm:, transport:), Some(_), _ -> {
       let recorder = cassette.recorder()

@@ -33,12 +33,14 @@ gleam run -m overlay/eval -- run suites/contexts.eyg \
 | `--model <model>` | `scripted:oracle`, `scripted:null`, `ollama:<name>` (Ollama Cloud, `OLLAMA_API_KEY`), `ollama-local:<name>` or `mistral:<name>` (`MISTRAL_API_KEY`). |
 | `--judge <model>` | The model for judged checks. Use a different family to the agent. |
 | `--trials <n>` | Trials of each task, for pass@k and pass^k. |
+| `--timeout <n>` | Seconds a model has to answer a request and each read of its stream, default 300. A provider that stalls fails that trial instead of holding the run open, `0` waits for as long as it takes. |
 | `--tag <tag>` | Only tasks with the tag, repeatable. |
 | `--root <path>` | The repository the fixtures are built from, default `../..`. |
 | `--out <path>` | Where reports are written, default `evals`. |
 | `--record <path>` / `--replay <path>` | Record model exchanges to cassettes, or answer from them. `--lenient` replays after a session has changed. |
 
-A run writes `run.json`, `summary.md` and a markdown file for each trial.
+A run writes `run.json`, `summary.md` and a markdown file for each trial, all
+stamped with when the run started.
 `compare a/run.json b/run.json` prints the paired difference of two logs, and
 `calibrate run.json` measures a judge against your own grading.
 

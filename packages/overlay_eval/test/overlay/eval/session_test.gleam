@@ -233,3 +233,32 @@ pub fn mistral_requests_go_to_mistral_test() {
   assert "api.mistral.ai" == first.host
   assert "/v1/chat/completions" == first.path
 }
+
+/// A provider that stops answering must not hold a run open.
+pub fn a_stalled_provider_ends_the_session_test() {
+  let stalled = fn(_) { promise.new(fn(_resolve) { Nil }) }
+  let assert model.Provider(llm:, ..) =
+    model.ollama_cloud("gpt-oss:120b", "key")
+  let model = model.Provider(llm:, transport: model.with_timeout(stalled, 1))
+  let config = session.Config(..config(agent.null(), ["add"]), model:)
+  use transcript <- promise.map(session.run(config))
+  let assert transcript.ModelFailed(reason) = transcript.stop
+  assert string.contains(reason, "no answer within 1s")
+  assert [] == transcript.runs(transcript)
+}
+
+/// A stream that stops mid answer has the same deadline as the request.
+pub fn a_stalled_stream_ends_the_session_test() {
+  let stalling = fn(_) {
+    promise.resolve(
+      Ok(response.Response(200, [], fn() { promise.new(fn(_resolve) { Nil }) })),
+    )
+  }
+  let assert model.Provider(llm:, ..) =
+    model.ollama_cloud("gpt-oss:120b", "key")
+  let model = model.Provider(llm:, transport: model.with_timeout(stalling, 1))
+  let config = session.Config(..config(agent.null(), ["add"]), model:)
+  use transcript <- promise.map(session.run(config))
+  let assert transcript.ModelFailed(reason) = transcript.stop
+  assert string.contains(reason, "no answer within 1s")
+}

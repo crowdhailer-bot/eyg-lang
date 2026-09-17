@@ -8,6 +8,7 @@
 import gleam/fetch
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response, Response}
+import gleam/int
 import gleam/javascript/promise.{type Promise}
 import gleam/option.{Some}
 import gleam/result
@@ -37,6 +38,35 @@ pub fn network() -> Transport {
     Response(..response, body: fn() { fetch.read_chunk(body) })
   }
 }
+
+/// Give up on a request, and on each read of its stream, after a wait.
+///
+/// A provider that stops answering mid stream would otherwise hold a run open
+/// for as long as anyone is willing to watch it. The session treats the failure
+/// like any other, so the trial is graded and reported.
+pub fn with_timeout(transport: Transport, seconds: Int) -> Transport {
+  fn(request) {
+    use response <- promise.map(deadline(transport(request), seconds))
+    use response <- result.map(response)
+    Response(..response, body: fn() { deadline(response.body(), seconds) })
+  }
+}
+
+fn deadline(
+  work: Promise(Result(a, fetch.FetchError)),
+  seconds: Int,
+) -> Promise(Result(a, fetch.FetchError)) {
+  deadline_ffi(
+    work,
+    seconds * 1000,
+    Error(fetch.NetworkError(
+      "no answer within " <> int.to_string(seconds) <> "s",
+    )),
+  )
+}
+
+@external(javascript, "./model_ffi.mjs", "deadline")
+fn deadline_ffi(work: Promise(a), milliseconds: Int, timed_out: a) -> Promise(a)
 
 /// A model on Ollama Cloud.
 pub fn ollama_cloud(model: String, api_key: String) -> Model {

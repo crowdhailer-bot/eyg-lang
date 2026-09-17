@@ -22,6 +22,7 @@ pub const schema = "overlay-eval/1"
 /// The details of a run a report needs, as written in a log.
 pub type Header {
   Header(
+    started: String,
     suite: String,
     context: String,
     model: String,
@@ -32,6 +33,7 @@ pub type Header {
 
 pub fn header(run: Run) -> Header {
   Header(
+    started: run.started,
     suite: run.suite,
     context: run.context,
     model: run.model,
@@ -43,9 +45,11 @@ pub fn header(run: Run) -> Header {
 /// The log of a run: its header, summary and every trial's checks.
 pub fn log(run: Run) -> json.Json {
   let summary = summary.summarise(run)
-  let Header(suite:, context:, model:, judge:, trials_per_task:) = header(run)
+  let Header(started:, suite:, context:, model:, judge:, trials_per_task:) =
+    header(run)
   json.object([
     #("schema", json.string(schema)),
+    #("started", json.string(started)),
     #("suite", json.string(suite)),
     #("context", json.string(context)),
     #("model", json.string(model)),
@@ -132,6 +136,7 @@ fn verdict_parts(verdict) {
 pub fn log_decoder() -> decode.Decoder(#(Header, Summary)) {
   use schema_version <- decode.field("schema", decode.string)
   use <- guard(schema_version == schema, "log schema " <> schema)
+  use started <- decode.field("started", decode.string)
   use suite <- decode.field("suite", decode.string)
   use context <- decode.field("context", decode.string)
   use model <- decode.field("model", decode.string)
@@ -176,7 +181,8 @@ pub fn log_decoder() -> decode.Decoder(#(Header, Summary)) {
       decode.success(summary.Failure(task:, check:, count:, reason:))
     }),
   )
-  let header = Header(suite:, context:, model:, judge:, trials_per_task:)
+  let header =
+    Header(started:, suite:, context:, model:, judge:, trials_per_task:)
   let tags =
     list.flat_map(tasks, fn(task) { task.tags })
     |> list.unique
@@ -201,7 +207,7 @@ pub fn log_decoder() -> decode.Decoder(#(Header, Summary)) {
 fn guard(condition, expected, then) {
   case condition {
     True -> then()
-    False -> decode.failure(#(Header("", "", "", "", 0), empty()), expected)
+    False -> decode.failure(#(Header("", "", "", "", "", 0), empty()), expected)
   }
 }
 
@@ -216,7 +222,8 @@ fn number() {
 
 /// A summary of a run in markdown.
 pub fn markdown(header: Header, summary: Summary) -> String {
-  let Header(suite:, context:, model:, judge:, trials_per_task:) = header
+  let Header(started:, suite:, context:, model:, judge:, trials_per_task:) =
+    header
   let k = int.to_string(trials_per_task)
   let #(low, high) = stats.interval(summary.rate)
   let tasks =
@@ -276,7 +283,9 @@ pub fn markdown(header: Header, summary: Summary) -> String {
       <> judge
       <> "`, "
       <> k
-      <> " trials per task.",
+      <> " trials per task, started "
+      <> started
+      <> ".",
     "Pass rate **"
       <> stats.percent(summary.rate.mean)
       <> "** (95% CI "

@@ -4,6 +4,8 @@ import gleam/int
 import gleam/javascript/promise.{type Promise}
 import gleam/list
 import gleam/option.{type Option}
+import gleam/time/calendar
+import gleam/time/timestamp
 import overlay/eval/environment.{type Environment}
 import overlay/eval/model.{type Model}
 import overlay/eval/session
@@ -30,6 +32,8 @@ pub type Config {
 
 pub type Run {
   Run(
+    // When the run started, RFC 3339.
+    started: String,
     suite: String,
     context: String,
     model: String,
@@ -65,6 +69,8 @@ pub fn config(
 
 /// Run every trial of every task in order, `progress` is told of each one.
 pub fn run(config: Config, progress: fn(Trial) -> Nil) -> Promise(Run) {
+  let started =
+    timestamp.to_rfc3339(timestamp.system_time(), calendar.utc_offset)
   let attempts =
     list.flat_map(config.suite.tasks, fn(task) {
       int.range(from: 1, to: config.trials + 1, with: [], run: fn(acc, number) {
@@ -89,6 +95,7 @@ pub fn run(config: Config, progress: fn(Trial) -> Nil) -> Promise(Run) {
     }),
   )
   Run(
+    started:,
     suite: config.suite.name,
     context: config.context_name,
     model: model.describe(config.model),
