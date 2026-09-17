@@ -15,11 +15,13 @@ import eyg/parser/debug
 import eyg/parser/parser.{type Reason} as _
 import gleam/dynamic/decode
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/string
 import multiformats/cid/v1
 import oas/generator/utils
 import overlay/llm/chat
 import overlay/llm/tool
+import overlay/web/workspace
 import pal/platform/browser
 import pal/system
 import touch_grass/harness/browser as harness
@@ -31,7 +33,20 @@ pub type Context {
     counter: Int,
     effects: List(system.Effect(#(Int, state.Value(Meta)))),
     context: cache.Module(Meta),
+    // Sessions with a file system can use the file effects.
+    workspace: Option(workspace.Workspace),
   )
+}
+
+/// The lift and lower types of every effect a program can perform.
+pub fn effect_types(
+  files: Option(workspace.Workspace),
+) -> List(#(String, #(binding.Mono, binding.Mono))) {
+  let effects = interface.types(harness.effects())
+  case files {
+    Some(_) -> list.append(effects, interface.types(workspace.effects()))
+    None -> effects
+  }
 }
 
 pub type Meta =
@@ -77,7 +92,7 @@ fn execute_single(ctx: Context, call: tool.Call) -> #(Context, Progress) {
           case parser.all_from_string(code) {
             Ok(source) -> {
               let source = ir.map_annotation(source, fn(_) { [] })
-              case check_single(source, ctx.cache, ctx.context) {
+              case check_single(source, ctx) {
                 [] -> {
                   let #(ctx, output, call) =
                     source
@@ -117,15 +132,14 @@ fn execute_single(ctx: Context, call: tool.Call) -> #(Context, Progress) {
 
 fn check_single(
   source: #(ir.Expression(a), a),
-  cache: cache.Cache(b),
-  context: cache.Module(_),
+  ctx: Context,
 ) -> List(#(a, error.Reason)) {
   let analysis =
     infer.pure()
-    |> with_scope([#("context", context.type_)])
-    |> infer.with_effects(interface.types(harness.effects()))
+    |> with_scope([#("context", ctx.context.type_)])
+    |> infer.with_effects(effect_types(ctx.workspace))
     |> infer.check(source)
-    |> cache.infer_sync(cache)
+    |> cache.infer_sync(ctx.cache)
   infer.all_errors(analysis)
 }
 
@@ -246,37 +260,51 @@ fn loop(
           }
       }
     }
-    Error(#(break.UnhandledEffect(label, lift), _, env, k)) -> {
-      case browser.cast(label, lift) {
-        // Printing belongs to the result the agent reads, not only the browser
-        // console. Keeping it here also preserves output across suspension.
-        Ok(harness.Print(message)) ->
-          loop(expression.resume(v.unit(), env, k), ctx, [message, ..output])
-        Ok(effect) -> {
-          case browser.extrinsic(effect) {
-            browser.Abort(reason) -> #(ctx, output, Aborted(reason))
-            browser.Work(system.Done(value)) ->
-              loop(expression.resume(value, env, k), ctx, output)
-            browser.Work(effect) -> {
-              let id = ctx.counter
-
-              let effect = system.map(effect, fn(v) { #(id, v) })
-              let effects = [effect, ..ctx.effects]
-              let ctx = Context(..ctx, counter: id + 1, effects:)
-              #(ctx, output, Handling(id, env, k))
-            }
-            browser.Spotless(..) -> #(
-              ctx,
-              output,
-              Aborted("Spotless integration not supported in harness"),
-            )
-          }
+    Error(#(break.UnhandledEffect(label, lift), _, env, k)) ->
+      case ctx.workspace, interface.cast(workspace.effects(), label, lift) {
+        // File effects change the workspace straight away, nothing waits on
+        // the browser.
+        Some(files), Ok(effect) -> {
+          let #(files, value) = workspace.perform(files, effect)
+          let ctx = Context(..ctx, workspace: Some(files))
+          loop(expression.resume(value, env, k), ctx, output)
         }
-        Error(reason) -> #(ctx, output, Exception(reason))
+        Some(_), Error(break.UnhandledEffect(..)) | None, _ ->
+          browser_effect(ctx, output, label, lift, env, k)
+        Some(_), Error(reason) -> #(ctx, output, Exception(reason))
       }
-    }
     Error(#(reason, _, _, _)) -> #(ctx, output, Exception(reason))
     Ok(value) -> #(ctx, output, Successful(value))
+  }
+}
+
+fn browser_effect(ctx: Context, output, label, lift, env, k) {
+  case browser.cast(label, lift) {
+    // Printing belongs to the result the agent reads, not only the browser
+    // console. Keeping it here also preserves output across suspension.
+    Ok(harness.Print(message)) ->
+      loop(expression.resume(v.unit(), env, k), ctx, [message, ..output])
+    Ok(effect) -> {
+      case browser.extrinsic(effect) {
+        browser.Abort(reason) -> #(ctx, output, Aborted(reason))
+        browser.Work(system.Done(value)) ->
+          loop(expression.resume(value, env, k), ctx, output)
+        browser.Work(effect) -> {
+          let id = ctx.counter
+
+          let effect = system.map(effect, fn(v) { #(id, v) })
+          let effects = [effect, ..ctx.effects]
+          let ctx = Context(..ctx, counter: id + 1, effects:)
+          #(ctx, output, Handling(id, env, k))
+        }
+        browser.Spotless(..) -> #(
+          ctx,
+          output,
+          Aborted("Spotless integration not supported in harness"),
+        )
+      }
+    }
+    Error(reason) -> #(ctx, output, Exception(reason))
   }
 }
 
@@ -352,7 +380,7 @@ pub fn pulled(ctx: Context, progress: Progress) -> #(Context, Progress) {
   case call {
     Pulling(source) -> {
       // TODO move to cache.infer_sync that will gather need to pull and to fetch references
-      case check_single(source, ctx.cache, ctx.context) {
+      case check_single(source, ctx) {
         [] -> {
           let #(ctx, output, call) =
             source
@@ -394,7 +422,7 @@ pub fn check_fetching(
       let cids = list.filter(cids, still_fetching(_, ctx.cache))
       case cids {
         [] ->
-          case check_single(source, ctx.cache, ctx.context) {
+          case check_single(source, ctx) {
             [] -> {
               let #(ctx, output, call) =
                 source

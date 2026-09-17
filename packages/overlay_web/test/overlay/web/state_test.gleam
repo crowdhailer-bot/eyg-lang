@@ -22,6 +22,7 @@ import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/state.{State}
 import overlay/web/tools
+import overlay/web/workspace
 import pal/system
 import untethered/ledger/schema
 import untethered/substrate
@@ -282,6 +283,44 @@ pub fn finished_runs_keep_computed_values_test() {
   assert tools.Successful(v.Integer(5)) == first.call
   assert "second" == second.id
   assert tools.Successful(v.unit()) == second.call
+}
+
+pub fn workspace_sessions_can_change_files_test() {
+  let code =
+    "let _ = perform WriteFile({path: \"notes.md\", contents: !string_to_binary(\"hi\")})
+match perform ReadFile({path: \"notes.md\", offset: 0, limit: 10}) {
+  Ok(bytes) -> { !string_from_binary(bytes) }
+  Error(reason) -> { Error({}) }
+}"
+  let status = chat_completion("") |> with_code("abc", code) |> streaming
+  let files = workspace.new()
+  let state = State(..init_default(), status:, workspace: Some(files))
+  let #(state, actions) = state.update(state, state.LlmStreamFinished(Ok(Nil)))
+  assert state.Asking([chat.ToolResultMessage("abc", "Ok(\"hi\")", [])])
+    == state.status
+  let assert Some(files) = state.workspace
+  assert [#("notes.md", <<"hi">>)] == workspace.files(files)
+
+  // The system prompt only offers file effects to sessions with a workspace.
+  let assert [system.FetchStreamResponse(request:, resume: _)] = actions
+  let assert Ok([#("system", prompt), ..]) =
+    json.parse_bits(request.body, helpers.ollama_messages_decoder())
+  assert string.contains(prompt, "ReadFile")
+}
+
+pub fn file_effects_need_a_workspace_test() {
+  let code = "perform ReadFile({path: \"notes.md\", offset: 0, limit: 10})"
+  let status = chat_completion("") |> with_code("abc", code) |> streaming
+  let state = State(..init_default(), status:)
+  let #(state, actions) = state.update(state, state.LlmStreamFinished(Ok(Nil)))
+  let assert state.Asking([chat.ToolResultMessage("abc", reason, [])]) =
+    state.status
+  assert string.contains(reason, "ReadFile")
+  assert None == state.workspace
+  let assert [system.FetchStreamResponse(request:, resume: _)] = actions
+  let assert Ok([#("system", prompt), ..]) =
+    json.parse_bits(request.body, helpers.ollama_messages_decoder())
+  assert !string.contains(prompt, "ReadFile")
 }
 
 pub fn side_effect_test() {

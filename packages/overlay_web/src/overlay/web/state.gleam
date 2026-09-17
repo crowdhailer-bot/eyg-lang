@@ -20,10 +20,9 @@ import overlay/llm/tool
 import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/tools
+import overlay/web/workspace
 import pal/system
-import touch_grass/harness/browser as harness
 import touch_grass/http
-import touch_grass/interface
 
 pub type Config {
   Config(origin: origin.Origin, context: context.Source)
@@ -41,6 +40,8 @@ pub type State {
     // Finished tool calls, most recent first. The history holds the text the
     // model is sent, runs keep the values programs computed.
     runs: List(tools.Progress),
+    // A file system for sessions that have one, see the workspace module.
+    workspace: Option(workspace.Workspace),
     input: String,
     input_error: Option(String),
     origin: origin.Origin,
@@ -78,6 +79,7 @@ pub fn new(config: Config) -> State {
     status: Waiting,
     history: [],
     runs: [],
+    workspace: None,
     input: "",
     input_error: None,
     origin: origin,
@@ -318,8 +320,9 @@ pub fn can_save_provider(state: State) {
 // cache state doesn't update during the eval but needs to resume later if everything fetched at the beginning
 
 fn current_context(state: State) {
-  let State(cache:, counter:, context:, ..) = state
-  tools.Context(cache:, counter:, effects: [], context: context.module(context))
+  let State(cache:, counter:, context:, workspace:, ..) = state
+  let context = context.module(context)
+  tools.Context(cache:, counter:, effects: [], context:, workspace:)
 }
 
 /// If a stream message is completed, and effect is handled or a cache message received then resolve calls sees what stage tool calls are in.
@@ -327,7 +330,8 @@ fn current_context(state: State) {
 fn run_effects_if_any_remain_to_do(return, state: State) {
   let #(ctx, calls) = return
 
-  let tools.Context(cache:, counter:, effects: inner, context: _) = ctx
+  let tools.Context(cache:, counter:, effects: inner, context: _, workspace:) =
+    ctx
   let effects =
     list.map(
       inner,
@@ -337,7 +341,7 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
       }),
     )
 
-  let state = State(..state, cache:, counter:)
+  let state = State(..state, cache:, counter:, workspace:)
   let #(state, cache_effects) = flush(state)
   let effects = list.append(cache_effects, effects)
 
@@ -437,10 +441,9 @@ This environment has the following effects
 
 "
   |> string.append(
-    harness.effects()
+    tools.effect_types(state.workspace)
     |> list.map(fn(effect) {
-      let interface.Interface(name:, lift_type:, lower_type:, decode: _) =
-        effect
+      let #(name, #(lift_type, lower_type)) = effect
 
       "-"
       <> name
@@ -456,10 +459,21 @@ Remember to always use perform to call an effect.
 
 Use the service effects, such as DNSimple, to call service API's these do not require the scheme, host or port to be set.
 They do not require an API token this will be added by the platform.
-
+" <> workspace_instructions(state.workspace) <> "
 # Context
 
 " <> context.readme(state.context)
+}
+
+fn workspace_instructions(files) {
+  case files {
+    Some(_) ->
+      "
+This session has a workspace file system, use the file effects to read and change it.
+Paths are relative to the workspace root and cannot leave it.
+"
+    None -> ""
+  }
 }
 
 pub fn spec() {
