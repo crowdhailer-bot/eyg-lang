@@ -63,15 +63,16 @@ pub fn available(
   vocabulary: Vocabulary,
   config: Config,
 ) -> List(Option) {
+  // Ordered by priority, builtins are last and dropped first if there are too many.
   list.flatten([
     navigation(buffer),
-    structure(buffer, vocabulary),
-    values(buffer, environment, vocabulary, config),
-    compounds(buffer, environment, config),
     [
       option(a.RunTests, "Run the `tests` of the program and see the results."),
       option(a.Finish, "The program is complete and satisfies the task."),
     ],
+    compounds(buffer, environment, config),
+    structure(buffer, vocabulary),
+    values(buffer, environment, vocabulary, config),
   ])
   |> list.unique
 }
@@ -180,6 +181,7 @@ fn structure(buffer: Buffer, vocabulary: Vocabulary) {
       [option(a.Delete, "Delete the selection.")]
     }),
     when(buffer.undo(buffer), fn(_) { [option(a.Undo, "Undo the last edit.")] }),
+    renames(buffer, vocabulary),
   ])
 }
 
@@ -267,12 +269,17 @@ fn expression_values(
     ],
     case fields {
       [] ->
-        list.map(labels, fn(label) {
-          option(
-            a.Record([label]),
-            "A record with the field `" <> label <> "`.",
-          )
-        })
+        list.append(
+          list.map(vocabulary.records, fn(labels) {
+            option(a.Record(labels), "A record with these fields.")
+          }),
+          list.map(labels, fn(label) {
+            option(
+              a.Record([label]),
+              "A record with the field `" <> label <> "`.",
+            )
+          }),
+        )
       _ -> [option(a.Record(labels), "A record with the expected fields.")]
     },
     list.map(labels, fn(label) {
@@ -393,5 +400,23 @@ fn selected(buffer: Buffer) {
       }
     }
     _ -> "selection"
+  }
+}
+
+// Patterns and labels can be renamed, expressions are replaced instead.
+fn renames(buffer: Buffer, vocabulary: Vocabulary) {
+  let candidates = case buffer.projection {
+    #(p.Assign(..), _) | #(p.FnParam(..), _) -> vocabulary.names
+    #(p.Label(..), _) | #(p.Select(..), _) -> vocabulary.labels
+    #(p.Match(..), _) -> vocabulary.tags
+    #(p.Exp(_), _) -> []
+  }
+  case buffer.insert(buffer) {
+    Ok(#(current, _)) ->
+      list.filter(candidates, fn(name) { name != current })
+      |> list.map(fn(name) {
+        option(a.Rename(name), "Rename the selection to `" <> name <> "`.")
+      })
+    Error(Nil) -> []
   }
 }

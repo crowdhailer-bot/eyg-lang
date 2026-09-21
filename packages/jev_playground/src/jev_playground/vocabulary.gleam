@@ -16,6 +16,8 @@ pub type Vocabulary {
     tags: List(String),
     strings: List(String),
     integers: List(Int),
+    /// Groups of labels written together, as in `{a, b}`, offered as one record.
+    records: List(List(String)),
   )
 }
 
@@ -28,10 +30,16 @@ const common_tags = ["Ok", "Error", "True", "False"]
 const common_integers = [0, 1]
 
 pub fn from_task(task: String) -> Vocabulary {
+  // An empty capture is reported as `None` so `""` is looked for separately.
   let quoted = matches("\"([^\"]*)\"", task)
+  let quoted = case string.contains(task, "\"\"") {
+    True -> list.append(quoted, [""])
+    False -> quoted
+  }
   let code = matches("`([^`]+)`", task)
+  let code_words = list.flat_map(code, words)
   let identifiers =
-    list.filter(code, is_name)
+    list.filter(code_words, is_name)
     |> list.append(
       list.filter(words(task), fn(word) {
         is_name(word) && string.contains(word, "_")
@@ -39,30 +47,43 @@ pub fn from_task(task: String) -> Vocabulary {
     )
   let tags =
     list.append(
-      list.filter(code, is_tag),
+      list.filter(code_words, is_tag),
       list.filter(words(task), is_common_tag),
     )
   let integers =
-    matches("(?<![\\w/])(-?[0-9]+)(?![\\w/])", task)
+    matches("(?<![\\w/\"])(-?[0-9]+)(?![\\w/\"])", task)
     |> list.filter_map(int.parse)
+  let records =
+    list.filter_map(code, fn(code) {
+      case string.starts_with(code, "{") {
+        True ->
+          case list.filter(words(code), is_name) {
+            [] -> Error(Nil)
+            labels -> Ok(labels)
+          }
+        False -> Error(Nil)
+      }
+    })
   Vocabulary(
     names: identifiers,
     labels: identifiers,
     tags:,
-    strings: list.append(quoted, list.filter(code, fn(c) { !is_name(c) })),
+    strings: quoted,
     integers:,
+    records:,
   )
 }
 
 /// Names and literals already written in the program can be written again.
 pub fn from_program(source: e.Expression) -> Vocabulary {
-  let found = collect(source, Vocabulary([], [], [], [], []))
+  let found = collect(source, Vocabulary([], [], [], [], [], []))
   Vocabulary(
     names: list.reverse(found.names),
     labels: list.reverse(found.labels),
     tags: list.reverse(found.tags),
     strings: list.reverse(found.strings),
     integers: list.reverse(found.integers),
+    records: [],
   )
 }
 
@@ -73,6 +94,7 @@ pub fn defaults() -> Vocabulary {
     tags: common_tags,
     strings: [],
     integers: common_integers,
+    records: [],
   )
 }
 
@@ -84,6 +106,7 @@ pub fn merge(vocabularies: List(Vocabulary)) -> Vocabulary {
     tags: all(vocabularies, fn(v: Vocabulary) { v.tags }),
     strings: all(vocabularies, fn(v: Vocabulary) { v.strings }),
     integers: all(vocabularies, fn(v: Vocabulary) { v.integers }),
+    records: all(vocabularies, fn(v: Vocabulary) { v.records }),
   )
 }
 
