@@ -173,3 +173,9 @@ pub fn every_eyg_package_file_round_trips_test() {
       == #(file, ir.clear_annotation(e.to_annotated(editable, [])))
   })
 }
+
+pub fn separators_count_towards_the_line_width_test() {
+  round_trip(
+    "{\n  method: GET({}),\n  path,\n  query: None({}),\n  headers: [],\n  body: !string_to_binary(\"\")\n}",
+  )
+}

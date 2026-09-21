@@ -173,7 +173,7 @@ fn function(params, body, rev, indent, marks) {
     e.Block(..) -> Error(Nil)
     _ -> {
       let text = expression(body, body_rev, indent + 2, marks)
-      case is_inline(text) && fits(indent, [head, text]) {
+      case is_inline(text) && fits(indent, [head, " ", text, " }"]) {
         True -> Ok(head <> " " <> text <> " }")
         False -> Error(Nil)
       }
@@ -211,14 +211,20 @@ fn sequence(open, items, tail, close, indent, marks) {
       list.append(inner, [".." <> expression(exp, rev, indent + 2, marks)])
     None -> inner
   }
-  case list.all(inner, is_inline) && fits(indent, [open, ..inner]) {
+  case
+    list.all(inner, is_inline)
+    && fits(indent, [open, string.join(inner, ", "), close])
+  {
     True -> open <> string.join(inner, ", ") <> close
     False -> {
       let hug = case list.reverse(items), tail {
         [#(e.Function(..) as last, rev), ..before], None -> {
           let before = list.take(inner, list.length(before))
           let last = expression(last, rev, indent, marks)
-          case list.all(before, is_inline) && fits(indent, [open, ..before]) {
+          case
+            list.all(before, is_inline)
+            && fits(indent, [open, string.join(before, ", ")])
+          {
             True if before == [] -> Ok(open <> last <> close)
             True ->
               Ok(open <> string.join(before, ", ") <> ", " <> last <> close)
@@ -264,7 +270,10 @@ fn record(fields, original, rev, indent, marks) {
     }
     None -> inner
   }
-  case list.all(inner, is_inline) && fits(indent, ["{", ..inner]) {
+  case
+    list.all(inner, is_inline)
+    && fits(indent, ["{", string.join(inner, ", "), "}"])
+  {
     True -> "{" <> string.join(inner, ", ") <> "}"
     False ->
       "{"
