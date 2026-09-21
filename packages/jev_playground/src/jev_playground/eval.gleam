@@ -8,6 +8,7 @@ import eyg/interpreter/value as v
 import eyg/parser
 import gleam/dict
 import gleam/dynamic/decode
+import gleam/int
 import gleam/list
 import gleam/option
 import gleam/result
@@ -36,7 +37,10 @@ pub type Eval {
 /// How the options are offered, the variables compared by running evals.
 pub type Variant {
   Variant(
-    compounds: Bool,
+    /// How many of the mined compounds are offered, most frequent first.
+    compounds: Int,
+    /// The most instances of each compound offered at a time.
+    instances: Int,
     slot_questions: Bool,
     type_filter: Bool,
     no_repeats: Bool,
@@ -46,18 +50,32 @@ pub type Variant {
 
 /// The default variant, every improvement on and no compounds.
 pub const improved = Variant(
-  compounds: False,
+  compounds: 0,
+  instances: 5,
   slot_questions: True,
   type_filter: True,
   no_repeats: True,
   focus_holes: False,
 )
 
-/// Build a variant from flags, `compounds` adds compounds and
+/// Build a variant from flags, `compounds` adds all the mined compounds and
+/// `compounds=5` the five most frequent, `instances=2` offers two instances of each,
 /// `flat`, `untyped` and `repeats` turn improvements off, `holes` keeps the selection on holes.
 pub fn variant(flags: List(String)) -> Variant {
+  let number = fn(prefix, default) {
+    list.find_map(flags, fn(flag) {
+      case flag == prefix, string.split_once(flag, "=") {
+        True, _ -> Ok(default)
+        _, Ok(#(name, value)) if name == prefix -> int.parse(value)
+        _, _ -> Error(Nil)
+      }
+    })
+  }
   Variant(
-    compounds: list.contains(flags, "compounds"),
+    compounds: number("compounds", list.length(compound.mined()))
+      |> result.unwrap(0),
+    instances: number("instances", improved.instances)
+      |> result.unwrap(improved.instances),
     slot_questions: !list.contains(flags, "flat"),
     type_filter: !list.contains(flags, "untyped"),
     no_repeats: !list.contains(flags, "repeats"),
@@ -68,14 +86,24 @@ pub fn variant(flags: List(String)) -> Variant {
 pub fn variant_name(variant: Variant) {
   let Variant(
     compounds:,
+    instances:,
     slot_questions:,
     type_filter:,
     no_repeats:,
     focus_holes:,
   ) = variant
+  let all = list.length(compound.mined())
   let flags =
     [
-      #(compounds, "compounds"),
+      #(compounds == all, "compounds"),
+      #(
+        compounds > 0 && compounds != all,
+        "compounds" <> int.to_string(compounds),
+      ),
+      #(
+        compounds > 0 && instances != improved.instances,
+        "instances" <> int.to_string(instances),
+      ),
       #(!slot_questions, "flat"),
       #(!type_filter, "untyped"),
       #(!no_repeats, "repeats"),
@@ -97,10 +125,8 @@ pub fn config(eval: Eval, variant: Variant) -> options.Config {
   options.Config(
     ..options.default_config(),
     open_libraries: eval.open_libraries,
-    compounds: case variant.compounds {
-      True -> compound.mined()
-      False -> []
-    },
+    compounds: list.take(compound.mined(), variant.compounds),
+    compound_instances: variant.instances,
     slot_questions: variant.slot_questions,
     type_filter: variant.type_filter,
     no_repeats: variant.no_repeats,
@@ -510,7 +536,24 @@ pub type Run {
 
 pub fn run_decoder() -> decode.Decoder(Run) {
   use slug <- decode.field("eval", decode.string)
-  use compounds <- decode.field("compounds", decode.bool)
+  // Early runs recorded whether all the compounds were offered.
+  use compounds <- decode.field(
+    "compounds",
+    decode.one_of(decode.int, [
+      decode.bool
+      |> decode.map(fn(all) {
+        case all {
+          True -> list.length(compound.mined())
+          False -> 0
+        }
+      }),
+    ]),
+  )
+  use instances <- decode.optional_field(
+    "instances",
+    improved.instances,
+    decode.int,
+  )
   use slot_questions <- decode.field("slot_questions", decode.bool)
   use type_filter <- decode.optional_field("type_filter", True, decode.bool)
   use no_repeats <- decode.optional_field("no_repeats", True, decode.bool)
@@ -520,6 +563,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
   let variant =
     Variant(
       compounds:,
+      instances:,
       slot_questions:,
       type_filter:,
       no_repeats:,

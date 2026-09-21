@@ -40,3 +40,13 @@ pub fn every_start_fails_its_check_test() {
       evals.check(eval, e.to_annotated(start, []), environment)
   })
 }
+
+pub fn variants_are_named_by_their_flags_test() {
+  assert evals.variant_name(evals.variant([])) == "improved"
+  assert evals.variant_name(evals.variant(["compounds", "holes"]))
+    == "compounds-holes"
+  assert evals.variant_name(
+      evals.variant(["compounds=5", "instances=2", "holes"]),
+    )
+    == "compounds5-instances2-holes"
+}

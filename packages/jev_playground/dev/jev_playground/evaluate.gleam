@@ -65,7 +65,8 @@ pub fn run(the_eval: eval.Eval, variant, transport) {
     json.object([
       #("eval", json.string(the_eval.slug)),
       #("variant", json.string(eval.variant_name(variant))),
-      #("compounds", json.bool(variant.compounds)),
+      #("compounds", json.int(variant.compounds)),
+      #("instances", json.int(variant.instances)),
       #("slot_questions", json.bool(variant.slot_questions)),
       #("type_filter", json.bool(variant.type_filter)),
       #("no_repeats", json.bool(variant.no_repeats)),

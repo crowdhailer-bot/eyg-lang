@@ -45,6 +45,8 @@ pub type Config {
     no_repeats: Bool,
     /// Keep the selection on the next `?` and only ask what fills it.
     focus_holes: Bool,
+    /// The most instances of one compound offered at a time.
+    compound_instances: Int,
   )
 }
 
@@ -58,6 +60,7 @@ pub fn default_config() {
     type_filter: True,
     no_repeats: True,
     focus_holes: False,
+    compound_instances: 5,
   )
 }
 
@@ -706,9 +709,6 @@ fn expression_values(
   ])
 }
 
-/// The most instances of one compound offered at a time.
-const instances_per_compound = 5
-
 // Fill the slots of each compound from the context: recent variables, the
 // fields of the value selected from, and builtins and tags the task mentions.
 // An instance is offered if its first step is, later steps are checked when applied.
@@ -726,7 +726,7 @@ fn compounds(buffer: Buffer, vocabulary: Vocabulary, config: Config, singles) {
         [] -> False
       }
     })
-    |> list.take(instances_per_compound)
+    |> list.take(config.compound_instances)
     |> list.map(fn(steps) {
       let name = string.join(list.map(steps, a.key), ", ")
       named(
