@@ -38,6 +38,13 @@ fn replay(demo: demo.Demo) {
           <> int.to_string(i + 1)
           <> ": "
           <> reason
+          <> "\nrecent "
+          <> string.join(
+            list.reverse(
+              list.map(list.take(agent.history, 6), fn(step) { step.label }),
+            ),
+            " | ",
+          )
           <> "\noffered "
           <> int.to_string(list.length(offered))
           <> ": "

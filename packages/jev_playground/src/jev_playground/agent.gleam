@@ -145,6 +145,24 @@ pub fn options(agent: Agent) -> List(options.Option) {
       }
     _, _ -> repeated
   }
+  // Moving back and making the same edit again and again is a loop that changes
+  // the program every time, the step that would come next is not offered.
+  // Taking turns without moving back is normal, as when nesting calls.
+  let repeated = case agent.config.no_repeats, list.take(agent.history, 6) {
+    True, [a1, b1, a2, b2, a3, b3] ->
+      case
+        a1.action == a2.action
+        && a2.action == a3.action
+        && b1.action == b2.action
+        && b2.action == b3.action
+        && a1.action != b1.action
+        && { a.is_navigation(a1.action) || a.is_navigation(b1.action) }
+      {
+        True -> [options.without_name(b1.action), ..repeated]
+        False -> repeated
+      }
+    _, _ -> repeated
+  }
   options.available(agent.buffer, agent.environment, vocabulary, agent.config)
   |> list.filter(fn(option) {
     !list.contains(repeated, options.without_name(option.action))

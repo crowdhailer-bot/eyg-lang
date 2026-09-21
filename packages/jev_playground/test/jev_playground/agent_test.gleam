@@ -241,3 +241,19 @@ pub fn the_selection_can_be_shown_in_comments_or_only_described_test() {
   assert string.contains(unmarked, "\"program\":\"(n) -> { 1 }\"")
   assert string.contains(unmarked, "\"code\":\"1\"")
 }
+
+pub fn two_edits_taking_turns_are_stopped_test() {
+  let agent =
+    take_all(new("`n`"), [
+      a.Function("n"),
+      a.Variable("n"),
+      a.Parent,
+      a.Next,
+      a.Parent,
+      a.Next,
+      a.Parent,
+      a.Next,
+    ])
+  assert !list.contains(keys(agent), "select parent")
+  assert list.contains(keys(agent), "move next")
+}
