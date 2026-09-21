@@ -41,7 +41,7 @@ pub type Target {
 }
 
 pub fn all() -> List(Demo) {
-  [github(), http(), http_compound()]
+  [github(), http(), http_compound(), github_library()]
 }
 
 pub fn find(slug) {
@@ -63,7 +63,18 @@ pub fn prepare(
     False -> demo.task
   }
   use actions <- result.map(synthesis.script(target, environment))
-  let actions = list.append(actions, [action.RunTests, action.Finish])
+  // Libraries the program uses are opened first, when Jev can search for them.
+  let opened = case demo.config.search_libraries {
+    True ->
+      vocabulary.references(target)
+      |> list.filter(fn(package) {
+        !list.contains(demo.config.open_libraries, package)
+      })
+      |> list.map(action.OpenLibrary)
+    False -> []
+  }
+  let actions =
+    list.flatten([opened, actions, [action.RunTests, action.Finish]])
   let actions = case demo.config.compounds {
     [] -> actions
     _ ->
@@ -239,3 +250,50 @@ pub fn prepared_decoder() {
   use actions <- decode.field("actions", decode.list(action.decoder()))
   decode.success(Prepared(task:, actions:))
 }
+
+pub fn github_library() {
+  Demo(
+    slug: "github-library",
+    title: "GitHub client with @http and compound moves",
+    task: "Write a client for three GitHub API endpoints using the @http library, search for it first.
+Define `http` as the library, `origin` as `http.origin.https` of \"api.github.com\", and `get = (path)` that calls `http.dispatch` with `http.operation.get` of the path and the origin.
+Then define `get_user = (username)` for \"/users/\" followed by the username,
+`list_repos = (username)` for \"/users/\" username \"/repos\",
+and `get_repo = (owner, repo)` for \"/repos/\" owner \"/\" repo, joining paths with `!string_append`.
+`dispatch` performs the `Fetch` effect, test the paths without the network: `path_of = (request)` handles `Fetch` with `(sent, resume)` returning `Error(sent.path)`.
+Return `{get_user, list_repos, get_repo, tests}` where each test `{name, test}` checks with `!equal` that `path_of` gives `Error` of \"/users/octocat\", \"/users/octocat/repos\" and \"/repos/gleam-lang/gleam\" for the user \"octocat\" and the repository \"gleam-lang\" \"gleam\".
+Name the tests \"get user\", \"list repos\" and \"get repo\". Run the tests before finishing.",
+    target: Code(github_library_target),
+    environment: environment.browser(),
+    config: options.Config(
+      ..options.default_config(),
+      compounds: compound.mined(),
+      search_libraries: True,
+    ),
+    spec: False,
+  )
+}
+
+const github_library_target = "let http = @http:3:baguqeeraqt2dscwwimthggq3gu5ji3j4vxk6diirk7plmtkiaihllacfln5q
+let origin = http.origin.https(\"api.github.com\")
+let get = (path) -> { http.dispatch(http.operation.get(path), origin) }
+let get_user = (username) -> { get(!string_append(\"/users/\", username)) }
+let list_repos = (username) -> {
+  get(!string_append(!string_append(\"/users/\", username), \"/repos\"))
+}
+let get_repo = (owner, repo) -> {
+  get(!string_append(!string_append(!string_append(\"/repos/\", owner), \"/\"), repo))
+}
+let path_of = (request) -> {
+  handle Fetch((sent, resume) -> { Error(sent.path) }, (_) -> { request({}) })
+}
+{
+  get_user,
+  list_repos,
+  get_repo,
+  tests: [
+    {name: \"get user\", test: (_) -> { !equal(path_of((_) -> { get_user(\"octocat\") }), Error(\"/users/octocat\")) }},
+    {name: \"list repos\", test: (_) -> { !equal(path_of((_) -> { list_repos(\"octocat\") }), Error(\"/users/octocat/repos\")) }},
+    {name: \"get repo\", test: (_) -> { !equal(path_of((_) -> { get_repo(\"gleam-lang\", \"gleam\") }), Error(\"/repos/gleam-lang/gleam\")) }}
+  ]
+}"

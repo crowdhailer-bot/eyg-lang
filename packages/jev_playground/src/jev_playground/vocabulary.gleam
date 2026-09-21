@@ -2,6 +2,7 @@
 //// Names, labels and literals are offered from those in the task, the program
 //// and a small list of common names.
 
+import eyg/ir/tree as ir
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
@@ -314,5 +315,54 @@ fn pattern_names(pattern, acc: Vocabulary) {
           ])
         },
       )
+  }
+}
+
+/// The packages a program references by name.
+pub fn references(source) -> List(String) {
+  do_references(source, []) |> list.reverse |> list.unique
+}
+
+fn do_references(exp, acc) {
+  case exp {
+    e.Reference(ir.Pinned(ir.Release(package:, ..)))
+    | e.Reference(ir.Package(package))
+    | e.Reference(ir.Version(package, _)) -> [package, ..acc]
+    e.Block(assigns, then, _) ->
+      list.fold(assigns, acc, fn(acc, assign) { do_references(assign.1, acc) })
+      |> do_references(then, _)
+    e.Call(func, args) ->
+      list.fold(args, do_references(func, acc), fn(acc, arg) {
+        do_references(arg, acc)
+      })
+    e.Function(_, body) -> do_references(body, acc)
+    e.List(items, tail) -> {
+      let acc =
+        list.fold(items, acc, fn(acc, item) { do_references(item, acc) })
+      case tail {
+        Some(tail) -> do_references(tail, acc)
+        None -> acc
+      }
+    }
+    e.Record(fields, original) -> {
+      let acc =
+        list.fold(fields, acc, fn(acc, field) { do_references(field.1, acc) })
+      case original {
+        Some(original) -> do_references(original, acc)
+        None -> acc
+      }
+    }
+    e.Select(from, _) -> do_references(from, acc)
+    e.Case(top, matches, otherwise) -> {
+      let acc =
+        list.fold(matches, do_references(top, acc), fn(acc, m) {
+          do_references(m.1, acc)
+        })
+      case otherwise {
+        Some(otherwise) -> do_references(otherwise, acc)
+        None -> acc
+      }
+    }
+    _ -> acc
   }
 }

@@ -590,12 +590,17 @@ fn expression_values(
     case config.search_libraries {
       True ->
         list.filter_map(environment.libraries, fn(library) {
-          case list.contains(config.open_libraries, library.name) {
-            True -> Error(Nil)
-            False ->
+          let open = list.contains(config.open_libraries, library.name)
+          // Modules named by content id are only imported by other libraries.
+          let released = !string.starts_with(library.name, "#")
+          case !open && released {
+            False -> Error(Nil)
+            True ->
               Ok(option(
                 a.OpenLibrary(library.name),
-                "Read the API of the library @" <> library.name <> ".",
+                "Read the API of the library @"
+                  <> library.name
+                  <> summary(library.readme),
               ))
           }
         })
@@ -866,5 +871,16 @@ fn unquote(text) {
       |> string.replace("\\\"", "\"")
       |> string.replace("\\\\", "\\")
     False -> text
+  }
+}
+
+// The first paragraph of a readme after its title.
+fn summary(readme) {
+  let paragraph =
+    string.split(readme, "\n\n")
+    |> list.find(fn(p) { p != "" && !string.starts_with(p, "#") })
+  case paragraph {
+    Ok(paragraph) -> ": " <> string.replace(paragraph, "\n", " ")
+    Error(Nil) -> "."
   }
 }

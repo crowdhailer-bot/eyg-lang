@@ -113,7 +113,10 @@ pub fn state(agent: Agent) -> Json {
   let libraries =
     list.filter_map(config.open_libraries, fn(name) {
       use library <- result.map(environment.find_library(environment, name))
-      #("@" <> name, json.string(environment.render_poly(library.type_)))
+      let api =
+        environment.library_api(library)
+        |> list.map(fn(field) { #(field.0, json.string(field.1)) })
+      #("@" <> name, json.object(api))
     })
   let recent =
     history

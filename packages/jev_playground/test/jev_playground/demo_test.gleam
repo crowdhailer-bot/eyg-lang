@@ -76,3 +76,9 @@ pub fn compounds_shorten_the_http_demo_test() {
   let assert Ok(compressed) = demo.script(compound, environment(compound))
   assert list.length(compressed) < list.length(single)
 }
+
+pub fn github_library_demo_opens_http_and_tests_pass_test() {
+  let agent = replay(demo.github_library())
+  assert agent.config.open_libraries == ["http"]
+  assert agent.test_results == Some("3 of 3 tests passed")
+}

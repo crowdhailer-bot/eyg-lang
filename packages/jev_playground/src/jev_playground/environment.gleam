@@ -8,6 +8,7 @@ import eyg/interpreter/state
 import eyg/ir/tree as ir
 import gleam/dict.{type Dict}
 import gleam/list
+import gleam/string
 import multiformats/cid/v1
 import touch_grass/harness/browser as harness
 import touch_grass/interface
@@ -92,4 +93,34 @@ pub fn effect_signatures(environment: Environment) -> List(#(String, String)) {
 pub fn render_poly(poly) {
   let #(type_, _) = binding.instantiate(poly, 0, dict.new())
   debug.mono(type_)
+}
+
+/// The fields of a library with their types, nested records are flattened to
+/// `operation.get` so each function is listed on its own.
+pub fn library_api(library: Library) -> List(#(String, String)) {
+  let #(type_, _) = binding.instantiate(library.type_, 0, dict.new())
+  flatten(type_, "", 2)
+}
+
+fn flatten(type_, prefix, depth) {
+  case type_ {
+    t.Record(rows) if depth > 0 ->
+      rows_of(rows, [])
+      |> list.flat_map(fn(field) {
+        let #(label, value) = field
+        flatten(value, prefix <> label <> ".", depth - 1)
+      })
+    _ ->
+      case prefix {
+        "" -> []
+        _ -> [#(string.drop_end(prefix, 1), debug.mono(type_))]
+      }
+  }
+}
+
+fn rows_of(rows, acc) {
+  case rows {
+    t.RowExtend(label, value, rest) -> rows_of(rest, [#(label, value), ..acc])
+    _ -> list.reverse(acc)
+  }
 }
