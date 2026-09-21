@@ -12,6 +12,7 @@ import gleam/json
 import gleam/list
 import gleam/string
 import jev
+import jev_playground/action
 import jev_playground/agent
 import jev_playground/client
 import jev_playground/environment
@@ -36,12 +37,31 @@ pub fn main() {
   let variant = eval.variant(flags)
   let assert Ok(key) =
     list.key_find(array.to_list(process.env()), "TYPESAFE_API_KEY")
-  use result <- promise.map(run(the_eval, variant, client.Direct(key)))
-  io.println(result)
+  use summary <- promise.map(run(the_eval, variant, client.Direct(key)))
+  io.println(summary_line(summary))
 }
 
-/// Run the eval and save it, returning a one line summary.
-pub fn run(the_eval: eval.Eval, variant, transport) {
+pub type Summary {
+  Summary(
+    eval: String,
+    variant: String,
+    solved: Bool,
+    outcome: String,
+    steps: Int,
+    compound_steps: Int,
+    tokens: Int,
+    cost: Float,
+    seconds: Float,
+    file: String,
+  )
+}
+
+/// Run the eval and save every step.
+pub fn run(
+  the_eval: eval.Eval,
+  variant,
+  transport,
+) -> promise.Promise(Summary) {
   let assert Ok(bundle) = packages.bundle()
   let assert Ok(environment) = library.environment(bundle, environment.pure())
   let assert Ok(start) = eval.start(the_eval)
@@ -82,15 +102,37 @@ pub fn run(the_eval: eval.Eval, variant, transport) {
   let _ = simplifile.create_directory_all(directory)
   let assert Ok(Nil) =
     simplifile.write(directory <> "/" <> file, json.to_string(record))
+  let compound_steps =
+    list.count(steps, fn(step) {
+      case step.action {
+        action.Compound(..) -> True
+        _ -> False
+      }
+    })
+  Summary(
+    eval: the_eval.slug,
+    variant: eval.variant_name(variant),
+    solved: outcome == Solved,
+    outcome: outcome_text,
+    steps: list.length(steps),
+    compound_steps:,
+    tokens:,
+    cost:,
+    seconds:,
+    file:,
+  )
+}
+
+pub fn summary_line(summary: Summary) {
   string.join(
     [
-      name,
-      outcome_text,
-      int.to_string(list.length(steps)) <> " steps",
-      int.to_string(tokens) <> " tokens",
-      "$" <> float.to_string(float.to_precision(cost, 4)),
-      float.to_string(float.to_precision(seconds, 1)) <> "s",
-      file,
+      summary.eval <> "-" <> summary.variant,
+      summary.outcome,
+      int.to_string(summary.steps) <> " steps",
+      int.to_string(summary.tokens) <> " tokens",
+      "$" <> float.to_string(float.to_precision(summary.cost, 4)),
+      float.to_string(float.to_precision(summary.seconds, 1)) <> "s",
+      summary.file,
     ],
     " | ",
   )
