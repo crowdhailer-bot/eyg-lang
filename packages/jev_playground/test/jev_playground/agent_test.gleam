@@ -6,6 +6,7 @@ import gleam/string
 import jev
 import jev_playground/action as a
 import jev_playground/agent
+import jev_playground/compound
 import jev_playground/environment
 import jev_playground/options
 import morph/editable as e
@@ -275,4 +276,27 @@ pub fn a_hole_in_a_match_branch_is_described_by_its_tag_test() {
     state,
     "the value returned when the match is any other tag",
   )
+}
+
+pub fn checked_compounds_do_not_call_a_record_test() {
+  let source =
+    e.Function(
+      [e.Bind("item")],
+      e.Call(e.Builtin("int_add"), [
+        e.Select(e.Variable("item"), "price"),
+        e.Vacant,
+      ]),
+    )
+  let keys = fn(check_compounds) {
+    let config =
+      options.Config(
+        ..options.default_config(),
+        focus_holes: True,
+        compounds: compound.mined(),
+        check_compounds:,
+      )
+    agent.new("", source, environment.pure(), config) |> keys
+  }
+  assert list.contains(keys(False), "variable item, call selection(..)")
+  assert !list.contains(keys(True), "variable item, call selection(..)")
 }

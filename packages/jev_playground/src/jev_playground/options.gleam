@@ -55,6 +55,9 @@ pub type Config {
     jumps: Bool,
     /// How the selection is shown in the program.
     highlight: Highlight,
+    /// Apply each compound instance before offering it and drop those that fail
+    /// or add a type error. Slow, as every instance is analysed.
+    check_compounds: Bool,
   )
 }
 
@@ -99,6 +102,7 @@ pub fn default_config() {
     cursors: 1,
     jumps: True,
     highlight: Guillemets,
+    check_compounds: False,
   )
 }
 
@@ -151,7 +155,7 @@ pub fn available(
       option(a.RunTests, "Run the `tests` of the program and see the results."),
       option(a.Finish, "The program is complete and satisfies the task."),
     ],
-    compounds(buffer, vocabulary, config, singles),
+    compounds(buffer, environment, vocabulary, config, singles),
     prioritise(singles, vocabulary.builtins),
   ])
   |> list.unique
@@ -748,9 +752,27 @@ fn expression_values(
 // Fill the slots of each compound from the context: recent variables, the
 // fields of the value selected from, and builtins and tags the task mentions.
 // An instance is offered if its first step is, later steps are checked when applied.
-fn compounds(buffer: Buffer, vocabulary: Vocabulary, config: Config, singles) {
+fn compounds(
+  buffer: Buffer,
+  environment: Environment,
+  vocabulary: Vocabulary,
+  config: Config,
+  singles,
+) {
   let offered = list.map(singles, fn(option: Option) { option.action })
   let context = slot_context(buffer, vocabulary)
+  let errors = list.length(a.type_errors(buffer))
+  // A checked instance is applied first, one that fails part way or adds a
+  // type error, such as calling a record, is not offered.
+  let checks = fn(steps) {
+    !config.check_compounds
+    || case
+      a.perform(a.Compound("", steps), buffer, environment, config.advance)
+    {
+      Ok(after) -> list.length(a.type_errors(after)) <= errors
+      Error(Nil) -> False
+    }
+  }
   list.flat_map(config.compounds, fn(template) {
     instantiate_steps(template, context, None)
     |> list.filter(fn(steps) {
@@ -762,6 +784,7 @@ fn compounds(buffer: Buffer, vocabulary: Vocabulary, config: Config, singles) {
         [] -> False
       }
     })
+    |> list.filter(checks)
     |> list.take(config.compound_instances)
     |> list.map(fn(steps) {
       let name = string.join(list.map(steps, a.key), ", ")

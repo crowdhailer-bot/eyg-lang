@@ -1,6 +1,6 @@
 //// Run evals with each variant against the real API and write a table of the results.
 //// Jev picks the same edits for the same request, so each pair runs once.
-//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|experiments [eval ...]`
+//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|experiments [eval ...]`
 
 import argv
 import gleam/float
@@ -28,6 +28,14 @@ const compound_variants = [
   ["compounds"],
 ]
 
+/// Compounds with each instance applied before it is offered.
+const checked_variants = [
+  ["compounds", "holes"],
+  ["compounds", "holes", "checked"],
+  ["compounds"],
+  ["compounds", "checked"],
+]
+
 /// The other ways of offering choices, each against its baseline.
 const experiment_variants = [
   ["holes"],
@@ -50,6 +58,7 @@ pub fn main() {
   let assert [set, ..slugs] = argv.load().arguments
   let variants = case set {
     "compounds" -> compound_variants
+    "checked" -> checked_variants
     _ -> experiment_variants
   }
   let evals = case slugs {

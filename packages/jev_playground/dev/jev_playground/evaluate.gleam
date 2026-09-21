@@ -98,6 +98,7 @@ pub fn run(
       #("cursors", json.int(variant.cursors)),
       #("jumps", json.bool(variant.jumps)),
       #("highlight", json.string(options.highlight_name(variant.highlight))),
+      #("check_compounds", json.bool(variant.check_compounds)),
       #("outcome", json.string(outcome_text)),
       #("steps", json.array(steps, agent.step_to_json)),
       #("input_tokens", json.int(tokens)),
