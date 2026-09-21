@@ -15,6 +15,7 @@ import jev_playground/environment.{type Environment}
 import morph/buffer.{type Buffer}
 import morph/editable as e
 import morph/projection as p
+import multiformats/cid/v1
 
 pub type Action {
   // Navigation
@@ -31,7 +32,7 @@ pub type Action {
   Integer(value: Int)
   Builtin(name: String)
   Tag(label: String)
-  Reference(package: String)
+  Reference(reference: ir.Reference)
   OpenLibrary(package: String)
   EmptyList
   List
@@ -77,7 +78,7 @@ pub fn key(action: Action) -> String {
     Integer(value) -> "integer " <> int.to_string(value)
     Builtin(name) -> "builtin !" <> name
     Tag(label) -> "tag " <> label
-    Reference(package) -> "library @" <> package
+    Reference(reference) -> "library " <> reference_name(reference)
     OpenLibrary(package) -> "open library @" <> package
     EmptyList -> "empty list []"
     List -> "wrap in list [..]"
@@ -105,6 +106,18 @@ pub fn key(action: Action) -> String {
     RunTests -> "run tests"
     Finish -> "finish"
     Compound(name:, ..) -> name
+  }
+}
+
+/// A short name for a reference, as written in code.
+pub fn reference_name(reference) {
+  case reference {
+    ir.Pinned(release) -> "@" <> release.package
+    ir.Package(package) -> "@" <> package
+    ir.Version(package, version) ->
+      "@" <> package <> ":" <> int.to_string(version)
+    ir.Content(cid) -> "#" <> string.slice(v1.to_string(cid), 0, 16)
+    ir.Relative(path) -> "import " <> quote(path)
   }
 }
 
@@ -160,11 +173,8 @@ pub fn apply(
     }
     Builtin(name) -> with(buffer.insert_builtin(buffer), name)
     Tag(label) -> with(buffer.tag(buffer), label)
-    Reference(package) -> {
-      use library <- result.try(environment.find_library(environment, package))
-      let reference = e.Reference(ir.Pinned(library.release))
-      with(buffer.set_expression(buffer), reference)
-    }
+    Reference(reference) ->
+      with(buffer.set_expression(buffer), e.Reference(reference))
     EmptyList -> done(buffer.create_empty_list(buffer))
     List -> done(buffer.create_list(buffer))
     EmptyRecord -> done(buffer.create_empty_record(buffer))

@@ -5,6 +5,7 @@
 import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/analysis/type_/binding/debug
 import eyg/analysis/type_/binding/error
+import eyg/ir/tree as ir
 import gleam/bool
 import gleam/int
 import gleam/list
@@ -341,7 +342,10 @@ fn expression_values(
     }),
     list.filter_map(config.open_libraries, fn(name) {
       use library <- result.map(environment.find_library(environment, name))
-      option(a.Reference(name), "The library @" <> library.name <> ".")
+      option(
+        a.Reference(ir.Pinned(library.release)),
+        "The library @" <> library.name <> ".",
+      )
     }),
     case config.search_libraries {
       True ->

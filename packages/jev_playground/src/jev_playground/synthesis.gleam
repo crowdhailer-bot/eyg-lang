@@ -3,7 +3,6 @@
 //// would choose: holes are filled in reading order and navigation actions are
 //// added whenever the selection is not already on the next hole.
 
-import eyg/ir/tree as ir
 import gleam/dict
 import gleam/int
 import gleam/list
@@ -196,14 +195,7 @@ fn build(state: State, target: e.Expression, path: List(Int)) {
 }
 
 fn reference(state: State, reference) {
-  case reference {
-    ir.Pinned(release) ->
-      case environment.library_by_module(state.environment, release.module) {
-        Ok(library) -> step(state, a.Reference(library.name))
-        Error(Nil) -> Error("unknown library @" <> release.package)
-      }
-    _ -> Error("only pinned library references are supported")
-  }
+  step(state, a.Reference(reference))
 }
 
 fn call(state: State, func, args, path) {
