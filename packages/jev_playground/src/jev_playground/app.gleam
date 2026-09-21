@@ -186,18 +186,18 @@ fn loaded(model: Model, result) {
       bundle,
       base(model.source),
     ))
-    use source <- result.map(case model.source {
+    use #(source, task) <- result.map(case model.source {
       Replay(demo:, speed:, ..) -> {
-        use actions <- result.map(demo.script(demo, environment))
-        Replay(demo:, actions:, speed:)
+        use prepared <- result.map(demo.prepare(demo, environment))
+        #(Replay(demo:, actions: prepared.actions, speed:), prepared.task)
       }
-      live -> Ok(live)
+      live -> Ok(#(live, model.task))
     })
-    #(source, environment)
+    #(source, task, environment)
   }
   case setup {
-    Ok(#(source, environment)) -> {
-      let fresh = new(source, model.task, environment)
+    Ok(#(source, task, environment)) -> {
+      let fresh = new(source, task, environment)
       let model = Model(..fresh, running: model.running)
       case model.running {
         // Pause on the empty program so a recording shows the start.
@@ -291,7 +291,9 @@ fn request(model: Model) {
       let step = list.length(model.agent.history)
       let effect = case list.drop(actions, step) |> list.first {
         Ok(action) ->
-          case mock.answer(offered, action, step) {
+          case
+            mock.answer(offered, agent.candidates(model.agent, _), action, step)
+          {
             Ok(#(evaluation, thinking_ms)) ->
               delay(
                 float.round(int.to_float(thinking_ms) /. speed),
@@ -322,10 +324,7 @@ fn answered(model: Model, result) {
         Ok(agent) -> {
           let assert [step, ..] = agent.history
           let id = list.length(agent.history)
-          let name = case step.ranked {
-            [#(name, _), ..] -> name
-            [] -> action.key(step.action)
-          }
+          let name = step.label
           let selections =
             [Selection(id:, name:, step:), ..model.selections]
             |> list.take(shown + 1)

@@ -55,6 +55,10 @@ pub type Action {
   Delete
   Undo
   Rename(text: String)
+  /// A string literal chosen by a separate question.
+  ChooseString
+  /// An integer literal chosen by a separate question.
+  ChooseInteger
   Destructure(fields: List(#(String, String)))
   // Checking the program
   RunTests
@@ -73,35 +77,38 @@ pub fn key(action: Action) -> String {
     Parent -> "select parent"
     NextVacant -> "move to next ?"
     JumpToError(index) -> "jump to type error " <> int.to_string(index + 1)
-    Variable(name) -> "variable " <> name
+    Variable(name) -> "variable " <> slot(name)
     String(value) -> "string " <> quote(value)
     Integer(value) -> "integer " <> int.to_string(value)
-    Builtin(name) -> "builtin !" <> name
-    Tag(label) -> "tag " <> label
+    Builtin(name) -> "builtin !" <> slot(name)
+    Tag(label) -> "tag " <> slot(label)
     Reference(reference) -> "library " <> reference_name(reference)
     OpenLibrary(package) -> "open library @" <> package
     EmptyList -> "empty list []"
     List -> "wrap in list [..]"
     EmptyRecord -> "empty record {}"
-    Record(labels) -> "record {" <> string.join(labels, ", ") <> "}"
-    Function(param) -> "function (" <> param <> ") ->"
+    Record(labels) ->
+      "record {" <> string.join(list.map(labels, slot), ", ") <> "}"
+    Function(param) -> "function (" <> slot(param) <> ") ->"
     Call -> "call selection(..)"
     CallWith -> "pass selection to ?(..)"
-    Assign(name) -> "let " <> name <> " ="
-    AssignBefore(name) -> "let " <> name <> " = above"
-    Select(label) -> "select ." <> label
-    Overwrite(label) -> "overwrite {" <> label <> ": .., ..}"
+    Assign(name) -> "let " <> slot(name) <> " ="
+    AssignBefore(name) -> "let " <> slot(name) <> " = above"
+    Select(label) -> "select ." <> slot(label)
+    Overwrite(label) -> "overwrite {" <> slot(label) <> ": .., ..}"
     Match(labels) -> "match " <> string.join(labels, " | ")
     Perform(label) -> "perform " <> label
     Handle(label) -> "handle " <> label
     InsertBefore(None) -> "insert before"
-    InsertBefore(Some(label)) -> "insert " <> label <> " before"
+    InsertBefore(Some(label)) -> "insert " <> slot(label) <> " before"
     InsertAfter(None) -> "insert after"
-    InsertAfter(Some(label)) -> "insert " <> label <> " after"
+    InsertAfter(Some(label)) -> "insert " <> slot(label) <> " after"
     Spread -> "spread .."
     Delete -> "delete selection"
     Undo -> "undo"
-    Rename(text) -> "rename to " <> text
+    Rename(text) -> "rename to " <> slot(text)
+    ChooseString -> "string ?"
+    ChooseInteger -> "integer ?"
     Destructure(fields) -> "destructure " <> fields_to_string(fields)
     RunTests -> "run tests"
     Finish -> "finish"
@@ -118,6 +125,14 @@ pub fn reference_name(reference) {
       "@" <> package <> ":" <> int.to_string(version)
     ir.Content(cid) -> "#" <> string.slice(v1.to_string(cid), 0, 16)
     ir.Relative(path) -> "import " <> quote(path)
+  }
+}
+
+// Names left empty are slots filled later, shown as `?`.
+fn slot(name) {
+  case name {
+    "" -> "?"
+    _ -> name
   }
 }
 
@@ -216,6 +231,8 @@ pub fn apply(
       buffer.update_code(buffer, projection, context, refs)
     }
     RunTests | Finish | OpenLibrary(_) -> Ok(buffer)
+    // A literal must be chosen before it can be applied.
+    ChooseString | ChooseInteger -> Error(Nil)
     Compound(steps:, ..) ->
       list.try_fold(steps, buffer, fn(buffer, step) {
         apply(step, buffer, environment)
@@ -255,8 +272,9 @@ fn completes(action, after: Buffer) {
   case action {
     String(_) | Integer(_) | EmptyList | EmptyRecord -> True
     Variable(_) | Builtin(_) | Tag(_) | Reference(_) ->
+      // A value of unknown type might be a function or record, keep it selected.
       case buffer.target_type(after) {
-        Ok(t.Fun(..)) | Ok(t.Record(_)) -> False
+        Ok(t.Fun(..)) | Ok(t.Record(_)) | Ok(t.Var(_)) | Error(Nil) -> False
         _ -> True
       }
     _ -> False

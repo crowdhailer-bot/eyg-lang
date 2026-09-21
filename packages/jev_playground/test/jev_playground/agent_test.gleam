@@ -27,10 +27,14 @@ fn take_all(agent, actions) {
 
 pub fn empty_program_offers_values_and_structure_test() {
   let keys = keys(new("Add `n` to 1"))
-  assert list.contains(keys, "function (n) ->")
+  assert list.contains(keys, "function (?) ->")
   assert list.contains(keys, "integer 1")
   assert list.contains(keys, "builtin !int_add")
-  assert list.contains(keys, "let n =")
+  assert list.contains(keys, "let ? =")
+  assert list.contains(
+    agent.candidates(new("Add `n` to 1"), options.NameSlot),
+    "n",
+  )
   assert !list.contains(keys, "move next")
 }
 
@@ -118,8 +122,11 @@ pub fn run_tests_reports_results_test() {
 
 pub fn request_offers_every_option_as_a_choice_test() {
   let #(request, offered) = agent.request(new("inc `n`"), jev.latest)
-  let assert [#("next_edit", jev.Choice(criteria:, ..))] = request.questions
+  let assert [#("next_edit", jev.Choice(criteria:, ..)), ..] = request.questions
+  let assert Ok(names) = list.key_find(request.questions, "name")
   assert list.length(criteria) == list.length(offered)
+  let assert jev.Choice(criteria: names, ..) = names
+  assert list.contains(names, #("n", None))
   let state = json.to_string(request.state)
   assert string.contains(state, "\"program\":\"«?»\"")
   assert string.contains(state, "\"task\":\"inc `n`\"")
@@ -130,19 +137,21 @@ pub fn answer_applies_the_chosen_option_test() {
   let #(_request, offered) = agent.request(agent, jev.latest)
   let answer =
     jev.ChoiceAnswer(
-      "function (n) ->",
-      dict.from_list([#("function (n) ->", 0.9), #("integer 1", 0.1)]),
+      "function (?) ->",
+      dict.from_list([#("function (?) ->", 0.9), #("integer 1", 0.1)]),
       0.8,
     )
+  let name = jev.ChoiceAnswer("n", dict.from_list([#("n", 1.0)]), 1.0)
   let evaluation =
     jev.Evaluation(
       "jev-1.13.0",
-      dict.from_list([#("next_edit", answer)]),
+      dict.from_list([#("next_edit", answer), #("name", name)]),
       jev.Usage(100, 1),
     )
   let assert Ok(agent) = agent.answer(agent, offered, evaluation, 50)
   assert agent.program_text(agent) == "(n) -> { «?» }"
   let assert [step] = agent.history
   assert step.thinking_ms == 50
-  assert step.ranked == [#("function (n) ->", 0.9), #("integer 1", 0.1)]
+  assert step.ranked == [#("function (?) ->", 0.9), #("integer 1", 0.1)]
+  assert step.label == "function (n) ->"
 }

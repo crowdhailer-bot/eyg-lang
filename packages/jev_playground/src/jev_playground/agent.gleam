@@ -47,6 +47,10 @@ pub type Step {
     offered: Int,
     input_tokens: Int,
     thinking_ms: Int,
+    /// The edit could not be applied, for example a compound failing part way.
+    failed: Bool,
+    /// How the choice is shown, the option name with any name filled in.
+    label: String,
   )
 }
 
@@ -108,7 +112,12 @@ pub fn state(agent: Agent) -> Json {
     history
     |> list.take(recent_actions)
     |> list.reverse
-    |> list.map(fn(step) { json.string(a.key(step.action)) })
+    |> list.map(fn(step) {
+      case step.failed {
+        True -> json.string(a.key(step.action) <> " (failed, nothing changed)")
+        False -> json.string(a.key(step.action))
+      }
+    })
   json.object(
     list.flatten([
       [
@@ -159,15 +168,42 @@ pub fn question(offered: List(options.Option)) -> jev.Question {
   jev.Choice(json.string(instructions), criteria)
 }
 
+/// The candidates offered in the question for a slot.
+pub fn candidates(agent: Agent, slot) -> List(String) {
+  let vocabulary = vocabulary.for_task(agent.task, source(agent))
+  options.candidates(slot, agent.buffer, vocabulary)
+  |> list.filter(fn(text) { text != "" })
+  |> list.unique
+  |> list.take(jev.max_choice_options)
+}
+
+const slots = [options.NameSlot, options.LabelSlot]
+
 /// The request for the next step and the options it offers.
+/// When an edit needs a name it is asked for in a second question, evaluated in
+/// parallel, so the options do not repeat each edit for every name.
 pub fn request(
   agent: Agent,
   model: String,
 ) -> #(jev.Request, List(options.Option)) {
   let offered = options(agent)
+  let slot_questions =
+    list.filter_map(slots, fn(slot) {
+      let needed =
+        list.any(offered, fn(option) { options.slot(option.action) == Ok(slot) })
+      case needed, candidates(agent, slot) {
+        True, [_, ..] as candidates -> {
+          let criteria = list.map(candidates, fn(text) { #(text, None) })
+          let instructions = json.string(options.slot_instructions(slot))
+          Ok(#(options.slot_id(slot), jev.Choice(instructions, criteria)))
+        }
+        _, _ -> Error(Nil)
+      }
+    })
   let request =
     jev.Request(model:, state: state(agent), questions: [
       #(question_id, question(offered)),
+      ..slot_questions
     ])
   #(request, offered)
 }
@@ -189,16 +225,39 @@ pub fn answer(
         list.find(offered, fn(option) { options.key(option) == choice })
         |> result.replace_error("unknown option " <> choice),
       )
+      use action <- result.try(case options.slot(option.action) {
+        Ok(slot) ->
+          case dict.get(evaluation.answers, options.slot_id(slot)) {
+            Ok(jev.ChoiceAnswer(choice: text, ..)) ->
+              Ok(options.fill(option.action, text))
+            _ ->
+              Error("no answer to the " <> options.slot_id(slot) <> " question")
+          }
+        Error(Nil) -> Ok(option.action)
+      })
+      let label = case options.slot(option.action) {
+        Ok(_) -> a.key(action)
+        Error(Nil) -> choice
+      }
       let step =
         Step(
-          action: option.action,
+          action:,
+          label:,
           confidence:,
           ranked: jev.ranked(probabilities) |> list.take(8),
           offered: list.length(offered),
           input_tokens: evaluation.usage.input_tokens,
           thinking_ms:,
+          failed: False,
         )
-      take(agent, step)
+      // A failed edit is shown to Jev in the recent edits rather than ending the run.
+      case take(agent, step) {
+        Ok(agent) -> Ok(agent)
+        Error(_) -> {
+          let step = Step(..step, failed: True)
+          Ok(Agent(..agent, history: [step, ..agent.history]))
+        }
+      }
     }
     _ -> Error("expected a choice answer")
   }
@@ -239,6 +298,8 @@ pub fn scripted(action) -> Step {
     offered: 0,
     input_tokens: 0,
     thinking_ms: 0,
+    failed: False,
+    label: a.key(action),
   )
 }
 

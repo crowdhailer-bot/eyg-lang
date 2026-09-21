@@ -18,6 +18,12 @@ pub type Vocabulary {
     integers: List(Int),
     /// Groups of labels written together, as in `{a, b}`, offered as one record.
     records: List(List(String)),
+    /// Destructuring patterns, pairs of field and variable, as in `{a, b: c}`.
+    patterns: List(List(#(String, String))),
+    /// Tags matched together, as in `True | False`.
+    unions: List(List(String)),
+    /// Builtins written as `!name`.
+    builtins: List(String),
   )
 }
 
@@ -71,19 +77,48 @@ pub fn from_task(task: String) -> Vocabulary {
     strings: quoted,
     integers:,
     records:,
+    patterns: list.filter_map(code, parse_pattern),
+    unions: [],
+    builtins: matches("!([a-z_][a-z0-9_]*)", task),
   )
+}
+
+// `{a, b: c}` is the pattern binding `a` to `a` and `b` to `c`.
+fn parse_pattern(code) {
+  case string.starts_with(code, "{") && string.ends_with(code, "}") {
+    False -> Error(Nil)
+    True -> {
+      let inner = code |> string.drop_start(1) |> string.drop_end(1)
+      string.split(inner, ",")
+      |> list.try_map(fn(part) {
+        case string.split_once(part, ":") {
+          Ok(#(label, var)) -> #(string.trim(label), string.trim(var))
+          Error(Nil) -> #(string.trim(part), string.trim(part))
+        }
+        |> fn(pair) {
+          case is_name(pair.0) && is_name(pair.1) {
+            True -> Ok(pair)
+            False -> Error(Nil)
+          }
+        }
+      })
+    }
+  }
 }
 
 /// Names and literals already written in the program can be written again.
 pub fn from_program(source: e.Expression) -> Vocabulary {
-  let found = collect(source, Vocabulary([], [], [], [], [], []))
+  let found = collect(source, Vocabulary([], [], [], [], [], [], [], [], []))
   Vocabulary(
     names: list.reverse(found.names),
     labels: list.reverse(found.labels),
     tags: list.reverse(found.tags),
     strings: list.reverse(found.strings),
     integers: list.reverse(found.integers),
-    records: [],
+    records: list.reverse(found.records),
+    patterns: list.reverse(found.patterns),
+    unions: list.reverse(found.unions),
+    builtins: list.reverse(found.builtins),
   )
 }
 
@@ -95,6 +130,9 @@ pub fn defaults() -> Vocabulary {
     strings: [],
     integers: common_integers,
     records: [],
+    patterns: [],
+    unions: [["True", "False"], ["Ok", "Error"]],
+    builtins: [],
   )
 }
 
@@ -107,6 +145,9 @@ pub fn merge(vocabularies: List(Vocabulary)) -> Vocabulary {
     strings: all(vocabularies, fn(v: Vocabulary) { v.strings }),
     integers: all(vocabularies, fn(v: Vocabulary) { v.integers }),
     records: all(vocabularies, fn(v: Vocabulary) { v.records }),
+    patterns: all(vocabularies, fn(v: Vocabulary) { v.patterns }),
+    unions: all(vocabularies, fn(v: Vocabulary) { v.unions }),
+    builtins: all(vocabularies, fn(v: Vocabulary) { v.builtins }),
   )
 }
 
@@ -180,6 +221,14 @@ fn collect(exp, acc: Vocabulary) -> Vocabulary {
       }
     }
     e.Record(fields, original) -> {
+      let acc = case fields {
+        [_, _, ..] ->
+          Vocabulary(..acc, records: [
+            list.map(fields, fn(f) { f.0 }),
+            ..acc.records
+          ])
+        _ -> acc
+      }
       let acc =
         list.fold(fields, acc, fn(acc, field) {
           let #(label, value) = field
@@ -192,6 +241,14 @@ fn collect(exp, acc: Vocabulary) -> Vocabulary {
     }
     e.Select(from, label) -> collect(from, add_label(acc, label))
     e.Case(top, matches, otherwise) -> {
+      let acc = case matches {
+        [_, _, ..] ->
+          Vocabulary(..acc, unions: [
+            list.map(matches, fn(m) { m.0 }),
+            ..acc.unions
+          ])
+        _ -> acc
+      }
       let acc =
         list.fold(matches, collect(top, acc), fn(acc, match) {
           let #(label, branch) = match
@@ -205,6 +262,7 @@ fn collect(exp, acc: Vocabulary) -> Vocabulary {
     e.Tag(label) -> Vocabulary(..acc, tags: [label, ..acc.tags])
     e.String(value) -> Vocabulary(..acc, strings: [value, ..acc.strings])
     e.Integer(value) -> Vocabulary(..acc, integers: [value, ..acc.integers])
+    e.Builtin(name) -> Vocabulary(..acc, builtins: [name, ..acc.builtins])
     _ -> acc
   }
 }
@@ -218,12 +276,16 @@ fn pattern_names(pattern, acc: Vocabulary) {
     e.Bind("$") -> acc
     e.Bind(name) -> Vocabulary(..acc, names: [name, ..acc.names])
     e.Destructure(fields) ->
-      list.fold(fields, acc, fn(acc, field) {
-        let #(label, name) = field
-        Vocabulary(..acc, names: [name, ..acc.names], labels: [
-          label,
-          ..acc.labels
-        ])
-      })
+      list.fold(
+        fields,
+        Vocabulary(..acc, patterns: [fields, ..acc.patterns]),
+        fn(acc, field) {
+          let #(label, name) = field
+          Vocabulary(..acc, names: [name, ..acc.names], labels: [
+            label,
+            ..acc.labels
+          ])
+        },
+      )
   }
 }

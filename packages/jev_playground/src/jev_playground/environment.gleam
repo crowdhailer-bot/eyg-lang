@@ -3,6 +3,7 @@
 import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/analysis/type_/binding
 import eyg/analysis/type_/binding/debug
+import eyg/analysis/type_/isomorphic as t
 import eyg/interpreter/state
 import eyg/ir/tree as ir
 import gleam/dict.{type Dict}
@@ -15,6 +16,9 @@ pub type Environment {
   Environment(
     effects: List(#(String, #(binding.Mono, binding.Mono))),
     libraries: List(Library),
+    /// Variables already defined around the program, with the bindings their types refer to.
+    scope: List(#(String, binding.Poly)),
+    bindings: Dict(Int, binding.Binding),
   )
 }
 
@@ -32,11 +36,16 @@ pub type Library {
 
 /// Every effect the browser runtime implements, and no libraries.
 pub fn browser() -> Environment {
-  Environment(effects: interface.types(harness.effects()), libraries: [])
+  Environment(
+    effects: interface.types(harness.effects()),
+    libraries: [],
+    scope: [],
+    bindings: dict.new(),
+  )
 }
 
 pub fn pure() -> Environment {
-  Environment(effects: [], libraries: [])
+  Environment(effects: [], libraries: [], scope: [], bindings: dict.new())
 }
 
 pub fn with_libraries(environment, libraries) {
@@ -44,7 +53,9 @@ pub fn with_libraries(environment, libraries) {
 }
 
 pub fn context(environment: Environment) -> infer.Context {
-  infer.pure() |> infer.with_effects(environment.effects)
+  let Environment(scope:, bindings:, ..) = environment
+  infer.Context(scope, t.Empty, 1, bindings)
+  |> infer.with_effects(environment.effects)
 }
 
 pub fn references(environment: Environment) -> Dict(v1.Cid, binding.Poly) {

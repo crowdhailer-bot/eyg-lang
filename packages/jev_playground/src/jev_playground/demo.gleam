@@ -3,12 +3,18 @@
 //// the actions are found by synthesis so they stay in step with the editor.
 
 import eyg/parser
+import gleam/int
 import gleam/list
+import gleam/option.{None}
 import gleam/result
+import gleam/string
 import jev_playground/action.{type Action}
+import jev_playground/agent
+import jev_playground/compound
 import jev_playground/environment.{type Environment}
 import jev_playground/options
 import jev_playground/synthesis
+import jev_playground/vocabulary
 import morph/editable as e
 
 pub type Demo {
@@ -19,33 +25,60 @@ pub type Demo {
     target: Target,
     environment: Environment,
     config: options.Config,
+    /// Add a list of the names and literals in the target to the task,
+    /// Jev chooses from offered names and literals so it needs them spelled out.
+    spec: Bool,
   )
 }
 
 /// The program Jev should end up with.
 pub type Target {
   Code(source: String)
-  /// The source of a library, as loaded into the environment.
-  LibrarySource(name: String)
+  /// The source of a library, as loaded into the environment, without some definitions.
+  LibrarySource(name: String, without: List(String))
 }
 
 pub fn all() -> List(Demo) {
-  [github()]
+  [github(), http(), http_compound()]
 }
 
 pub fn find(slug) {
   list.find(all(), fn(demo) { demo.slug == slug })
 }
 
+/// The task and scripted actions once the environment, with any libraries, is known.
+pub type Prepared {
+  Prepared(task: String, actions: List(Action))
+}
+
+pub fn prepare(
+  demo: Demo,
+  environment: Environment,
+) -> Result(Prepared, String) {
+  use target <- result.try(target(demo, environment))
+  let task = case demo.spec {
+    True -> demo.task <> "\n" <> spec(target)
+    False -> demo.task
+  }
+  use actions <- result.map(synthesis.script(target, environment))
+  let actions = list.append(actions, [action.RunTests, action.Finish])
+  let actions = case demo.config.compounds {
+    [] -> actions
+    _ ->
+      compound.compress(
+        actions,
+        agent.new(task, e.Vacant, environment, demo.config),
+      )
+  }
+  Prepared(task:, actions:)
+}
+
 /// The actions Jev is scripted to choose, ending by running the tests and finishing.
-/// The environment is the demo environment with any libraries loaded.
 pub fn script(
   demo: Demo,
   environment: Environment,
 ) -> Result(List(Action), String) {
-  use target <- result.try(target(demo, environment))
-  use actions <- result.map(synthesis.script(target, environment))
-  list.append(actions, [action.RunTests, action.Finish])
+  prepare(demo, environment) |> result.map(fn(prepared) { prepared.actions })
 }
 
 pub fn target(demo: Demo, environment) -> Result(e.Expression, String) {
@@ -56,11 +89,97 @@ pub fn target(demo: Demo, environment) -> Result(e.Expression, String) {
       |> result.replace_error(
         "the target of " <> demo.slug <> " does not parse",
       )
-    LibrarySource(name) ->
+    LibrarySource(name, without) ->
       environment.find_library(environment, name)
-      |> result.map(fn(library) { e.from_annotated(library.source) })
+      |> result.map(fn(library) {
+        e.from_annotated(library.source) |> remove(without)
+      })
       |> result.replace_error("the library " <> name <> " is not loaded")
   }
+}
+
+// Remove top level definitions and the fields that export them.
+fn remove(source, names) {
+  case source {
+    e.Block(assigns, e.Record(fields, None), open) -> {
+      let assigns =
+        list.filter(assigns, fn(assign) {
+          case assign.0 {
+            e.Bind(name) -> !list.contains(names, name)
+            _ -> True
+          }
+        })
+      let fields =
+        list.filter(fields, fn(field) { !list.contains(names, field.0) })
+      e.Block(assigns, e.Record(fields, None), open)
+    }
+    _ -> source
+  }
+}
+
+/// The names, record shapes, tags and literals a program uses, written out for a task.
+pub fn spec(target) -> String {
+  let found = vocabulary.from_program(target)
+  let code = fn(items) {
+    list.map(items, fn(item) { "`" <> item <> "`" }) |> string.join(", ")
+  }
+  let quoted = fn(items) {
+    list.map(items, fn(item) { "\"" <> item <> "\"" }) |> string.join(", ")
+  }
+  [
+    "Names: " <> code(list.unique(list.append(found.names, found.labels))),
+    "Patterns: "
+      <> code(
+      list.map(found.patterns, fn(fields) {
+        let fields =
+          list.map(fields, fn(field) {
+            case field.0 == field.1 {
+              True -> field.0
+              False -> field.0 <> ": " <> field.1
+            }
+          })
+        "{" <> string.join(fields, ", ") <> "}"
+      })
+      |> list.unique,
+    ),
+    "Records: "
+      <> code(
+      list.map(found.records, fn(labels) {
+        "{" <> string.join(labels, ", ") <> "}"
+      })
+      |> list.unique,
+    ),
+    "Tags: " <> code(list.unique(found.tags)),
+    "Builtins: "
+      <> code(list.map(list.unique(found.builtins), fn(name) { "!" <> name })),
+    "Strings: " <> quoted(list.unique(found.strings)),
+    "Integers: "
+      <> string.join(list.map(list.unique(found.integers), int.to_string), ", "),
+  ]
+  |> string.join("\n")
+}
+
+pub fn http() {
+  Demo(
+    slug: "http",
+    title: "HTTP library",
+    task: "Write the @http library for working with HTTP operations, requests and responses: helpers for percent and form encoding, origins, operations for each method, responses for each status, content and headers, and dispatch that performs `Fetch`.",
+    target: LibrarySource("http", without: ["readme"]),
+    environment: environment.browser(),
+    config: options.Config(..options.default_config(), open_libraries: [
+      "standard",
+    ]),
+    spec: True,
+  )
+}
+
+pub fn http_compound() {
+  Demo(
+    ..http(),
+    slug: "http-compound",
+    title: "HTTP library with compound moves",
+    config: options.Config(..http().config, compounds: compound.mined()),
+  )
 }
 
 pub fn github() {
@@ -78,6 +197,7 @@ Name the tests \"get user\", \"list repos\" and \"get repo\". Run the tests befo
     target: Code(github_target),
     environment: environment.browser(),
     config: options.default_config(),
+    spec: False,
   )
 }
 
