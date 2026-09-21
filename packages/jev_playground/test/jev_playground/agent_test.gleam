@@ -257,3 +257,22 @@ pub fn two_edits_taking_turns_are_stopped_test() {
   assert !list.contains(keys(agent), "select parent")
   assert list.contains(keys(agent), "move next")
 }
+
+pub fn a_hole_in_a_match_branch_is_described_by_its_tag_test() {
+  let source =
+    e.Case(
+      e.Variable("x"),
+      [#("Ok", e.Function([e.Bind("v")], e.Vacant))],
+      Some(e.Function([e.Bind("_")], e.Vacant)),
+    )
+  let config = options.Config(..options.default_config(), focus_holes: True)
+  let agent = agent.new("", source, environment.pure(), config)
+  let state = json.to_string(agent.state(agent))
+  assert string.contains(state, "the value returned when the match is `Ok`")
+  let agent = take_all(agent, [a.NextVacant])
+  let state = json.to_string(agent.state(agent))
+  assert string.contains(
+    state,
+    "the value returned when the match is any other tag",
+  )
+}

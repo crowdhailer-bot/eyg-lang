@@ -402,6 +402,11 @@ fn role(buffer: Buffer) -> Result(String, Nil) {
         <> func_type,
       )
     }
+    // A match branch is a function, what it returns is the value for the branch.
+    #(p.Exp(_), [p.Body(_), p.CaseMatch(label:, ..), ..]) ->
+      Ok("the value returned when the match is `" <> label <> "`")
+    #(p.Exp(_), [p.Body(_), p.CaseTail(..), ..]) ->
+      Ok("the value returned when the match is any other tag")
     #(p.Exp(_), [p.Body(params), ..]) ->
       Ok(
         "the body of the function taking ("
