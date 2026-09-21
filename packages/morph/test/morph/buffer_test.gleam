@@ -31,3 +31,11 @@ pub fn arity_is_found_at_the_focus_test() {
   assert buffer.target_arity(at(source, [2, 0])) == Ok(2)
   assert buffer.target_arity(at(e.Record([], None), [])) == Error(Nil)
 }
+
+pub fn focusing_on_a_path_that_does_not_exist_fails_test() {
+  let source = e.Call(e.Variable("f"), [e.Integer(1)])
+  let buffer = at(source, [])
+  let assert Ok(focused) = buffer.focus_at(buffer, [1])
+  assert focused.projection.0 == p.Exp(e.Integer(1))
+  assert buffer.focus_at(buffer, [1, 0]) == Error(Nil)
+}

@@ -207,7 +207,8 @@ pub fn focus_at(buffer: Buffer, path) {
 }
 
 fn navigate_focus_at(projection, path) {
-  Ok(p.focus_at(p.rebuild(projection), path))
+  p.do_focus_at(p.rebuild(projection), path, [])
+  |> result.replace_error(Nil)
 }
 
 pub fn focus_at_reversed(buffer: Buffer, reversed) {
