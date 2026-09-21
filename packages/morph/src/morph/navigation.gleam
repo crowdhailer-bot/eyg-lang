@@ -3,6 +3,7 @@ import gleam/list
 import gleam/listx
 import gleam/option.{None, Some}
 import gleam/result.{try}
+import gleam/set
 import gleam/string
 import morph/editable as e
 import morph/projection as p
@@ -774,19 +775,22 @@ pub fn toggle_open(proj) {
 pub fn next_vacant(projection) {
   let bottom = p.zoom_in(projection)
   let initial = p.path(bottom)
-  do_next_vacant(bottom, initial)
+  do_next_vacant(bottom, set.from_list([initial]))
 }
 
-fn do_next_vacant(proj, initial) {
+// Stops when a node is visited twice, the starting node may not be visited again
+// because moving on from an assignment statement selects its pattern.
+fn do_next_vacant(proj, seen) {
   let next = next(proj)
-  case p.path(next) == initial {
+  let path = p.path(next)
+  case set.contains(seen, path) {
     True -> Error(Nil)
     False ->
       case next {
         #(p.Exp(e.Vacant), _zoom) -> Ok(next)
         // If at the top break, can search again to loop around
         #(p.Exp(_), []) -> Error(Nil)
-        _ -> do_next_vacant(next, initial)
+        _ -> do_next_vacant(next, set.insert(seen, path))
       }
   }
 }

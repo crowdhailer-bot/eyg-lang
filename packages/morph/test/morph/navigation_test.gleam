@@ -18,3 +18,13 @@ pub fn nex_vacant_test() {
     |> navigation.first()
     |> navigation.next_vacant()
 }
+
+// Moving on from a block selects its first assignment's pattern, not the statement.
+pub fn no_next_vacant_from_a_block_test() {
+  let source =
+    e.Function(
+      [e.Bind("x")],
+      e.Block([#(e.Bind("y"), e.Variable("x"))], e.Variable("y"), True),
+    )
+  assert Error(Nil) == navigation.next_vacant(p.focus_at(source, [1]))
+}
