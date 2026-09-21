@@ -73,11 +73,16 @@ Call the API with:
 ### Compound moves
 
 Look at each file in the eyg_packages directory.
-- [ ] Find a string of transformations that moves from the empty program to the library function as it exits today.
-- [ ] Find the most common compound moves. i.e. a series of transformations that repeat in different contexts.
+- [x] Find a string of transformations that moves from the empty program to the library function as it exits today.
+  - 434 of 436 definitions, `gleam run -m jev_playground/mine`, each typed in the scope of its file
+  - [x] Fix `morph` navigation looping forever looking for a `?` when there is none
+  - [x] Fix `morph` paths to the original record of an overwrite of several fields
+- [x] Find the most common compound moves. i.e. a series of transformations that repeat in different contexts.
   - Make sure that you consider ones have the same structural modification but use different variable names.
-  - [ ] Find 10 compound strings to start with
-- [ ] record a video of jev creaing the http library, with mocked responses, First without the compound options second with the compound options.
+  - [x] Find 10 compound strings to start with, see `packages/jev_playground/research/compound_moves.md`
+- [x] record a video of jev creaing the http library, with mocked responses, First without the compound options second with the compound options.
+  - [x] Ask for names, labels and many literals in separate questions, a long task offered more than 255 options
+  - [x] Find demo scripts when building the playground, finding them in the browser was slow
 
 ### Adding libraries
 
