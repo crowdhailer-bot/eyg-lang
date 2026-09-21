@@ -240,11 +240,24 @@ fn cursor_options(agent: Agent) {
   })
 }
 
-fn cursor_question(number, offered: List(options.Option)) {
+// The question for an extra hole says where the hole is and its type, as the
+// selection description only describes the selected hole.
+fn cursor_question(number, at: Buffer, offered: List(options.Option)) {
+  let role = case role(at) {
+    Ok(role) -> ", " <> role
+    Error(Nil) -> ""
+  }
+  let type_ = case buffer.target_type(at) {
+    Ok(t.Var(_)) | Error(Nil) -> ""
+    Ok(type_) -> ", of type " <> environment.show_type(type_)
+  }
   let instructions =
     "Choose what fills the hole marked ⟨"
     <> int.to_string(number)
-    <> ":?⟩ in `program`, or leave it for later if the task does not yet say."
+    <> ":?⟩ in `program`"
+    <> role
+    <> type_
+    <> ", or leave it for later if the task does not yet say."
   let criteria =
     list.map(offered, fn(option) {
       #(options.key(option), Some(json.string(option.description)))
@@ -481,8 +494,9 @@ pub fn request(
       ..list.append(
         slot_questions,
         list.map(cursor_options(agent), fn(cursor) {
-          let #(number, _, offered) = cursor
-          #(cursor_id(number), cursor_question(number, offered))
+          let #(number, projection, offered) = cursor
+          let at = buffer.update_position(agent.buffer, projection)
+          #(cursor_id(number), cursor_question(number, at, offered))
         }),
       )
     ])

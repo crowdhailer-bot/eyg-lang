@@ -201,8 +201,10 @@ pub fn several_holes_are_filled_in_one_request_test() {
     |> take_all([a.Function("n"), a.Builtin("int_add"), a.Call])
   assert agent.program_text(agent) == "(n) -> { !int_add(«?», ⟨2:?⟩) }"
   let #(request, offered) = agent.request(agent, jev.latest)
-  let assert Ok(jev.Choice(criteria:, ..)) =
+  let assert Ok(jev.Choice(instructions:, criteria:)) =
     list.key_find(request.questions, "hole_2")
+  assert json.to_string(instructions)
+    == "\"Choose what fills the hole marked ⟨2:?⟩ in `program`, argument 2 of 2 to !int_add, which has type (Integer, Integer) -> Integer, of type Integer, or leave it for later if the task does not yet say.\""
   let keys = list.map(criteria, fn(criterion) { criterion.0 })
   assert list.contains(keys, "leave it for later")
   assert list.contains(keys, "integer 1")
