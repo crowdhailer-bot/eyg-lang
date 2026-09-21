@@ -156,7 +156,12 @@ fn all(vocabularies, get) {
 }
 
 pub fn for_task(task, source) {
-  merge([from_task(task), from_program(source), defaults()])
+  with_task(from_task(task), source)
+}
+
+/// Combine the vocabulary of a task, found once, with that of the program so far.
+pub fn with_task(task: Vocabulary, source) {
+  merge([task, from_program(source), defaults()])
 }
 
 fn matches(pattern, text) {
@@ -180,16 +185,38 @@ fn words(text) {
   regexp.scan(re, text) |> list.map(fn(match) { match.content })
 }
 
+// Checked by character, compiling a regular expression for each word was slow.
 fn is_name(text) {
-  let assert Ok(re) = regexp.from_string("^[a-z_][a-z0-9_]*$")
-  regexp.check(re, text) && !list.contains(keywords, text)
+  case string.to_graphemes(text) {
+    [first, ..rest] ->
+      { is_lower(first) || first == "_" }
+      && list.all(rest, fn(g) { is_lower(g) || is_digit(g) || g == "_" })
+      && !list.contains(keywords, text)
+    [] -> False
+  }
+}
+
+fn is_lower(g) {
+  string.contains("abcdefghijklmnopqrstuvwxyz", g)
+}
+
+fn is_upper(g) {
+  string.contains("ABCDEFGHIJKLMNOPQRSTUVWXYZ", g)
+}
+
+fn is_digit(g) {
+  string.contains("0123456789", g)
 }
 
 const keywords = ["let", "match", "perform", "handle", "deep", "import"]
 
 fn is_tag(text) {
-  let assert Ok(re) = regexp.from_string("^[A-Z][a-zA-Z0-9]*$")
-  regexp.check(re, text)
+  case string.to_graphemes(text) {
+    [first, ..rest] ->
+      is_upper(first)
+      && list.all(rest, fn(g) { is_lower(g) || is_upper(g) || is_digit(g) })
+    [] -> False
+  }
 }
 
 fn is_common_tag(text) {

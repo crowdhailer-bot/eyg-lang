@@ -34,6 +34,8 @@ pub type Agent {
     history: List(Step),
     test_results: Option(String),
     finished: Bool,
+    /// Names and literals from the task, found once as the task can be long.
+    task_vocabulary: vocabulary.Vocabulary,
   )
 }
 
@@ -77,7 +79,12 @@ pub fn new(task, source: e.Expression, environment, config) -> Agent {
     history: [],
     test_results: None,
     finished: False,
+    task_vocabulary: vocabulary.from_task(task),
   )
+}
+
+pub fn with_task(agent: Agent, task) {
+  Agent(..agent, task:, task_vocabulary: vocabulary.from_task(task))
 }
 
 pub fn source(agent: Agent) -> e.Expression {
@@ -85,7 +92,7 @@ pub fn source(agent: Agent) -> e.Expression {
 }
 
 pub fn options(agent: Agent) -> List(options.Option) {
-  let vocabulary = vocabulary.for_task(agent.task, source(agent))
+  let vocabulary = vocabulary.with_task(agent.task_vocabulary, source(agent))
   options.available(agent.buffer, agent.environment, vocabulary, agent.config)
   |> list.take(jev.max_choice_options)
 }
@@ -170,7 +177,7 @@ pub fn question(offered: List(options.Option)) -> jev.Question {
 
 /// The candidates offered in the question for a slot.
 pub fn candidates(agent: Agent, slot) -> List(String) {
-  let vocabulary = vocabulary.for_task(agent.task, source(agent))
+  let vocabulary = vocabulary.with_task(agent.task_vocabulary, source(agent))
   options.candidates(slot, agent.buffer, vocabulary)
   |> list.filter(fn(text) { text != "" })
   |> list.unique
