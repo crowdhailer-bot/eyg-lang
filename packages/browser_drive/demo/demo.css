@@ -1,0 +1,470 @@
+@import url('./base.css');
+body {
+  background: #f7f7f2;
+}
+.lab-bar {
+  height: 49px;
+  background: #23372f;
+  color: #e2e8d9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  position: relative;
+  z-index: 2;
+}
+.lab-bar a {
+  color: #e2e8d9;
+  text-decoration: none;
+}
+.lab-bar .tag {
+  font:
+    10px ui-monospace,
+    monospace;
+  color: #afc1a0;
+}
+.inject {
+  border: 1px solid #87987d;
+  border-radius: 6px;
+  color: #ecf1e5;
+  background: #3c5240;
+  padding: 7px 12px;
+  font: 11px inherit;
+  cursor: pointer;
+}
+.injection {
+  position: absolute;
+  right: 20px;
+  top: 58px;
+  width: min(570px, calc(100vw - 40px));
+  padding: 24px;
+  background: #17291f;
+  color: #d6e3cb;
+  border: 1px solid #546948;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px #142d3230;
+  z-index: 10;
+}
+.injection h2 {
+  font:
+    22px Georgia,
+    serif;
+  margin: 0 0 10px;
+}
+.injection p {
+  font-size: 12px;
+  color: #b7c7ad;
+  line-height: 1.7;
+}
+.injection pre {
+  white-space: pre-wrap;
+  font:
+    11px/1.7 ui-monospace,
+    monospace;
+  background: #0e2118;
+  padding: 16px;
+  border-radius: 8px;
+}
+.injection button {
+  border: 0;
+  border-radius: 7px;
+  background: #dbe9b9;
+  color: #283d27;
+  padding: 11px 17px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.site-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 28px 5%;
+  border-bottom: 1px solid #dedfd7;
+  background: #fff;
+}
+.site-header .wordmark {
+  font:
+    700 36px Georgia,
+    serif;
+  letter-spacing: -2px;
+}
+.site-header .wordmark.di {
+  color: #a82929;
+}
+.site-header nav {
+  display: flex;
+  gap: 25px;
+  font-size: 12px;
+  color: #5a6258;
+}
+.site-header .account {
+  font-size: 11px;
+  border: 1px solid #b3b9ac;
+  border-radius: 30px;
+  padding: 9px 18px;
+}
+.demo-main {
+  max-width: 1110px;
+  margin: 0 auto;
+  padding: 38px 5% 50px;
+}
+.breadcrumb {
+  font:
+    10px ui-monospace,
+    monospace;
+  color: #7a8474;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.page-title {
+  font:
+    400 clamp(32px, 3.4vw, 49px)/1.1 Georgia,
+    serif;
+  letter-spacing: -1.5px;
+  margin: 19px 0 12px;
+}
+.subtitle {
+  color: #7a8373;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.market-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+.live-label {
+  font:
+    10px ui-monospace,
+    monospace;
+  color: #537e57;
+  white-space: nowrap;
+}
+.ticker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 28px 0;
+  border: 1px solid #e0e3d8;
+  border-radius: 11px;
+  background: #fff;
+}
+.ticker > div {
+  padding: 16px 18px;
+  border-right: 1px solid #e4e7df;
+  font-size: 10px;
+  color: #7d8878;
+}
+.ticker b {
+  display: block;
+  color: #283d2e;
+  font-size: 16px;
+  font-weight: 550;
+  margin-top: 7px;
+}
+.positive {
+  color: #4d8159;
+  font:
+    10px ui-monospace,
+    monospace;
+}
+.market-chart {
+  background: #fff;
+  border: 1px solid #dfe3d9;
+  border-radius: 13px;
+  width: 76%;
+  padding: 23px;
+  min-height: 275px;
+  box-sizing: border-box;
+}
+.chart-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.chart-top h2 {
+  font-size: 13px;
+  margin: 0;
+}
+.periods {
+  display: flex;
+  gap: 6px;
+}
+.periods button {
+  padding: 5px 7px;
+  border: 0;
+  background: none;
+  font-size: 10px;
+  border-radius: 5px;
+  color: #8d9588;
+}
+.periods .selected {
+  background: #edf2e5;
+  color: #4b6540;
+}
+.chart-value {
+  font-size: 29px;
+  letter-spacing: -1px;
+  margin-top: 9px;
+}
+.chart-value small {
+  font:
+    11px ui-monospace,
+    monospace;
+  letter-spacing: 0;
+  color: #57815d;
+  margin-left: 12px;
+}
+.market-chart svg {
+  display: block;
+  width: 100%;
+  height: 160px;
+  margin: 10px 0 0;
+  overflow: visible;
+}
+.axis {
+  display: flex;
+  justify-content: space-between;
+  color: #939b8b;
+  font:
+    9px ui-monospace,
+    monospace;
+}
+.news {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+  margin-top: 28px;
+  border-top: 1px solid #dfe3d8;
+  padding-top: 23px;
+}
+.news span {
+  font:
+    9px ui-monospace,
+    monospace;
+  color: #8e9787;
+  letter-spacing: 1px;
+}
+.news h3 {
+  font:
+    19px/1.3 Georgia,
+    serif;
+  color: #3e4c3b;
+  margin: 10px 0;
+}
+.news p {
+  color: #939a8b;
+  font-size: 10px;
+}
+.sample-note {
+  margin-top: 32px;
+  font:
+    10px/1.7 ui-monospace,
+    monospace;
+  color: #8a957f;
+}
+.sj {
+  font-weight: 800 !important;
+  font-family: system-ui !important;
+  color: #214b3a !important;
+  font-size: 33px !important;
+}
+.trip-summary {
+  background: #eaf0df;
+  border: 1px solid #d4dec7;
+  border-radius: 12px;
+  margin: 27px 0 25px;
+  padding: 20px 23px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+}
+.trip-summary strong {
+  font-size: 14px;
+  font-weight: 550;
+}
+.trip-summary p {
+  font-size: 11px;
+  color: #81916e;
+  margin: 6px 0 0;
+}
+.route {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.route .arrow {
+  color: #7c9466;
+}
+.search-pill {
+  font-size: 11px;
+  border: 1px solid #a7b899;
+  border-radius: 20px;
+  padding: 8px 14px;
+  color: #587347;
+}
+.departures-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  font-size: 11px;
+  color: #849476;
+}
+.departures-heading b {
+  color: #3f5739;
+  font-weight: 500;
+}
+.departure {
+  border: 1px solid #dfe4d8;
+  border-radius: 12px;
+  background: #fff;
+  padding: 17px 20px;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 85px;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 10px;
+  transition:
+    background-color 0.25s,
+    opacity 0.25s,
+    box-shadow 0.25s;
+}
+.departure .time {
+  font-size: 21px;
+  letter-spacing: -0.5px;
+  color: #29442f;
+}
+.departure .time span {
+  font-size: 16px;
+  color: #99a38e;
+  margin: 0 14px;
+}
+.departure .meta {
+  font-size: 10px;
+  color: #85967a;
+  margin-top: 7px;
+}
+.departure .duration {
+  font-size: 12px;
+  color: #5d7650;
+}
+.departure .direct {
+  font-size: 9px;
+  background: #eef4e8;
+  color: #6c845b;
+  padding: 4px 7px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+.departure .price {
+  text-align: right;
+  font-size: 20px;
+  color: #2e5437;
+}
+.departure .price small {
+  font-size: 10px;
+  margin-left: 4px;
+}
+.departure .price p {
+  font-size: 9px;
+  color: #8d9c80;
+  margin: 4px 0 0;
+}
+.journey-caption {
+  font-size: 11px;
+  line-height: 1.7;
+  color: #7f8f72;
+  margin-top: 18px;
+}
+@media (max-width: 850px) {
+  .site-header nav {
+    gap: 12px;
+  }
+  .site-header .account {
+    display: none;
+  }
+  .demo-main {
+    padding: 28px 5%;
+  }
+  .ticker > div {
+    padding: 12px;
+  }
+  .market-chart {
+    width: 100%;
+  }
+  .news {
+    gap: 13px;
+  }
+  .news h3 {
+    font-size: 16px;
+  }
+  .trip-summary {
+    padding: 16px;
+  }
+  .search-pill {
+    display: none;
+  }
+  .departure {
+    grid-template-columns: 1.4fr 1fr 70px;
+    padding: 14px;
+    gap: 8px;
+  }
+  .departure .time {
+    font-size: 18px;
+  }
+  .departure .time span {
+    margin: 0 6px;
+  }
+  .direct {
+    display: none;
+  }
+}
+@media (max-width: 500px) {
+  .lab-bar {
+    padding: 0 14px;
+  }
+  .lab-bar .tag {
+    display: none;
+  }
+  .site-header {
+    padding: 20px;
+  }
+  .site-header nav {
+    gap: 10px;
+    font-size: 10px;
+  }
+  .wordmark {
+    font-size: 27px !important;
+  }
+  .ticker {
+    grid-template-columns: 1fr 1fr;
+  }
+  .news {
+    grid-template-columns: 1fr;
+  }
+  .ticker > div:nth-child(-n + 2) {
+    border-bottom: 1px solid #e4e7df;
+  }
+  .market-top {
+    display: block;
+  }
+  .live-label {
+    margin-top: 15px;
+  }
+  .departure {
+    grid-template-columns: 1fr 70px;
+  }
+  .departure > div:nth-child(2) {
+    display: none;
+  }
+  .route {
+    gap: 10px;
+  }
+  .trip-summary strong {
+    font-size: 12px;
+  }
+}

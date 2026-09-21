@@ -1,0 +1,9 @@
+name = "browser_drive"
+version = "0.1.0"
+target = "javascript"
+
+[dependencies]
+eyg_interpreter = { path = "../gleam_interpreter" }
+eyg_parser = { path = "../gleam_parser" }
+eyg_ir = { path = "../gleam_ir" }
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"

@@ -1,0 +1,6 @@
+/build/
+/node_modules/
+/dist/
+/artifacts/raw/
+/artifacts/live-*.png
+/artifacts/live-dom.txt

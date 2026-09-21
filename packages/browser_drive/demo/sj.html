@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" data-demo-site="sj.se · local demo">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>A calmer way to choose · Phantom demo</title>
+    <link rel="stylesheet" href="demo.css" />
+  </head>
+  <body>
+    <div class="lab-bar">
+      <a href="/">← PHANTOM / DEMOS</a
+      ><span class="tag">02 · SJ-INSPIRED LOCAL DEMO · SAMPLE DATA</span
+      ><button class="inject" id="show-injection" aria-expanded="false">Inject Phantom ↗</button>
+    </div>
+    <aside class="injection" hidden>
+      <h2>A small addition. A calmer journey.</h2>
+      <p>
+        Run the same self-contained script to bring Phantom to the page. Your assistant can inspect,
+        highlight, and add a useful button.
+      </p>
+      <pre></pre>
+      <button>Run injection ↗</button>
+    </aside>
+    <header class="site-header">
+      <div class="wordmark sj">SJ ≋</div>
+      <nav><strong>Book a journey</strong><span>Your journeys</span><span>Discover</span></nav>
+      <span class="account">Sweden, by train</span>
+    </header>
+    <main class="demo-main">
+      <div class="breadcrumb">Plan a little escape</div>
+      <h1 class="page-title">The journey starts here.</h1>
+      <p class="subtitle">A window seat. A slower morning. Somewhere new.</p>
+      <section class="trip-summary">
+        <div class="route">
+          <div>
+            <strong>Stockholm C</strong>
+            <p>Departure</p>
+          </div>
+          <span class="arrow">⟶</span>
+          <div>
+            <strong>Göteborg C</strong>
+            <p>Arrival</p>
+          </div>
+        </div>
+        <div>
+          <strong>Friday, 25 September</strong>
+          <p>1 adult · One way · Sample timetable</p>
+        </div>
+      </section>
+      <div class="departures-heading">
+        <b>6 ways to get there</b><span>Sample fares · 2nd class</span>
+      </div>
+      <section aria-label="Available departures">
+        <article class="departure" id="train-1" data-departure>
+          <div>
+            <div class="time">08:30 <span>→</span> 11:35</div>
+            <div class="meta">SJ High-speed · 421</div>
+          </div>
+          <div><span class="duration">3h 05m</span><span class="direct">Direct</span></div>
+          <div class="price">
+            545<small>kr</small>
+            <p>per person</p>
+          </div>
+        </article>
+        <article class="departure" id="train-2" data-departure>
+          <div>
+            <div class="time">09:24 <span>→</span> 12:35</div>
+            <div class="meta">SJ High-speed · 423</div>
+          </div>
+          <div><span class="duration">3h 11m</span><span class="direct">Direct</span></div>
+          <div class="price">
+            395<small>kr</small>
+            <p>per person</p>
+          </div>
+        </article>
+        <article class="departure" id="train-3" data-departure>
+          <div>
+            <div class="time">10:14 <span>→</span> 14:20</div>
+            <div class="meta">Regional · 167</div>
+          </div>
+          <div><span class="duration">4h 06m</span><span class="direct">1 change</span></div>
+          <div class="price">
+            285<small>kr</small>
+            <p>per person</p>
+          </div>
+        </article>
+        <article class="departure" id="train-4" data-departure>
+          <div>
+            <div class="time">10:30 <span>→</span> 13:35</div>
+            <div class="meta">SJ High-speed · 425</div>
+          </div>
+          <div><span class="duration">3h 05m</span><span class="direct">Direct</span></div>
+          <div class="price">
+            345<small>kr</small>
+            <p>per person</p>
+          </div>
+        </article>
+        <article class="departure" id="train-5" data-departure>
+          <div>
+            <div class="time">11:24 <span>→</span> 14:35</div>
+            <div class="meta">SJ High-speed · 427</div>
+          </div>
+          <div><span class="duration">3h 11m</span><span class="direct">Direct</span></div>
+          <div class="price">
+            465<small>kr</small>
+            <p>per person</p>
+          </div>
+        </article>
+        <article class="departure" id="train-6" data-departure>
+          <div>
+            <div class="time">12:30 <span>→</span> 15:35</div>
+            <div class="meta">SJ High-speed · 429</div>
+          </div>
+          <div><span class="duration">3h 05m</span><span class="direct">Direct</span></div>
+          <div class="price">
+            595<small>kr</small>
+            <p>per person</p>
+          </div>
+        </article>
+      </section>
+      <p class="sample-note">
+        Independent interaction demo inspired by sj.se. Timetables and fares are fictional.<br />Try:
+        shortlist the two cheapest direct trains → add a shortlist toggle.
+      </p>
+    </main>
+    <script type="module" src="inject.mjs"></script>
+  </body>
+</html>

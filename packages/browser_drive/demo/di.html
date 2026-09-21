@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en" data-demo-site="di.se · local demo">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Markets, in focus · Phantom demo</title>
+    <link rel="stylesheet" href="demo.css" />
+  </head>
+  <body>
+    <div class="lab-bar">
+      <a href="/">← PHANTOM / DEMOS</a
+      ><span class="tag">01 · DI-INSPIRED LOCAL DEMO · SAMPLE DATA</span
+      ><button class="inject" id="show-injection" aria-expanded="false">Inject Phantom ↗</button>
+    </div>
+    <aside class="injection" hidden>
+      <h2>One script. A new perspective.</h2>
+      <p>
+        Inject the complete assistant into this page. The same script can be run from your browser’s
+        developer console on another site.
+      </p>
+      <pre></pre>
+      <button>Run injection ↗</button>
+    </aside>
+    <header class="site-header">
+      <div class="wordmark di">Dagens industri</div>
+      <nav><span>Nyheter</span><strong>Börs & marknad</strong><span>Analys</span></nav>
+      <span class="account">Market overview</span>
+    </header>
+    <main class="demo-main">
+      <div class="breadcrumb">Markets / Stockholm</div>
+      <div class="market-top">
+        <div>
+          <h1 class="page-title">The market at a glance.</h1>
+          <p class="subtitle">A clearer view of the movements that matter.</p>
+        </div>
+        <div class="live-label">● &nbsp; DEMONSTRATION DATA</div>
+      </div>
+      <div class="ticker">
+        <div>
+          OMXS30 <b>2,584.72 <span class="positive">+1.24%</span></b>
+        </div>
+        <div>
+          S&P 500 <b>5,218.39 <span class="positive">+0.86%</span></b>
+        </div>
+        <div>
+          NASDAQ <b>16,428.82 <span class="positive">+1.12%</span></b>
+        </div>
+        <div>
+          EUR / SEK <b>11.18 <span class="positive">+0.08%</span></b>
+        </div>
+      </div>
+      <section
+        class="market-chart"
+        id="stockholm-chart"
+        data-chart
+        aria-label="OMXS30 market chart"
+      >
+        <div class="chart-top">
+          <h2>OMXS30 · Stockholm</h2>
+          <div class="periods"><span class="selected">TODAY</span></div>
+        </div>
+        <div class="chart-value">2,584.72 <small>↗ +31.65 (1.24%)</small></div>
+        <svg
+          viewBox="0 0 760 200"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="Sample OMXS30 index rising during the day"
+        >
+          <defs>
+            <linearGradient id="chart-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#71a583" stop-opacity=".22" />
+              <stop offset="100%" stop-color="#71a583" stop-opacity="0" />
+            </linearGradient>
+          </defs>
+          <g stroke="#e8ece2" stroke-dasharray="3 5">
+            <path d="M0 30H760M0 80H760M0 130H760M0 180H760" />
+          </g>
+          <path
+            d="M0 158L16 161L29 145L42 152L59 140L73 147L90 139L111 142L128 113L142 123L158 110L174 119L190 98L209 104L230 91L251 110L273 103L288 108L301 85L319 87L331 73L348 88L364 59L383 72L402 66L420 76L440 46L457 52L473 64L490 43L510 54L531 50L552 66L568 40L589 37L605 44L629 27L648 41L664 26L678 30L699 16L720 27L741 20L760 12V200H0Z"
+            fill="url(#chart-fill)"
+          />
+          <path
+            d="M0 158L16 161L29 145L42 152L59 140L73 147L90 139L111 142L128 113L142 123L158 110L174 119L190 98L209 104L230 91L251 110L273 103L288 108L301 85L319 87L331 73L348 88L364 59L383 72L402 66L420 76L440 46L457 52L473 64L490 43L510 54L531 50L552 66L568 40L589 37L605 44L629 27L648 41L664 26L678 30L699 16L720 27L741 20L760 12"
+            fill="none"
+            stroke="#4b7e5f"
+            stroke-width="2.4"
+            vector-effect="non-scaling-stroke"
+          />
+        </svg>
+        <div class="axis">
+          <span>09:00</span><span>11:00</span><span>13:00</span><span>15:00</span><span>17:30</span>
+        </div>
+      </section>
+      <section class="news">
+        <article>
+          <span>THE BIG PICTURE</span>
+          <h3>A brighter day for Stockholm’s leading shares.</h3>
+          <p>Sample market commentary · 4 min read</p>
+        </article>
+        <article>
+          <span>IN FOCUS</span>
+          <h3>The companies shaping tomorrow’s economy.</h3>
+          <p>Sample analysis · 6 min read</p>
+        </article>
+        <article>
+          <span>GLOBAL MARKETS</span>
+          <h3>Looking beyond the opening bell.</h3>
+          <p>Sample market commentary · 3 min read</p>
+        </article>
+      </section>
+      <p class="sample-note">
+        Independent interaction demo inspired by di.se. All figures and articles are fictional.<br />Try:
+        a bigger chart → a hover effect → a focus button.
+      </p>
+    </main>
+    <script type="module" src="inject.mjs"></script>
+  </body>
+</html>

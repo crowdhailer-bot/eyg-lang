@@ -1,0 +1,21 @@
+{
+  "name": "eyg-browser-drive",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "gleam build --warnings-as-errors && node build.mjs",
+    "format": "prettier --write src demo test *.mjs *.json README.md",
+    "check": "gleam format --check src && prettier --check src demo test *.mjs *.json README.md",
+    "start": "node server.mjs",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "record": "node test/record.mjs",
+    "record:live": "node test/record-live.mjs",
+    "check:live": "node test/live.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0",
+    "prettier": "3.9.8"
+  }
+}
