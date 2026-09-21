@@ -64,7 +64,7 @@ pub fn from_task(task: String) -> Vocabulary {
     list.filter_map(code, fn(code) {
       case string.starts_with(code, "{") {
         True ->
-          case list.filter(words(code), is_name) {
+          case record_labels(code) {
             [] -> Error(Nil)
             labels -> Ok(labels)
           }
@@ -82,6 +82,24 @@ pub fn from_task(task: String) -> Vocabulary {
     unions: [],
     builtins: matches("!([a-z_][a-z0-9_]*)", task),
   )
+}
+
+// The labels of `{a, b: c}` are `a` and `b`.
+fn record_labels(code) {
+  code
+  |> string.drop_start(1)
+  |> string.drop_end(1)
+  |> string.split(",")
+  |> list.filter_map(fn(part) {
+    let label = case string.split_once(part, ":") {
+      Ok(#(label, _)) -> string.trim(label)
+      Error(Nil) -> string.trim(part)
+    }
+    case is_name(label) {
+      True -> Ok(label)
+      False -> Error(Nil)
+    }
+  })
 }
 
 // `{a, b: c}` is the pattern binding `a` to `a` and `b` to `c`.
