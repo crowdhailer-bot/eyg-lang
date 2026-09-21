@@ -30,7 +30,8 @@ pub fn path_to_zoom(zoom, acc) {
         // label is first value so exp is one higher than list of pre 
         RecordValue(pre: pre, ..) -> [list.length(pre) * 2 + 1, ..acc]
         SelectValue(..) -> [0, ..acc]
-        OverwriteTail(fields: fields) -> [list.length(fields) + 1, ..acc]
+        // The original follows a label and value for each field.
+        OverwriteTail(fields: fields) -> [list.length(fields) * 2, ..acc]
         CaseTop(_branches, _otherwise) -> [0, ..acc]
         CaseMatch(pre: pre, ..) -> [list.length(pre) + 1, 0, ..acc]
         CaseTail(branches: branches, ..) -> [list.length(branches) + 1, ..acc]

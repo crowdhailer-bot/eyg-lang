@@ -389,3 +389,14 @@ pub fn match_test() {
   |> p.path
   |> should_equal(path)
 }
+
+pub fn path_to_the_original_of_an_overwrite_test() {
+  let source =
+    e.Record(
+      [#("a", e.Integer(1)), #("b", e.Integer(2))],
+      Some(e.Variable("original")),
+    )
+  let projection = p.focus_at(source, [4])
+  assert projection.0 == p.Exp(e.Variable("original"))
+  assert p.path(projection) == [4]
+}
