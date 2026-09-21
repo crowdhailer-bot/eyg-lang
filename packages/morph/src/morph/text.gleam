@@ -1,6 +1,8 @@
 //// Print `Editable` code using the syntax of `eyg_parser`.
 //// Vacant nodes, which have no syntax, print as `?`.
 //// Any node can be marked by its path, for example to show the focus of a projection.
+//// A block ending in a function literal has no syntax, the parser reads the
+//// parameters as a call to the value of the last assignment.
 
 import eyg/ir/tree as ir
 import gleam/dict.{type Dict}
