@@ -29,6 +29,11 @@ pub fn main() {
       ))
       io.println(file <> " " <> status)
     }
+    ["sample", path, seconds] -> {
+      let assert Ok(seconds) = int.parse(seconds)
+      use result <- promise.map(sample(origin <> path, seconds))
+      io.println(result)
+    }
     ["inspect", path, expression] -> {
       use result <- promise.map(inspect(
         origin <> path,
@@ -51,6 +56,9 @@ fn screenshot(url: String, path: String, wait: Int) -> Promise(String)
 
 @external(javascript, "./record_ffi.mjs", "record")
 fn record(url: String, output: String, timeout: Int) -> Promise(String)
+
+@external(javascript, "./record_ffi.mjs", "sample")
+fn sample(url: String, seconds: Int) -> Promise(String)
 
 @external(javascript, "./record_ffi.mjs", "inspect")
 fn inspect(url: String, expression: String, timeout: Int) -> Promise(String)

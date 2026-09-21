@@ -3,7 +3,9 @@
 //// the actions are found by synthesis so they stay in step with the editor.
 
 import eyg/parser
+import gleam/dynamic/decode
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option.{None}
 import gleam/result
@@ -224,3 +226,16 @@ let path_of = (request) -> {
     {name: \"get repo\", test: (_) -> { !equal(path_of((_) -> { get_repo(\"gleam-lang\", \"gleam\") }), Error(\"/repos/gleam-lang/gleam\")) }}
   ]
 }"
+
+pub fn prepared_to_json(prepared: Prepared) {
+  json.object([
+    #("task", json.string(prepared.task)),
+    #("actions", json.array(prepared.actions, action.to_json)),
+  ])
+}
+
+pub fn prepared_decoder() {
+  use task <- decode.field("task", decode.string)
+  use actions <- decode.field("actions", decode.list(action.decoder()))
+  decode.success(Prepared(task:, actions:))
+}

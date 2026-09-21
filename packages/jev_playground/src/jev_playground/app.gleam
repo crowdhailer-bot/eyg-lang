@@ -3,6 +3,8 @@
 //// `/` runs live against the API through the dev server proxy,
 //// `/demo/<slug>` replays a demo with mocked answers.
 
+import gleam/dict
+import gleam/dynamic/decode
 import gleam/fetch
 import gleam/float
 import gleam/http/request
@@ -75,7 +77,9 @@ pub type Message {
   JevAnswered(generation: Int, result: Result(#(jev.Evaluation, Int), String))
   Continue(generation: Int)
   Ticked(Float)
-  LibrariesLoaded(Result(library.Bundle, String))
+  LibrariesLoaded(
+    Result(#(library.Bundle, dict.Dict(String, demo.Prepared)), String),
+  )
 }
 
 /// The number of recent selections shown, one more is kept while it fades out.
@@ -103,7 +107,12 @@ pub fn init(flags: #(String, String, String)) -> #(Model, Effect(Message)) {
         Ok(demo) -> {
           let speed =
             list.key_find(query, "speed")
-            |> result.try(float.parse)
+            |> result.try(fn(speed) {
+              // `float.parse` needs a decimal point, `?speed=2` is written as a whole number.
+              result.lazy_or(float.parse(speed), fn() {
+                int.parse(speed) |> result.map(int.to_float)
+              })
+            })
             |> result.unwrap(1.0)
           #(Ok(Replay(demo:, actions: [], speed:)), demo.task, True)
         }
@@ -161,34 +170,51 @@ fn new(source, task, environment) {
   )
 }
 
+// Demo scripts are found when the page is built, a page can find them itself if missing.
 fn load_libraries(origin) {
   effect.from(fn(dispatch) {
-    let assert Ok(request) = request.to(origin <> "/libraries.json")
-    fetch.send(request)
-    |> promise.try_await(fetch.read_text_body)
-    |> promise.map(fn(response) {
-      let result = case response {
-        Ok(response) ->
-          json.parse(response.body, library.decoder())
-          |> result.replace_error("could not decode the libraries")
-        Error(reason) -> Error(string.inspect(reason))
-      }
-      dispatch(LibrariesLoaded(result))
-    })
+    {
+      use libraries <- promise.await(get_json(
+        origin <> "/libraries.json",
+        library.decoder(),
+      ))
+      use demos <- promise.map(get_json(
+        origin <> "/demos.json",
+        decode.dict(decode.string, demo.prepared_decoder()),
+      ))
+      let demos = result.unwrap(demos, dict.new())
+      dispatch(LibrariesLoaded(result.map(libraries, fn(b) { #(b, demos) })))
+    }
     Nil
   })
 }
 
+fn get_json(url, decoder) {
+  let assert Ok(request) = request.to(url)
+  use response <- promise.map(
+    fetch.send(request) |> promise.try_await(fetch.read_text_body),
+  )
+  case response {
+    Ok(response) ->
+      json.parse(response.body, decoder)
+      |> result.replace_error("could not decode " <> url)
+    Error(reason) -> Error(string.inspect(reason))
+  }
+}
+
 fn loaded(model: Model, result) {
   let setup = {
-    use bundle <- result.try(result)
+    use #(bundle, demos) <- result.try(result)
     use environment <- result.try(library.environment(
       bundle,
       base(model.source),
     ))
     use #(source, task) <- result.map(case model.source {
       Replay(demo:, speed:, ..) -> {
-        use prepared <- result.map(demo.prepare(demo, environment))
+        use prepared <- result.map(case dict.get(demos, demo.slug) {
+          Ok(prepared) -> Ok(prepared)
+          Error(Nil) -> demo.prepare(demo, environment)
+        })
         #(Replay(demo:, actions: prepared.actions, speed:), prepared.task)
       }
       live -> Ok(#(live, model.task))
@@ -215,7 +241,7 @@ fn loaded(model: Model, result) {
 pub fn update(model: Model, message) -> #(Model, Effect(Message)) {
   case message {
     UserEditedTask(task) -> {
-      let agent = agent.Agent(..model.agent, task:)
+      let agent = agent.with_task(model.agent, task)
       #(Model(..model, task:, agent:), effect.none())
     }
     UserClickedRun -> {

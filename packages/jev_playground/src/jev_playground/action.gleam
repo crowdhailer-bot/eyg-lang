@@ -6,7 +6,9 @@ import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/analysis/type_/binding/error
 import eyg/analysis/type_/isomorphic as t
 import eyg/ir/tree as ir
+import gleam/dynamic/decode
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -316,4 +318,207 @@ pub fn is_navigation(action) {
     Next | Previous | Up | Down | Parent | NextVacant | JumpToError(_) -> True
     _ -> False
   }
+}
+
+pub fn to_json(action: Action) -> json.Json {
+  let with = fn(kind, fields) {
+    json.object([#("kind", json.string(kind)), ..fields])
+  }
+  let text = fn(kind, value) { with(kind, [#("text", json.string(value))]) }
+  let texts = fn(kind, values) {
+    with(kind, [#("texts", json.array(values, json.string))])
+  }
+  case action {
+    Next -> with("next", [])
+    Previous -> with("previous", [])
+    Up -> with("up", [])
+    Down -> with("down", [])
+    Parent -> with("parent", [])
+    NextVacant -> with("next_vacant", [])
+    JumpToError(index) -> with("jump_to_error", [#("index", json.int(index))])
+    Variable(name) -> text("variable", name)
+    String(value) -> text("string", value)
+    Integer(value) -> with("integer", [#("value", json.int(value))])
+    Builtin(name) -> text("builtin", name)
+    Tag(label) -> text("tag", label)
+    Reference(reference) ->
+      with("reference", [#("reference", reference_to_json(reference))])
+    OpenLibrary(package) -> text("open_library", package)
+    EmptyList -> with("empty_list", [])
+    List -> with("list", [])
+    EmptyRecord -> with("empty_record", [])
+    Record(labels) -> texts("record", labels)
+    Function(param) -> text("function", param)
+    Call -> with("call", [])
+    CallWith -> with("call_with", [])
+    Assign(name) -> text("assign", name)
+    AssignBefore(name) -> text("assign_before", name)
+    Select(label) -> text("select", label)
+    Overwrite(label) -> text("overwrite", label)
+    Match(labels) -> texts("match", labels)
+    Perform(label) -> text("perform", label)
+    Handle(label) -> text("handle", label)
+    InsertBefore(label) ->
+      with("insert_before", [#("text", json.nullable(label, json.string))])
+    InsertAfter(label) ->
+      with("insert_after", [#("text", json.nullable(label, json.string))])
+    Spread -> with("spread", [])
+    Delete -> with("delete", [])
+    Undo -> with("undo", [])
+    Rename(value) -> text("rename", value)
+    ChooseString -> with("choose_string", [])
+    ChooseInteger -> with("choose_integer", [])
+    Destructure(fields) ->
+      with("destructure", [
+        #(
+          "fields",
+          json.array(fields, fn(field) {
+            json.preprocessed_array([json.string(field.0), json.string(field.1)])
+          }),
+        ),
+      ])
+    RunTests -> with("run_tests", [])
+    Finish -> with("finish", [])
+    Compound(name:, steps:) ->
+      with("compound", [
+        #("name", json.string(name)),
+        #("steps", json.array(steps, to_json)),
+      ])
+  }
+}
+
+fn reference_to_json(reference) {
+  // Only references to released and content addressed modules are needed by scripts.
+  case reference {
+    ir.Pinned(ir.Release(package, version, module)) ->
+      json.object([
+        #("package", json.string(package)),
+        #("version", json.int(version)),
+        #("module", json.string(v1.to_string(module))),
+      ])
+    ir.Content(module) ->
+      json.object([#("module", json.string(v1.to_string(module)))])
+    ir.Package(package) -> json.object([#("package", json.string(package))])
+    ir.Version(package, version) ->
+      json.object([
+        #("package", json.string(package)),
+        #("version", json.int(version)),
+      ])
+    ir.Relative(path) -> json.object([#("path", json.string(path))])
+  }
+}
+
+pub fn decoder() -> decode.Decoder(Action) {
+  use kind <- decode.field("kind", decode.string)
+  let text = decode.field("text", decode.string, decode.success)
+  let texts = decode.field("texts", decode.list(decode.string), decode.success)
+  case kind {
+    "next" -> decode.success(Next)
+    "previous" -> decode.success(Previous)
+    "up" -> decode.success(Up)
+    "down" -> decode.success(Down)
+    "parent" -> decode.success(Parent)
+    "next_vacant" -> decode.success(NextVacant)
+    "jump_to_error" ->
+      decode.field("index", decode.int, fn(i) { decode.success(JumpToError(i)) })
+    "variable" -> decode.map(text, Variable)
+    "string" -> decode.map(text, String)
+    "integer" ->
+      decode.field("value", decode.int, fn(i) { decode.success(Integer(i)) })
+    "builtin" -> decode.map(text, Builtin)
+    "tag" -> decode.map(text, Tag)
+    "reference" ->
+      decode.field("reference", reference_decoder(), fn(r) {
+        decode.success(Reference(r))
+      })
+    "open_library" -> decode.map(text, OpenLibrary)
+    "empty_list" -> decode.success(EmptyList)
+    "list" -> decode.success(List)
+    "empty_record" -> decode.success(EmptyRecord)
+    "record" -> decode.map(texts, Record)
+    "function" -> decode.map(text, Function)
+    "call" -> decode.success(Call)
+    "call_with" -> decode.success(CallWith)
+    "assign" -> decode.map(text, Assign)
+    "assign_before" -> decode.map(text, AssignBefore)
+    "select" -> decode.map(text, Select)
+    "overwrite" -> decode.map(text, Overwrite)
+    "match" -> decode.map(texts, Match)
+    "perform" -> decode.map(text, Perform)
+    "handle" -> decode.map(text, Handle)
+    "insert_before" ->
+      decode.field("text", decode.optional(decode.string), fn(label) {
+        decode.success(InsertBefore(label))
+      })
+    "insert_after" ->
+      decode.field("text", decode.optional(decode.string), fn(label) {
+        decode.success(InsertAfter(label))
+      })
+    "spread" -> decode.success(Spread)
+    "delete" -> decode.success(Delete)
+    "undo" -> decode.success(Undo)
+    "rename" -> decode.map(text, Rename)
+    "choose_string" -> decode.success(ChooseString)
+    "choose_integer" -> decode.success(ChooseInteger)
+    "destructure" ->
+      decode.field(
+        "fields",
+        decode.list({
+          use label <- decode.field(0, decode.string)
+          use var <- decode.field(1, decode.string)
+          decode.success(#(label, var))
+        }),
+        fn(fields) { decode.success(Destructure(fields)) },
+      )
+    "run_tests" -> decode.success(RunTests)
+    "finish" -> decode.success(Finish)
+    "compound" -> {
+      use name <- decode.field("name", decode.string)
+      use steps <- decode.field("steps", decode.list(decoder()))
+      decode.success(Compound(name, steps))
+    }
+    _ -> decode.failure(Finish, "Action")
+  }
+}
+
+fn reference_decoder() {
+  let cid = {
+    use text <- decode.then(decode.string)
+    case v1.from_string(text) {
+      Ok(#(module, _)) -> decode.success(module)
+      Error(_) -> decode.failure(placeholder_cid(), "cid")
+    }
+  }
+  decode.one_of(
+    {
+      use package <- decode.field("package", decode.string)
+      use version <- decode.field("version", decode.int)
+      use module <- decode.field("module", cid)
+      decode.success(ir.Pinned(ir.Release(package, version, module)))
+    },
+    [
+      decode.field("module", cid, fn(module) {
+        decode.success(ir.Content(module))
+      }),
+      {
+        use package <- decode.field("package", decode.string)
+        use version <- decode.field("version", decode.int)
+        decode.success(ir.Version(package, version))
+      },
+      decode.field("package", decode.string, fn(package) {
+        decode.success(ir.Package(package))
+      }),
+      decode.field("path", decode.string, fn(path) {
+        decode.success(ir.Relative(path))
+      }),
+    ],
+  )
+}
+
+fn placeholder_cid() {
+  let assert Ok(#(module, _)) =
+    v1.from_string(
+      "baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja",
+    )
+  module
 }

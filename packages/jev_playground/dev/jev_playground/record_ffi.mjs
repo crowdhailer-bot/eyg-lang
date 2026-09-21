@@ -73,3 +73,30 @@ export async function inspect(url, expression, timeout) {
   await browser.close();
   return JSON.stringify(result, null, 1);
 }
+
+// Print the step and status every two seconds, to see where time goes.
+export async function sample(url, seconds) {
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: size });
+  page.on("pageerror", (error) => console.error("pageerror", error.message));
+  page.on("console", (message) => console.error("console", message.text()));
+  const start = Date.now();
+  await page.goto(url);
+  await page.evaluate(() => {
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) console.log("longtask " + Math.round(entry.duration));
+    }).observe({ type: "longtask", buffered: true });
+  });
+  const lines = [];
+  while (Date.now() - start < seconds * 1000) {
+    const state = await page.evaluate(() => {
+      const chips = [...document.querySelectorAll(".chip")].map((c) => c.innerText.replace("\n", " "));
+      const status = document.querySelector(".status");
+      return chips.join(" | ") + " | " + (status ? status.innerText : "");
+    });
+    lines.push(Math.round((Date.now() - start) / 1000) + "s " + state);
+    await page.waitForTimeout(2000);
+  }
+  await browser.close();
+  return lines.join("\n");
+}

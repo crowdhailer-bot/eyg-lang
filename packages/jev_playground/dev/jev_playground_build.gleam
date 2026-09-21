@@ -8,6 +8,7 @@ import gleam/javascript/promise
 import gleam/json
 import gleam/list
 import gleam/result
+import jev_playground/demo
 import jev_playground/library
 import jev_playground/packages
 import lustre/attribute as a
@@ -28,9 +29,22 @@ pub fn main() {
     ))
     use bundle <- result.try(packages.bundle())
     let libraries = json.to_string(library.to_json(bundle))
+    // Demo scripts take a while to find so they are found once here.
+    use demos <- result.try(
+      list.try_map(demo.all(), fn(demo) {
+        use environment <- result.try(library.environment(
+          bundle,
+          demo.environment,
+        ))
+        use prepared <- result.map(demo.prepare(demo, environment))
+        #(demo.slug, demo.prepared_to_json(prepared))
+      }),
+    )
+    let demos = json.to_string(json.object(demos))
     let files = [
       #("index.html", <<html:utf8>>),
       #("libraries.json", <<libraries:utf8>>),
+      #("demos.json", <<demos:utf8>>),
       ..list.map(dict.to_list(assets), fn(asset) {
         let #(name, #(_file, _mime, bits)) = asset
         #("assets/" <> name, bits)
