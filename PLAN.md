@@ -86,9 +86,14 @@ Look at each file in the eyg_packages directory.
 
 ### Adding libraries
 
-- [ ] Add the option to search the library as a choice for jev to make
-- [ ] When a library is selected add the functions an types to the state sent to the endpoint.
-- [ ] Record a video of Jev writing the Github library using the compound actions and the @http library
+- [x] Add the option to search the library as a choice for jev to make
+  - `Config(search_libraries:)` offers to open each library that is not yet open
+  - [x] Bundle the `eyg_packages` libraries with their releases, relative imports become content references
+  - [x] Annotate library trees directly, the continuation passing rewrite in `eyg_ir` overflowed the browser stack
+- [x] When a library is selected add the functions an types to the state sent to the endpoint.
+  - [x] Show types without effect rows and with letters for type variables, the raw types were long and hard to read
+- [x] Record a video of Jev writing the Github library using the compound actions and the @http library
+  - `/demo/github-library`, 105 choices of which 21 are compound
 
 ### Real API
 
