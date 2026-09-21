@@ -45,11 +45,23 @@ pub fn call(
 fn resolve(return, environment) {
   case return {
     Ok(value) -> Ok(value)
-    Error(#(break.UndefinedReference(ir.Pinned(release)), _meta, env, k)) ->
-      case environment.library_by_module(environment, release.module) {
+    Error(#(
+      break.UndefinedReference(ir.Pinned(ir.Release(module:, ..)) as reference),
+      _,
+      env,
+      k,
+    ))
+    | Error(#(
+        break.UndefinedReference(ir.Content(module) as reference),
+        _,
+        env,
+        k,
+      )) ->
+      case environment.library_by_module(environment, module) {
         Ok(library) ->
           expression.resume(library.value, env, k) |> resolve(environment)
-        Error(Nil) -> Error("unknown library @" <> release.package)
+        Error(Nil) ->
+          Error("unknown reference " <> ir.reference_to_string(reference))
       }
     Error(#(break.UnhandledEffect(label, _lift), _, _, _)) ->
       Error("the effect " <> label <> " was performed but is not handled")

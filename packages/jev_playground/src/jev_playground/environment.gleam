@@ -26,6 +26,7 @@ pub type Library {
     type_: binding.Poly,
     value: state.Value(List(Int)),
     readme: String,
+    source: ir.Node(Nil),
   )
 }
 
