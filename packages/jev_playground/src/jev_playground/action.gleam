@@ -53,6 +53,8 @@ pub type Action {
   Spread
   Delete
   Undo
+  Rename(text: String)
+  Destructure(fields: List(#(String, String)))
   // Checking the program
   RunTests
   Finish
@@ -98,10 +100,23 @@ pub fn key(action: Action) -> String {
     Spread -> "spread .."
     Delete -> "delete selection"
     Undo -> "undo"
+    Rename(text) -> "rename to " <> text
+    Destructure(fields) -> "destructure " <> fields_to_string(fields)
     RunTests -> "run tests"
     Finish -> "finish"
     Compound(name:, ..) -> name
   }
+}
+
+fn fields_to_string(fields) {
+  let fields =
+    list.map(fields, fn(field) {
+      case field {
+        #(label, var) if label == var -> label
+        #(label, var) -> label <> ": " <> var
+      }
+    })
+  "{" <> string.join(fields, ", ") <> "}"
 }
 
 fn quote(value) {
@@ -174,6 +189,22 @@ pub fn apply(
     Spread -> done(buffer.spread(buffer))
     Delete -> done(buffer.delete(buffer))
     Undo -> done(buffer.undo(buffer))
+    Rename(text) -> {
+      use #(_, rebuild) <- result.map(buffer.insert(buffer))
+      rebuild(text, context, refs)
+    }
+    Destructure(fields) -> {
+      let pattern = p.AssignPattern(e.Destructure(fields))
+      use projection <- result.map(case buffer.projection {
+        #(p.Assign(p.AssignPattern(_), value, pre, post, then), zoom)
+        | #(p.Assign(p.AssignStatement(_), value, pre, post, then), zoom) ->
+          Ok(#(p.Assign(pattern, value, pre, post, then), zoom))
+        #(p.FnParam(p.AssignPattern(_), pre, post, body), zoom) ->
+          Ok(#(p.FnParam(pattern, pre, post, body), zoom))
+        _ -> Error(Nil)
+      })
+      buffer.update_code(buffer, projection, context, refs)
+    }
     RunTests | Finish | OpenLibrary(_) -> Ok(buffer)
     Compound(steps:, ..) ->
       list.try_fold(steps, buffer, fn(buffer, step) {
