@@ -11,6 +11,7 @@ import jev_playground/action
 import jev_playground/agent
 import jev_playground/app.{type Model, type Selection}
 import jev_playground/environment
+import jev_playground/library
 import jev_playground/options
 import lustre/attribute as a
 import lustre/element.{type Element, text}
@@ -57,6 +58,7 @@ fn chip(label, value) {
 
 fn status(model: Model) {
   let #(class, label) = case model.status {
+    app.Loading -> #("idle", "loading libraries")
     app.Idle -> #("idle", "ready")
     app.Thinking(..) -> {
       let ms = option.unwrap(app.thinking_ms(model), 0)
@@ -119,7 +121,7 @@ fn task_panel(model: Model) {
         h.span([a.class("effect")], [text(effect.0)])
       }),
     ),
-    case agent.environment.libraries {
+    case list.filter(agent.environment.libraries, library.is_released) {
       [] -> element.none()
       libraries ->
         h.div([], [

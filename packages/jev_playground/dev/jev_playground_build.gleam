@@ -5,8 +5,11 @@ import filepath
 import gleam/dict
 import gleam/io
 import gleam/javascript/promise
+import gleam/json
 import gleam/list
 import gleam/result
+import jev_playground/library
+import jev_playground/packages
 import lustre/attribute as a
 import lustre/element
 import lustre/element/html as h
@@ -23,8 +26,11 @@ pub fn main() {
       result,
       snag.pretty_print,
     ))
+    use bundle <- result.try(packages.bundle())
+    let libraries = json.to_string(library.to_json(bundle))
     let files = [
       #("index.html", <<html:utf8>>),
+      #("libraries.json", <<libraries:utf8>>),
       ..list.map(dict.to_list(assets), fn(asset) {
         let #(name, #(_file, _mime, bits)) = asset
         #("assets/" <> name, bits)

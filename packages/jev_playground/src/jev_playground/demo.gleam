@@ -16,10 +16,17 @@ pub type Demo {
     slug: String,
     title: String,
     task: String,
-    target: String,
+    target: Target,
     environment: Environment,
     config: options.Config,
   )
+}
+
+/// The program Jev should end up with.
+pub type Target {
+  Code(source: String)
+  /// The source of a library, as loaded into the environment.
+  LibrarySource(name: String)
 }
 
 pub fn all() -> List(Demo) {
@@ -31,16 +38,29 @@ pub fn find(slug) {
 }
 
 /// The actions Jev is scripted to choose, ending by running the tests and finishing.
-pub fn script(demo: Demo) -> Result(List(Action), String) {
-  use target <- result.try(
-    parser.all_from_string(demo.target)
-    |> result.replace_error("the target of " <> demo.slug <> " does not parse"),
-  )
-  use actions <- result.map(synthesis.script(
-    e.from_annotated(target),
-    demo.environment,
-  ))
+/// The environment is the demo environment with any libraries loaded.
+pub fn script(
+  demo: Demo,
+  environment: Environment,
+) -> Result(List(Action), String) {
+  use target <- result.try(target(demo, environment))
+  use actions <- result.map(synthesis.script(target, environment))
   list.append(actions, [action.RunTests, action.Finish])
+}
+
+pub fn target(demo: Demo, environment) -> Result(e.Expression, String) {
+  case demo.target {
+    Code(source) ->
+      parser.all_from_string(source)
+      |> result.map(e.from_annotated)
+      |> result.replace_error(
+        "the target of " <> demo.slug <> " does not parse",
+      )
+    LibrarySource(name) ->
+      environment.find_library(environment, name)
+      |> result.map(fn(library) { e.from_annotated(library.source) })
+      |> result.replace_error("the library " <> name <> " is not loaded")
+  }
 }
 
 pub fn github() {
@@ -55,7 +75,7 @@ and `get_repo = (owner, repo)` for \"/repos/\" owner \"/\" repo, joining paths w
 Test the paths without the network: `path_of = (request)` handles `GitHub` with `(operation, resume)` returning `Error(operation.path)`.
 Return `{get_user, list_repos, get_repo, tests}` where each test `{name, test}` checks with `!equal` that `path_of` gives `Error` of \"/users/octocat\", \"/users/octocat/repos\" and \"/repos/gleam-lang/gleam\" for the user \"octocat\" and the repository \"gleam-lang\" \"gleam\".
 Name the tests \"get user\", \"list repos\" and \"get repo\". Run the tests before finishing.",
-    target: github_target,
+    target: Code(github_target),
     environment: environment.browser(),
     config: options.default_config(),
   )

@@ -7,6 +7,8 @@ const size = { width: 1280, height: 720 };
 export async function screenshot(url, path, wait) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: size });
+  page.on("console", (message) => console.error("console", message.type(), message.text().slice(0, 500)));
+  page.on("pageerror", (error) => console.error("pageerror", error.message.slice(0, 500), (error.stack || "").slice(0, 3000)));
   await page.goto(url);
   await page.waitForTimeout(wait);
   await page.screenshot({ path });

@@ -3,9 +3,12 @@
 //// `/` runs live against the API through the dev server proxy,
 //// `/demo/<slug>` replays a demo with mocked answers.
 
+import gleam/fetch
 import gleam/float
+import gleam/http/request
 import gleam/int
 import gleam/javascript/promise
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -17,6 +20,7 @@ import jev_playground/agent
 import jev_playground/client
 import jev_playground/demo
 import jev_playground/environment
+import jev_playground/library
 import jev_playground/mock
 import jev_playground/options
 import lustre/effect.{type Effect}
@@ -32,6 +36,7 @@ pub type Source {
 }
 
 pub type Status {
+  Loading
   Idle
   Thinking(started: Float)
   Waiting
@@ -49,6 +54,7 @@ pub type Model {
   Model(
     source: Source,
     task: String,
+    environment: environment.Environment,
     agent: agent.Agent,
     status: Status,
     running: Bool,
@@ -69,6 +75,7 @@ pub type Message {
   JevAnswered(generation: Int, result: Result(#(jev.Evaluation, Int), String))
   Continue(generation: Int)
   Ticked(Float)
+  LibrariesLoaded(Result(library.Bundle, String))
 }
 
 /// The number of recent selections shown, one more is kept while it fades out.
@@ -84,45 +91,40 @@ pub fn location_flags() {
   #(location.pathname(location), query, location.origin(location))
 }
 
+/// Libraries are loaded before anything starts, demos are then scripted
+/// against the same environment they are replayed in.
 pub fn init(flags: #(String, String, String)) -> #(Model, Effect(Message)) {
   let #(path, query, origin) = flags
   let query =
     uri.parse_query(string.remove_prefix(query, "?")) |> result.unwrap([])
-  case string.split(path, "/") {
-    ["", "demo", slug, ..] -> {
-      let found = {
-        use demo <- result.try(
-          demo.find(slug) |> result.replace_error("no demo " <> slug),
-        )
-        use actions <- result.map(demo.script(demo))
-        #(demo, actions)
-      }
-      case found {
-        Ok(#(demo, actions)) -> {
+  let #(source, task, running) = case string.split(path, "/") {
+    ["", "demo", slug, ..] ->
+      case demo.find(slug) {
+        Ok(demo) -> {
           let speed =
             list.key_find(query, "speed")
             |> result.try(float.parse)
             |> result.unwrap(1.0)
-          let source = Replay(demo:, actions:, speed:)
-          let model = Model(..new(source, demo.task), running: True)
-          // Pause on the empty program so a recording shows the start.
-          #(model, delay(1500, Continue(model.generation)))
+          #(Ok(Replay(demo:, actions: [], speed:)), demo.task, True)
         }
-        Error(reason) -> #(
-          Model(..new(live(origin), ""), status: Failed(reason)),
-          effect.none(),
-        )
+        Error(Nil) -> #(Error("no demo " <> slug), "", False)
       }
-    }
     // `?task=..` starts Jev on the task straight away, for sharing and recording runs.
     _ ->
       case list.key_find(query, "task") {
-        Ok(task) -> {
-          let model = Model(..new(live(origin), task), running: True)
-          #(model, delay(1500, Continue(model.generation)))
-        }
-        Error(Nil) -> #(new(live(origin), ""), effect.none())
+        Ok(task) -> #(Ok(live(origin)), task, True)
+        Error(Nil) -> #(Ok(live(origin)), "", False)
       }
+  }
+  case source {
+    Ok(source) -> {
+      let model = new(source, task, base(source))
+      #(Model(..model, status: Loading, running:), load_libraries(origin))
+    }
+    Error(reason) -> {
+      let model = new(live(origin), "", environment.browser())
+      #(Model(..model, status: Failed(reason)), effect.none())
+    }
   }
 }
 
@@ -131,14 +133,23 @@ fn live(origin) {
   Live(transport: client.Proxy(origin), model: jev.latest)
 }
 
-fn new(source, task) {
-  let #(environment, config) = case source {
-    Replay(demo:, ..) -> #(demo.environment, demo.config)
-    Live(..) -> #(environment.browser(), options.default_config())
+fn base(source) {
+  case source {
+    Replay(demo:, ..) -> demo.environment
+    Live(..) -> environment.browser()
+  }
+}
+
+fn new(source, task, environment) {
+  let config = case source {
+    Replay(demo:, ..) -> demo.config
+    Live(..) ->
+      options.Config(..options.default_config(), search_libraries: True)
   }
   Model(
     source:,
     task:,
+    environment:,
     agent: agent.new(task, e.Vacant, environment, config),
     status: Idle,
     running: False,
@@ -148,6 +159,57 @@ fn new(source, task) {
     now: client.now(),
     tokens: 0,
   )
+}
+
+fn load_libraries(origin) {
+  effect.from(fn(dispatch) {
+    let assert Ok(request) = request.to(origin <> "/libraries.json")
+    fetch.send(request)
+    |> promise.try_await(fetch.read_text_body)
+    |> promise.map(fn(response) {
+      let result = case response {
+        Ok(response) ->
+          json.parse(response.body, library.decoder())
+          |> result.replace_error("could not decode the libraries")
+        Error(reason) -> Error(string.inspect(reason))
+      }
+      dispatch(LibrariesLoaded(result))
+    })
+    Nil
+  })
+}
+
+fn loaded(model: Model, result) {
+  let setup = {
+    use bundle <- result.try(result)
+    use environment <- result.try(library.environment(
+      bundle,
+      base(model.source),
+    ))
+    use source <- result.map(case model.source {
+      Replay(demo:, speed:, ..) -> {
+        use actions <- result.map(demo.script(demo, environment))
+        Replay(demo:, actions:, speed:)
+      }
+      live -> Ok(live)
+    })
+    #(source, environment)
+  }
+  case setup {
+    Ok(#(source, environment)) -> {
+      let fresh = new(source, model.task, environment)
+      let model = Model(..fresh, running: model.running)
+      case model.running {
+        // Pause on the empty program so a recording shows the start.
+        True -> #(model, delay(1500, Continue(model.generation)))
+        False -> #(model, effect.none())
+      }
+    }
+    Error(reason) -> #(
+      Model(..model, status: Failed(reason), running: False),
+      effect.none(),
+    )
+  }
 }
 
 pub fn update(model: Model, message) -> #(Model, Effect(Message)) {
@@ -170,7 +232,7 @@ pub fn update(model: Model, message) -> #(Model, Effect(Message)) {
         _ -> #(model, effect.none())
       }
     UserClickedReset -> {
-      let fresh = new(model.source, model.task)
+      let fresh = new(model.source, model.task, model.environment)
       #(Model(..fresh, generation: model.generation + 1), effect.none())
     }
     Continue(generation) if generation == model.generation ->
@@ -183,6 +245,7 @@ pub fn update(model: Model, message) -> #(Model, Effect(Message)) {
     JevAnswered(generation, result) if generation == model.generation ->
       answered(model, result)
     JevAnswered(..) -> #(model, effect.none())
+    LibrariesLoaded(result) -> loaded(model, result)
     Ticked(now) ->
       case model.status {
         Thinking(..) -> #(Model(..model, now:), tick())

@@ -8,7 +8,7 @@ import jev_playground/mock
 import morph/editable as e
 
 fn replay(demo: demo.Demo) {
-  let assert Ok(actions) = demo.script(demo)
+  let assert Ok(actions) = demo.script(demo, demo.environment)
   let agent = agent.new(demo.task, e.Vacant, demo.environment, demo.config)
   list.index_fold(actions, agent, fn(agent, action, i) {
     let offered = agent.options(agent)
@@ -41,6 +41,6 @@ pub fn every_demo_replays_with_each_choice_offered_test() {
 pub fn github_demo_tests_pass_test() {
   let agent = replay(demo.github())
   assert agent.test_results == Some("3 of 3 tests passed")
-  let assert Ok(actions) = demo.script(demo.github())
+  let assert Ok(actions) = demo.script(demo.github(), demo.github().environment)
   assert list.last(actions) == Ok(action.Finish)
 }
