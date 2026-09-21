@@ -155,13 +155,13 @@ pub fn varients(buffer) {
 pub fn target_scope(buffer) {
   let Buffer(projection:, analysis:, ..) = buffer
   let path = p.path(projection)
-  infer.scope_at(analysis, path)
+  infer.scope_at(analysis, list.reverse(path))
 }
 
 pub fn target_arity(buffer) {
   let Buffer(projection:, analysis:, ..) = buffer
   let path = p.path(projection)
-  infer.arity_at(analysis, path)
+  infer.arity_at(analysis, list.reverse(path))
 }
 
 // ------------------------- Navigations
