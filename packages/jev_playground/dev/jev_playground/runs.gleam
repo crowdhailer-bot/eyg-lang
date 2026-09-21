@@ -1,7 +1,7 @@
-//// Replay every saved eval run and report how Jev used navigation,
-//// in particular what the edit after a jump to a type error did.
+//// Replay saved eval runs and report how Jev used navigation, in particular what
+//// the edit after a jump to a type error did, and how confidence relates to success.
 //// Runs are replayed with the current code, so only runs saved since a time are read.
-//// `gleam run -m jev_playground/jumps --runtime bun -- 1790000000000`
+//// `gleam run -m jev_playground/runs --runtime bun -- 1790000000000`
 
 import argv
 import gleam/dict
@@ -100,6 +100,38 @@ pub fn main() {
     <> int.to_string(list.count(runs, fn(run) { run.outcome == "solved" }))
     <> " solved runs jumped to an error",
   )
+  // A streak of unsure choices, is it a sign the run will not recover?
+  let unsure =
+    list.map(runs, fn(run) {
+      #(run.outcome == "solved", unsure_streak(run.steps, 0, 0) >= 3)
+    })
+  let count = fn(solved, streak) {
+    list.count(unsure, fn(pair) { pair == #(solved, streak) })
+    |> int.to_string
+  }
+  io.println(
+    "three choices in a row below 0.2 confidence: "
+    <> count(True, True)
+    <> " solved and "
+    <> count(False, True)
+    <> " unsolved runs, without: "
+    <> count(True, False)
+    <> " solved and "
+    <> count(False, False)
+    <> " unsolved",
+  )
+}
+
+// The longest run of choices made with less than 0.2 confidence.
+fn unsure_streak(steps: List(agent.Step), current, longest) {
+  case steps {
+    [] -> int.max(current, longest)
+    [step, ..rest] if step.input_tokens > 0 && step.confidence <. 0.2 ->
+      unsure_streak(rest, current + 1, longest)
+    [step, ..rest] if step.input_tokens > 0 ->
+      unsure_streak(rest, 0, int.max(current, longest))
+    [_, ..rest] -> unsure_streak(rest, current, longest)
+  }
 }
 
 type Replayed {
