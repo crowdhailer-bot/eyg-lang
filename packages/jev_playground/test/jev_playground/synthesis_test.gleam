@@ -1,6 +1,6 @@
 import eyg/parser
 import gleam/list
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import jev_playground/action as a
 import jev_playground/environment
 import jev_playground/synthesis
@@ -112,4 +112,10 @@ pub fn selecting_fields_test() {
 
 pub fn calls_with_more_arguments_than_known_insert_holes_test() {
   let assert Ok(_) = script("(f) -> { f(1, 2) }")
+}
+
+pub fn overwriting_several_fields_test() {
+  let assert Ok(actions) = script("(m) -> { {headers: [], body: 1, ..m} }")
+  assert list.contains(actions, a.Overwrite("headers"))
+  assert list.contains(actions, a.InsertAfter(Some("body")))
 }

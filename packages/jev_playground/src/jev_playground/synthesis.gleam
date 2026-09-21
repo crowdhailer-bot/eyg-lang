@@ -157,12 +157,26 @@ fn build(state: State, target: e.Expression, path: List(Int)) {
         build(state, field.1, at(path, [i * 2 + 1]))
       })
     }
-    e.Record([#(label, value)], Some(original)) -> {
-      use state <- try(step(state, a.Overwrite(label)))
-      use state <- try(build(state, value, at(path, [1])))
-      build(state, original, at(path, [2]))
+    e.Record([], Some(_)) ->
+      Error("an overwrite without fields is not supported")
+    e.Record([#(first, _), ..rest] as fields, Some(original)) -> {
+      use state <- try(step(state, a.Overwrite(first)))
+      // Each further field is inserted after the label of the one before.
+      use state <- try(
+        list.index_fold(rest, Ok(state), fn(state, field, i) {
+          use state <- try(state)
+          use state <- try(goto(state, at(path, [i * 2])))
+          step(state, a.InsertAfter(Some(field.0)))
+        }),
+      )
+      use state <- try(
+        list.index_fold(fields, Ok(state), fn(state, field, i) {
+          use state <- try(state)
+          build(state, field.1, at(path, [i * 2 + 1]))
+        }),
+      )
+      build(state, original, at(path, [list.length(fields) * 2]))
     }
-    e.Record(_, Some(_)) -> Error("overwriting several fields is not supported")
     e.List([], None) -> step(state, a.EmptyList)
     e.List([], Some(_)) -> Error("a spread without items is not supported")
     e.List(items, tail) -> {
