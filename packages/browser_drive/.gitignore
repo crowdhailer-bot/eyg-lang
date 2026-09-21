@@ -4,3 +4,4 @@
 /artifacts/raw/
 /artifacts/live-*.png
 /artifacts/live-dom.txt
+/artifacts/live-check.json

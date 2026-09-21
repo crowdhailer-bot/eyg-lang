@@ -1,5 +1,18 @@
 # Browser drive
 
+Implemented in [packages/browser_drive](./packages/browser_drive/README.md).
+
+- [x] Single-file `phantom.js` injection with a draggable, dockable chat.
+- [x] Real EYG interpreter, mocked single-tool agent, expandable code and effect traces.
+- [x] Three requested effects plus one general presentation effect, `SetAttribute`.
+- [x] DI chart enlargement, hover effect and working focus toggle.
+- [x] SJ direct-train shortlist and working comparison toggle.
+- [x] Recorded injection and chat walkthroughs on both live sites, plus polished local demos with fictional data.
+- [x] [JavaScript embedding tutorial](./guides/browser_drive.md), complete system prompt and canonical syntax context.
+
+Run instructions, final videos, screenshots and test commands are linked from
+the package README.
+
 THe perpose is to create an environment where an agent can write EYG code that explores the DOM.
 
 ## Create a phantom.js driver
@@ -32,9 +45,9 @@ For the demo's show the script injection process, then record a video of the use
 
 Write a guide that explains
 
-- [ ] How to run the interpreter in JavaScript
-  - [ ] How can we make this easier
-- [ ] How to set up an agent loop in JS that uses only the EYG tool
-- [ ] How to pass a context to the agent. The agent needs the EYG syntax guide as part of it's system prompt.
-  - [ ] Make sure there is a full system prompt that explains to the agent how to work well
-- [ ] Review the guide that it is concise, explains EYG well and explains that you can write anything outside the harness and the agent is securly sandboxed only able to use the explicitly defined effects.
+- [x] How to run the interpreter in JavaScript
+  - [x] How can we make this easier
+- [x] How to set up an agent loop in JS that uses only the EYG tool
+- [x] How to pass a context to the agent. The agent needs the EYG syntax guide as part of it's system prompt.
+  - [x] Make sure there is a full system prompt that explains to the agent how to work well
+- [x] Review the guide that it is concise, explains EYG well and explains that you can write anything outside the harness and the agent is securly sandboxed only able to use the explicitly defined effects.

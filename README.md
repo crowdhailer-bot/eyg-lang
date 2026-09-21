@@ -83,6 +83,7 @@ Use `eyg eval` for evaluating pure values, no side effects, and printing the res
 - Full effect reference is in [`./guides/cli_effects_reference.md`](./guides/cli_effects_reference.md).
 - File and import path resolution is explained in [`guides/file_resolution.md`](./guides/file_resolution.md).
 - To install from source see [`./guides/install_from_source.md`](./guides/install_from_source.md).
+- To embed EYG in JavaScript and give a browser agent one tool with explicit effects, see the [browser drive tutorial](./guides/browser_drive.md) and [Phantom demos](./packages/browser_drive/README.md).
 
 ## Packages
 
@@ -96,6 +97,7 @@ A sensible reason could be to create a runtime with a unique set of effects, i.e
 Another reason could be to imagine your own syntax, or even visual editor, and reuse the EYG interpreter and packages.
 
 - [spec](./spec) A JSON spec of all evaluation rules. Compiler and interpreter implementations should use this as their test suite.
+- [browser_drive](./packages/browser_drive/) Phantom: an injectable browser assistant with a mocked agent, the real EYG interpreter, reversible DOM effects, and recorded demos.
 - [gleam_analysis](./packages/gleam_analysis/) Type inference for expressions, effects and scope variables in EYG programs.
 - [gleam_cli](./packages/gleam_cli/) The CLI for running EYG programs and interacting with the EYG hub.
 - [gleam_hub](./packages/gleam_hub/) Schemas, encoders and decoders for the EYG Hub API. (Unpublished)

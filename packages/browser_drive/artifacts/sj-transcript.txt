@@ -1,0 +1,44 @@
+A LITTLE MORE YOUR INTERNET
+Your page.
+Your possibilities.
+
+Make the useful things stand out.
+Tell me what you’d like to change.
+
+Shortlist the two cheapest direct trains
+↗
+Add a button to toggle my shortlist
+↗
+Shortlist the two cheapest direct trains
+✓
+Ran EYG
+1/1 complete
+View code
+1 effect
+✓
+GetElements
+[data-departure], button:has(h3), [class*="journey-card"], [class*="departure-card"]
+✓
+Ran EYG
+7/7 complete
+View code
+7 effects
+Your two cheapest direct trains are highlighted, from 345 kr. The other departures are still there for comparison.
+Add a button to toggle my shortlist
+✓
+Ran EYG
+1/1 complete
+View code
+1 effect
+✓
+GetElements
+main, [role="main"]
+✓
+Ran EYG
+1/1 complete
+View code
+1 effect
+✓
+InsertButton
+Toggle my shortlist
+Your button is on the page. Click it to switch your changes off and on.
