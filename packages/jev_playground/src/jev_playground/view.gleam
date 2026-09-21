@@ -22,12 +22,27 @@ import lustre/event
 pub fn render(model: Model) -> Element(app.Message) {
   h.div([a.class("app")], [
     header(model),
+    // The status in the header changes on every tick, the panels only when Jev answers.
     h.main([a.class("grid")], [
-      task_panel(model),
-      program_panel(model),
-      options_panel(model),
+      element.memo(
+        [
+          element.ref(model.agent),
+          element.ref(model.task),
+          element.ref(model.running),
+        ],
+        fn() { task_panel(model) },
+      ),
+      element.memo([element.ref(model.agent)], fn() { program_panel(model) }),
+      element.memo(
+        [
+          element.ref(model.agent),
+          element.ref(model.offered),
+          element.ref(is_thinking(model)),
+        ],
+        fn() { options_panel(model) },
+      ),
     ]),
-    history(model),
+    element.memo([element.ref(model.selections)], fn() { history(model) }),
   ])
 }
 
@@ -369,4 +384,11 @@ fn thousands(n) {
   |> list.map(fn(chunk) { chunk |> list.reverse |> string.concat })
   |> list.reverse
   |> string.join(",")
+}
+
+fn is_thinking(model: Model) {
+  case model.status {
+    app.Thinking(..) -> True
+    _ -> False
+  }
 }
