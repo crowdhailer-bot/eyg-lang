@@ -97,20 +97,42 @@ Look at each file in the eyg_packages directory.
 
 ### Real API
 
-- [ ] Use the provided API token
-  - [ ] Check the API client is accurate
-    - [ ] record error responses and update an required tests
-    - [ ] write API documentation
-- [ ] Write an eval that takes a prompt, starting program and loops until the output is correct.
-  - [ ] run an eval that creates a program to calculate the first n fibonacci numbers.
-  - [ ] run an eval that adds new list functions to the existing standard library.
-- [ ] The output of an eval should include a realtime video of the progress of the program. Show the program as it was to the amount of time jev was thinking about it.
-- [ ] Investigate the effect of the compound actions on the cost and speed of jev reaching a solution.
-  - [ ] Write evals that allow you to discover better compound actions. Weigh up the cost of more options against the ability to make larger transformations for each decision
-- [ ] Do deep research into the best way to use type information to guide choices.
-  - Type information of all vacant nodes can be shown
-  - Type information of all nodes with an effect can be shown
-  - What is the best way to highlight the current selection
-- [ ] Do deep research into giving jev the ability to have multiple cursors at a time.
-- [ ] Do deep research into the ability to jump around the program. I think that jump to type errors is the most valuable power. but maybe there are times it doesn't work.
-- [ ] Suggest and test any other improvements that will allow jev to work towards the correct solution quicker.
+- [x] Use the provided API token
+  - The key stays out of git and the browser, the dev server and eval runner read `TYPESAFE_API_KEY`
+  - [x] Check the API client is accurate
+    - [x] record error responses and update an required tests
+      - `packages/jev/test/fixtures` are real responses, including a request refused for too many tokens
+    - [x] write API documentation, `packages/jev/README.md`
+    - [x] Report a request of more than about 32,800 input tokens as `TooManyTokens`
+- [x] Write an eval that takes a prompt, starting program and loops until the output is correct.
+  - `gleam run -m jev_playground/evaluate`, a checker calls the program and its verdict is shown to Jev as test results
+  - [x] run an eval that creates a program to calculate the first n fibonacci numbers.
+    - never solved from an empty program, solved from a scaffold in 21 steps for $0.0043
+  - [x] run an eval that adds new list functions to the existing standard library.
+    - never solved from the library alone, solved from a scaffold in every run once the selected code is repeated for Jev
+  - [x] Add evals for a greeting, a record, an order total and a match, and a sweep that runs each with a set of variants
+  - [x] Resolve the types in scope with what inference learnt later, every parameter was type `a`
+  - [x] Describe a hole in a match branch by its tag, and keep the arity a call was offered with
+  - [x] Stop loops that move back to repeat an edit, calls grew until a request was refused
+  - [x] Stop evaluating a program after a million steps, one grew until the kernel killed the eval
+  - [x] Fail rather than crash when focusing on a path that is not in the program
+- [x] The output of an eval should include a realtime video of the progress of the program. Show the program as it was to the amount of time jev was thinking about it.
+  - `/eval/<file>` replays a saved run, `record` turns it into a video
+- [x] Investigate the effect of the compound actions on the cost and speed of jev reaching a solution.
+  - `packages/jev_playground/research/evals.md`, compounds helped one scaffold, broke two and added 14% to each request
+  - [x] Write evals that allow you to discover better compound actions. Weigh up the cost of more options against the ability to make larger transformations for each decision
+    - the number of compounds and instances of each are variant flags, `checked` offers only instances that type check
+- [x] Do deep research into the best way to use type information to guide choices.
+  - `packages/jev_playground/research/type_information.md`, the types in scope had not been resolved, fixed in `eyg_analysis`
+  - [x] Repeat the selected code in the description of the selection by default, the best variant measured
+  - Type information of all vacant nodes can be shown, `types`
+  - Type information of all nodes with an effect can be shown, designed but not measured as no eval performs effects
+  - What is the best way to highlight the current selection, `mark=`
+- [x] Do deep research into giving jev the ability to have multiple cursors at a time.
+  - `packages/jev_playground/research/cursors_and_jumps.md`, `cursors=3` asks what fills the next holes in the same request, which solved fewer evals
+- [x] Do deep research into the ability to jump around the program. I think that jump to type errors is the most valuable power. but maybe there are times it doesn't work.
+  - `packages/jev_playground/research/cursors_and_jumps.md`, `gleam run -m jev_playground/runs` reports how saved runs moved
+  - jumping to type errors made no measurable difference, moving to any hole by number made results worse
+- [x] Suggest and test any other improvements that will allow jev to work towards the correct solution quicker.
+  - `packages/jev_playground/research/improvements.md`
+  - [x] Stop a run after three choices in a row below 0.2 confidence, 1 of 357 solved runs did so
