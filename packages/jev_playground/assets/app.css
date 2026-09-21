@@ -1,0 +1,456 @@
+:root {
+  --background: #0b0e14;
+  --panel: #11151d;
+  --border: #1f2633;
+  --text: #c9d1d9;
+  --muted: #6b7686;
+  --accent: #56d4a0;
+  --accent-dim: rgba(86, 212, 160, 0.14);
+  --warning: #f0b35a;
+  --danger: #ef6f6c;
+  --selection: rgba(86, 160, 255, 0.22);
+  --selection-edge: #56a0ff;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+  height: 100%;
+  background: var(--background);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+#app,
+.app {
+  height: 100%;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr) 132px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: normal;
+  text-transform: none;
+  font-weight: 400;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: #0d1118;
+}
+
+.logo {
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.2em;
+}
+
+.title {
+  color: var(--muted);
+  margin-right: 12px;
+}
+
+.chip {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.chip-label {
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 190px;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+.status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status.thinking .dot {
+  background: var(--warning);
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+.status.waiting .dot,
+.status.finished .dot {
+  background: var(--accent);
+}
+
+.status.failed {
+  color: var(--danger);
+}
+
+.status.failed .dot {
+  background: var(--danger);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 390px;
+  min-height: 0;
+}
+
+.panel {
+  padding: 14px 16px;
+  border-right: 1px solid var(--border);
+  overflow: auto;
+  min-height: 0;
+}
+
+.panel:last-child {
+  border-right: none;
+}
+
+.task-input {
+  width: 100%;
+  height: 170px;
+  resize: vertical;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.controls {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0 18px;
+}
+
+.button {
+  flex: 1;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.checks {
+  margin: 0 0 12px;
+}
+
+.check {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.check dt,
+.check dd {
+  margin: 0;
+}
+
+.check dd {
+  color: var(--warning);
+}
+
+.check.ok dd {
+  color: var(--accent);
+}
+
+.tests {
+  margin: 0 0 16px;
+  padding: 8px;
+  background: var(--panel);
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+.effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.effect {
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+}
+
+.effect.open {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.code {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: hidden;
+}
+
+.code .selection {
+  background: var(--selection);
+  outline: 1px solid var(--selection-edge);
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+
+.keyword {
+  color: #c792ea;
+}
+
+.string {
+  color: #a5d6a7;
+}
+
+.builtin {
+  color: #82aaff;
+}
+
+.tag {
+  color: #ffcb6b;
+}
+
+.number {
+  color: #f78c6c;
+}
+
+.hole {
+  color: var(--background);
+  background: var(--warning);
+  border-radius: 2px;
+  padding: 0 2px;
+  font-weight: 700;
+}
+
+.option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ranked {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  overflow: hidden;
+  white-space: nowrap;
+  animation: appear 0.3s ease-out both;
+}
+
+.ranked .bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(255, 255, 255, 0.05);
+  transition: width 0.4s ease-out;
+}
+
+.ranked.chosen {
+  color: var(--accent);
+  outline: 1px solid var(--accent);
+}
+
+.ranked.chosen .bar {
+  background: var(--accent-dim);
+}
+
+.ranked .probability {
+  position: relative;
+  width: 38px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ranked.chosen .probability {
+  color: var(--accent);
+}
+
+.ranked .name {
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 10px;
+}
+
+.tag-option {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.cloud.scanning {
+  animation: scan 1s ease-in-out infinite;
+}
+
+@keyframes scan {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+.history {
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+  position: relative;
+  z-index: 2;
+}
+
+/* Oldest first in the document so a new selection is appended and no card moves,
+   moving a node would restart its animation. */
+.selections {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.selection-item {
+  flex: 0 0 auto;
+  width: 146px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.selection-item.new {
+  animation: slide-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.selection-item:last-child {
+  border-color: var(--accent);
+}
+
+.selection-item .number {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.selection-item .name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selection-item:last-child .name {
+  color: var(--accent);
+}
+
+.selection-item .meta {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.selection-item .flag {
+  align-self: flex-start;
+  font-size: 10px;
+  color: var(--background);
+  background: var(--accent);
+  border-radius: 2px;
+  padding: 0 4px;
+}
+
+.selection-item.leaving {
+  animation: fade-out 0.6s ease-out forwards;
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0.3;
+    transform: translate(900px, -500px) scale(0.95);
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}

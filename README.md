@@ -101,6 +101,7 @@ Another reason could be to imagine your own syntax, or even visual editor, and r
 - [gleam_hub](./packages/gleam_hub/) Schemas, encoders and decoders for the EYG Hub API. (Unpublished)
 - [gleam_ir](./packages/gleam_ir/) Data structures for the EYG IR. This is the original implementation of EYG.
 - [jev](./packages/jev/) Client for the TypeSafe System One API and its Jev decision model.
+- [jev_playground](./packages/jev_playground/) Jev writing EYG programs by choosing structural edits. (Unpublished)
 - [gleam_interpreter](./packages/gleam_interpreter/) A Gleam interpreter for EYG targeting JavaScript. Runs in the browser and on the server.
 - [gleam_parser](./packages/gleam_parser/) Parser for a curly braces syntax for EYG IR.
 - [hub](./packages/hub/) Backend application for [eyg.run](https://eyg.run). Stores modules, packages and signatories.
