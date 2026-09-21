@@ -278,6 +278,8 @@ pub type Failure {
   Unauthenticated(message: String)
   /// Status 400, for example an unknown model or more than 255 options.
   BadRequest(message: String)
+  /// Status 400 when the request is longer than the model accepts, about 32,800 input tokens.
+  TooManyTokens
   /// Status 422, the body failed validation.
   InvalidRequest(problems: List(Problem))
   /// Status 429, back off before retrying.
@@ -305,9 +307,18 @@ fn failure(response: Response(BitArray)) -> Failure {
       |> result.map(Unauthenticated)
       |> result.unwrap(UnexpectedResponse(status:, body:))
     400 ->
-      decode_message(body)
-      |> result.map(BadRequest)
-      |> result.unwrap(UnexpectedResponse(status:, body:))
+      case
+        json.parse_bits(
+          body,
+          decode.at(["detail", "error_type"], decode.string),
+        )
+      {
+        Ok("max_tokens_exceeded") -> TooManyTokens
+        _ ->
+          decode_message(body)
+          |> result.map(BadRequest)
+          |> result.unwrap(UnexpectedResponse(status:, body:))
+      }
     422 ->
       json.parse_bits(body, decode.at(["detail"], decode.list(problem())))
       |> result.map(InvalidRequest)

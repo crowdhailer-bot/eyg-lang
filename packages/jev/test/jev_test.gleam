@@ -111,6 +111,8 @@ pub fn unknown_model_is_a_bad_request_test() {
 pub fn too_many_options_is_a_bad_request_test() {
   assert jev.system_one_response(reply(400, "choice_256"))
     == Error(jev.BadRequest("Too many choices. Must have at most 255 choices."))
+  assert jev.system_one_response(reply(400, "max_tokens"))
+    == Error(jev.TooManyTokens)
 }
 
 pub fn missing_field_reports_the_location_test() {

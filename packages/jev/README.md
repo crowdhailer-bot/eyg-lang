@@ -55,6 +55,7 @@ Input tokens are charged, output tokens are free. A choice option costs about te
 | --- | --- | --- |
 | 401 invalid key, 403 missing key | `Unauthenticated(message)` | `{"detail": {"error_type", "message"}}` |
 | 400 | `BadRequest(message)` | `{"detail": {"error_type", "message"}}` or `{"detail": message}` |
+| 400 | `TooManyTokens` | `{"detail": {"error_type": "max_tokens_exceeded"}}` |
 | 422 | `InvalidRequest(problems)` | `{"detail": [{"loc", "msg", ..}]}` |
 | 429 | `RateLimited(retry_after)` | |
 | 529 | `Overloaded(retry_after)` | |
@@ -72,6 +73,7 @@ Recorded against `jev-1.13.0` on 2026-09-21, the fixtures in `test/fixtures` are
 - An unknown model, an unknown question type, more than 255 options, an empty choice or more than 10 levels return 400, which the docs do not list.
   An unknown question type only says `Invalid request.`.
 - A score with a single level is accepted although the docs ask for at least two.
+- A request of 32,771 input tokens is accepted and one of 33,271 is refused with `max_tokens_exceeded`.
 - Browsers are refused: CORS rejects `localhost` origins, so browser apps need a proxy.
 - Typical latency is 80ms upstream and 0.7s for the round trip; a 255 option choice uses about 2,700 input tokens.
 
