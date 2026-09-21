@@ -5,6 +5,7 @@
 import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/analysis/type_/binding/debug
 import eyg/analysis/type_/binding/error
+import gleam/bool
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
@@ -126,7 +127,21 @@ pub fn describe_error(reason) {
 }
 
 fn structure(buffer: Buffer, vocabulary: Vocabulary) {
-  let names = vocabulary.names
+  // New bindings do not shadow variables in scope or reuse builtin names.
+  let scope =
+    buffer.target_scope(buffer)
+    |> result.unwrap([])
+    |> list.map(fn(entry) { entry.0 })
+  let builtins = list.map(infer.builtins(), fn(builtin) { builtin.0 })
+  let names =
+    list.filter(vocabulary.names, fn(name) {
+      name == "_"
+      || { !list.contains(scope, name) && !list.contains(builtins, name) }
+    })
+  let vacant = case buffer.projection {
+    #(p.Exp(e.Vacant), _) -> True
+    _ -> False
+  }
   list.flatten([
     when(buffer.insert_function(buffer), fn(_) {
       list.map(names, fn(name) {
@@ -166,6 +181,7 @@ fn structure(buffer: Buffer, vocabulary: Vocabulary) {
       })
     }),
     when(buffer.assign_before(buffer), fn(_) {
+      use <- bool.guard(vacant, [])
       list.map(names, fn(name) {
         option(
           a.AssignBefore(name),

@@ -37,11 +37,11 @@ pub fn from_task(task: String) -> Vocabulary {
     False -> quoted
   }
   let code = matches("`([^`]+)`", task)
-  let code_words = list.flat_map(code, words)
+  let code_words = list.flat_map(code, plain_words)
   let identifiers =
     list.filter(code_words, is_name)
     |> list.append(
-      list.filter(words(task), fn(word) {
+      list.filter(plain_words(task), fn(word) {
         is_name(word) && string.contains(word, "_")
       }),
     )
@@ -127,6 +127,11 @@ fn matches(pattern, text) {
       _ -> Error(Nil)
     }
   })
+}
+
+// Words after `!` are builtins, not names to bind.
+fn plain_words(text) {
+  matches("(?<![!\\w])([A-Za-z_][A-Za-z0-9_]*)", text)
 }
 
 fn words(text) {
