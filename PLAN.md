@@ -32,12 +32,17 @@ Add any extra tasks for each step in the lists below. Solve everything including
 
 ### Prerequisits
 
-- [ ] Create an API client for the Jev API
+- [x] Create an API client for the Jev API
   - Documentation is available here https://docs.typesafe.ai/api.md
   - create a new package called jev and rely on it as a path dependency
-- [ ] Jev needs the current state of a program implement AST to text code.
-  - [ ] Ensure the syntax matches that used by the parser, up to the point of indicating a cursor
-  - [ ] There nees to be a way to identiy what is currently selected. Make sure Jev can clearly undersand the current focus (1 or many).
+  - [x] `packages/jev`, sans-io operations and decoders tested on Erlang and JavaScript
+  - [x] Browsers are refused by CORS, the playground dev server proxies `/v1` and holds the key
+- [x] Jev needs the current state of a program implement AST to text code.
+  - [x] Ensure the syntax matches that used by the parser, up to the point of indicating a cursor
+    - `morph/text`, every file in `eyg_packages` prints and parses back to the same tree
+  - [x] There nees to be a way to identiy what is currently selected. Make sure Jev can clearly undersand the current focus (1 or many).
+    - any number of paths can be marked, the selection is shown `«like this»`
+  - [x] Fix `morph/buffer` looking up scope and arity with the path the wrong way round
 
 ### Basic edits
 
@@ -49,11 +54,17 @@ Call the API with:
   - Include move left/right increase selection
   - Include jump to any type error.
 
-- [ ] Create a new project jev-playground
-- [ ] Create a new route which starts the jev-playground with an empty program
-- [ ] Show a textbox where there user can ask a question.
-- [ ] A loop that will keep calling Jev implement the returned manipulation and continue in a loop
-- [ ] record a video with mocked jev responses of it working through the process of creating a API client for github.
+- [x] Create a new project jev-playground
+- [x] Create a new route which starts the jev-playground with an empty program
+- [x] Show a textbox where there user can ask a question.
+- [x] A loop that will keep calling Jev implement the returned manipulation and continue in a loop
+  - [x] Jev cannot generate text, offer names and literals from the task, the program and common names
+  - [x] Move to the next `?` after a hole is filled with a complete value, Jev kept replacing the same hole
+  - [x] Name options by their result, for example `call !int_add(?, ?)`
+  - [x] Keep to the 255 option limit by dropping builtins first and not offering names already in scope
+- [x] record a video with mocked jev responses of it working through the process of creating a API client for github.
+  - [x] Synthesise the actions that build a target program so the mocked script matches the editor
+  - [x] A test replays each demo and fails if any scripted choice was not offered
   - Give it explicit instructions of three enpoints to implement.
   - Make sure it understands the effect environment. it should be able to write and run tests.
   - Make it look technical, show jev thinking time for each option, show what options was presented and what was selected.
