@@ -8,6 +8,7 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/result
+import gleam/string
 import jev
 import jev_playground/action.{type Action}
 import jev_playground/agent
@@ -27,9 +28,16 @@ pub fn answer(
   )
   let seed = step * 7919 + 17
   let confidence = 0.55 +. to_unit(seed) *. 0.44
-  let others =
+  // Close alternatives are options of the same kind, such as another variable.
+  let kind = fn(option) {
+    options.key(option) |> string.split(" ") |> list.first
+  }
+  let #(similar, different) =
     list.filter(offered, fn(option) { option.action != action })
-    |> pick(seed, 4)
+    |> list.partition(fn(option) { kind(option) == kind(chosen) })
+  let others =
+    list.append(pick(similar, seed, 2), pick(different, seed + 1, 3))
+    |> list.take(4)
   let remainder = 1.0 -. confidence
   let weights = [0.55, 0.25, 0.14, 0.06]
   let probabilities =
