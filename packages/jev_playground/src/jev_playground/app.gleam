@@ -114,7 +114,15 @@ pub fn init(flags: #(String, String, String)) -> #(Model, Effect(Message)) {
         )
       }
     }
-    _ -> #(new(live(origin), ""), effect.none())
+    // `?task=..` starts Jev on the task straight away, for sharing and recording runs.
+    _ ->
+      case list.key_find(query, "task") {
+        Ok(task) -> {
+          let model = Model(..new(live(origin), task), running: True)
+          #(model, delay(1500, Continue(model.generation)))
+        }
+        Error(Nil) -> #(new(live(origin), ""), effect.none())
+      }
   }
 }
 
