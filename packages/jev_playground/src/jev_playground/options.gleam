@@ -39,6 +39,12 @@ pub type Config {
     advance: Bool,
     /// Ask for names and labels in separate questions rather than offering an edit for each.
     slot_questions: Bool,
+    /// Only offer values whose type fits the hole, or whose result fits when called.
+    type_filter: Bool,
+    /// When a program state recurs, do not offer the edit chosen there last time.
+    no_repeats: Bool,
+    /// Keep the selection on the next `?` and only ask what fills it.
+    focus_holes: Bool,
   )
 }
 
@@ -49,6 +55,9 @@ pub fn default_config() {
     search_libraries: False,
     advance: True,
     slot_questions: True,
+    type_filter: True,
+    no_repeats: True,
+    focus_holes: False,
   )
 }
 
@@ -76,11 +85,29 @@ pub fn available(
       structure(buffer, vocabulary, config),
       values(buffer, environment, vocabulary, config),
     ])
+  let holes = case buffer.projection, config.focus_holes {
+    #(p.Exp(e.Vacant), _), True -> True
+    _, _ -> False
+  }
+  let singles = case holes {
+    True -> fills(singles, buffer, environment)
+    False -> singles
+  }
+  let navigation = case holes {
+    True ->
+      list.filter(navigation(buffer), fn(option) {
+        case option.action {
+          a.NextVacant | a.JumpToError(_) -> True
+          _ -> False
+        }
+      })
+    False -> navigation(buffer)
+  }
   // Ordered by priority, builtins are last and dropped first if there are too many.
   // A long task can offer many names, each kind of binding is limited so they
   // do not crowd out values.
   list.flatten([
-    navigation(buffer),
+    navigation,
     [
       option(a.RunTests, "Run the `tests` of the program and see the results."),
       option(a.Finish, "The program is complete and satisfies the task."),
@@ -119,10 +146,8 @@ fn navigation(buffer: Buffer) {
 }
 
 fn navigable(action, buffer: Buffer) {
-  case action {
-    a.JumpToError(_) -> True
-    _ -> result.is_ok(a.apply(action, buffer, environment.pure()))
-  }
+  // Jumping and moving are only useful if the selection changes.
+  result.is_ok(a.apply(action, buffer, environment.pure()))
 }
 
 pub fn describe_error(reason) {
@@ -418,8 +443,65 @@ fn values(
   config: Config,
 ) {
   case buffer.projection {
+    #(p.Exp(e.Vacant), _) if config.type_filter -> {
+      let expected = buffer.target_type(buffer)
+      let scope = buffer.target_scope(buffer) |> result.unwrap([])
+      expression_values(buffer, environment, vocabulary, config)
+      |> list.filter(fn(option) {
+        case value_type(option.action, scope, environment) {
+          Ok(type_) -> fits(expected, type_)
+          Error(Nil) -> True
+        }
+      })
+    }
     #(p.Exp(_), _) -> expression_values(buffer, environment, vocabulary, config)
     _ -> []
+  }
+}
+
+// The type of the value an option would write, if it writes one.
+fn value_type(action, scope, environment: Environment) {
+  case action {
+    a.Variable(name) -> list.key_find(scope, name) |> result.map(instantiate)
+    a.Builtin(name) ->
+      list.key_find(infer.builtins(), name) |> result.map(instantiate)
+    a.String(_) | a.ChooseString -> Ok(t.String)
+    a.Integer(_) | a.ChooseInteger -> Ok(t.Integer)
+    a.EmptyList -> Ok(t.List(t.Var(0)))
+    a.EmptyRecord | a.Record(_) -> Ok(t.Record(t.Empty))
+    a.Tag(_) -> Ok(t.Fun(t.Var(0), t.Empty, t.Union(t.Var(1))))
+    a.Reference(ir.Pinned(release)) ->
+      environment.library_by_module(environment, release.module)
+      |> result.map(fn(library) { instantiate(library.type_) })
+    _ -> Error(Nil)
+  }
+}
+
+// A value fits a hole when their types start the same, when calling it or
+// selecting one of its fields gives a value that fits, or when it can be matched on.
+fn fits(expected, candidate) {
+  do_fits(expected, candidate, 2)
+}
+
+fn do_fits(expected, candidate, depth) {
+  case expected, candidate {
+    Error(Nil), _ | Ok(t.Var(_)), _ | _, t.Var(_) -> True
+    Ok(t.Integer), t.Integer
+    | Ok(t.String), t.String
+    | Ok(t.Binary), t.Binary
+    | Ok(t.List(_)), t.List(_)
+    | Ok(t.Record(_)), t.Record(_)
+    | Ok(t.Union(_)), t.Union(_)
+    | Ok(t.Fun(..)), t.Fun(..)
+    -> True
+    // A union can be matched on to give a value of any type.
+    Ok(_), t.Union(_) -> True
+    Ok(_), t.Fun(_, _, return) -> do_fits(expected, return, depth)
+    Ok(_), t.Record(rows) if depth > 0 ->
+      list.any(analysis.rows(rows), fn(field) {
+        do_fits(expected, field.1, depth - 1)
+      })
+    _, _ -> False
   }
 }
 
@@ -884,5 +966,55 @@ fn summary(readme) {
   case paragraph {
     Ok(paragraph) -> ": " <> string.replace(paragraph, "\n", " ")
     Error(Nil) -> "."
+  }
+}
+
+// With the selection kept on holes a function is offered called, `call f(?, ?)`,
+// as the selection moves on straight away and could not be called afterwards.
+// It is also offered uncalled where the hole takes a function.
+fn fills(singles: List(Option), buffer: Buffer, environment: Environment) {
+  let expected = buffer.target_type(buffer)
+  let scope = buffer.target_scope(buffer) |> result.unwrap([])
+  // A hole of unknown type rarely wants a function that is not called.
+  let takes_function = case expected {
+    Ok(t.Fun(..)) -> True
+    _ -> False
+  }
+  list.flat_map(singles, fn(option) {
+    case option.action {
+      a.Variable(_) | a.Builtin(_) | a.Tag(_) ->
+        case value_type(option.action, scope, environment) {
+          Ok(t.Fun(..) as type_) -> {
+            let holes = list.repeat("?", arity(type_)) |> string.join(", ")
+            let name = case option.action {
+              a.Variable(name) -> name
+              a.Builtin(name) -> "!" <> name
+              a.Tag(label) -> label
+              _ -> ""
+            }
+            let key = "call " <> name <> "(" <> holes <> ")"
+            let called =
+              named(
+                a.Compound(key, [option.action, a.Call]),
+                key,
+                option.description
+                  <> ", called with the cursor on its first argument.",
+              )
+            case takes_function {
+              True -> [called, option]
+              False -> [called]
+            }
+          }
+          _ -> [option]
+        }
+      _ -> [option]
+    }
+  })
+}
+
+fn arity(type_) {
+  case type_ {
+    t.Fun(_, _, return) -> 1 + arity(return)
+    _ -> 0
   }
 }

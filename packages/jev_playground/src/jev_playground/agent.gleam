@@ -6,6 +6,7 @@ import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/analysis/type_/binding
 import eyg/analysis/type_/isomorphic as t
 import gleam/dict
+import gleam/dynamic/decode
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -20,6 +21,7 @@ import jev_playground/run
 import jev_playground/vocabulary
 import morph/buffer.{type Buffer}
 import morph/editable as e
+import morph/navigation
 import morph/projection as p
 import morph/text
 
@@ -35,6 +37,8 @@ pub type Agent {
     finished: Bool,
     /// Names and literals from the task, found once as the task can be long.
     task_vocabulary: vocabulary.Vocabulary,
+    /// Recent program states, with the selection marked, and the edit chosen in each.
+    visited: List(#(String, Action)),
   )
 }
 
@@ -64,9 +68,14 @@ const instructions = "Choose the single next edit that makes the most progress t
 const recent_actions = 6
 
 pub fn new(task, source: e.Expression, environment, config) -> Agent {
+  // Start on the first hole of a scaffold, otherwise with everything selected.
+  let projection = case source {
+    e.Vacant -> p.all(source)
+    _ -> navigation.next_vacant(p.all(source)) |> result.unwrap(p.all(source))
+  }
   let buffer =
     buffer.from_projection(
-      p.all(source),
+      projection,
       environment.context(environment),
       environment.references(environment),
     )
@@ -79,6 +88,7 @@ pub fn new(task, source: e.Expression, environment, config) -> Agent {
     test_results: None,
     finished: False,
     task_vocabulary: vocabulary.from_task(task),
+    visited: [],
   )
 }
 
@@ -92,9 +102,47 @@ pub fn source(agent: Agent) -> e.Expression {
 
 pub fn options(agent: Agent) -> List(options.Option) {
   let vocabulary = vocabulary.with_task(agent.task_vocabulary, source(agent))
+  // Coming back to a state means the edit chosen there last time did not help.
+  let repeated = case agent.config.no_repeats {
+    True -> {
+      let here = program_text(agent)
+      list.filter_map(agent.visited, fn(entry) {
+        case entry.0 == here {
+          True -> Ok(options.without_name(entry.1))
+          False -> Error(Nil)
+        }
+      })
+    }
+    False -> []
+  }
+  // The same kind of edit chosen many times in a row is usually a loop.
+  let repeated = case
+    agent.config.no_repeats,
+    list.take(agent.history, in_a_row)
+  {
+    True, [first, ..] as recent ->
+      case
+        list.length(recent) == in_a_row
+        && list.all(recent, fn(step) {
+          options.without_name(step.action)
+          == options.without_name(first.action)
+        })
+      {
+        True -> [options.without_name(first.action), ..repeated]
+        False -> repeated
+      }
+    _, _ -> repeated
+  }
   options.available(agent.buffer, agent.environment, vocabulary, agent.config)
+  |> list.filter(fn(option) {
+    !list.contains(repeated, options.without_name(option.action))
+  })
   |> list.take(jev.max_choice_options)
 }
+
+const remembered_states = 12
+
+const in_a_row = 5
 
 pub fn program_text(agent: Agent) {
   text.projection(agent.buffer.projection, selection)
@@ -166,7 +214,72 @@ fn selection_json(buffer: Buffer) {
     Ok(t.Var(_)) | Error(Nil) -> []
     Ok(type_) -> [#("type", json.string(environment.show_type(type_)))]
   }
-  json.object([#("kind", json.string(options.focus_kind(buffer))), ..type_])
+  let role = case role(buffer) {
+    Ok(role) -> [#("role", json.string(role))]
+    Error(Nil) -> []
+  }
+  json.object([
+    #("kind", json.string(options.focus_kind(buffer))),
+    ..list.append(role, type_)
+  ])
+}
+
+// Where the selection sits in its parent, so the position of a hole is clear.
+fn role(buffer: Buffer) -> Result(String, Nil) {
+  let short = fn(exp) {
+    let code = text.print(exp) |> string.replace("\n", " ")
+    case string.length(code) > 40 {
+      True -> string.slice(code, 0, 37) <> "..."
+      False -> code
+    }
+  }
+  case buffer.projection {
+    #(p.Exp(_), [p.CallArg(func, pre, post), ..rest]) -> {
+      let position = list.length(pre) + 1
+      let count = position + list.length(post)
+      let path = p.path_to_zoom(rest, [])
+      let func_type = case
+        infer.type_at(buffer.analysis, list.reverse(list.append(path, [0])))
+      {
+        Ok(type_) -> ", which has type " <> environment.show_type(type_)
+        Error(Nil) -> ""
+      }
+      Ok(
+        "argument "
+        <> int.to_string(position)
+        <> " of "
+        <> int.to_string(count)
+        <> " to "
+        <> short(func)
+        <> func_type,
+      )
+    }
+    #(p.Exp(_), [p.Body(params), ..]) ->
+      Ok(
+        "the body of the function taking ("
+        <> string.join(list.map(params, pattern_text), ", ")
+        <> ")",
+      )
+    #(p.Exp(_), [p.BlockValue(pattern, ..), ..]) ->
+      Ok("the value assigned to " <> pattern_text(pattern))
+    #(p.Exp(_), [p.BlockTail(_), ..]) ->
+      Ok("the value returned after the assignments")
+    #(p.Exp(_), [p.RecordValue(label, ..), ..]) ->
+      Ok("the value of the field `" <> label <> "`")
+    #(p.Exp(_), [p.ListItem(pre, ..), ..]) ->
+      Ok("item " <> int.to_string(list.length(pre) + 1) <> " of a list")
+    #(p.Exp(_), [p.CaseMatch(label:, ..), ..]) ->
+      Ok("the branch for `" <> label <> "`")
+    _ -> Error(Nil)
+  }
+}
+
+fn pattern_text(pattern) {
+  case pattern {
+    e.Bind(name) -> name
+    e.Destructure(fields) ->
+      "{" <> string.join(list.map(fields, fn(field) { field.1 }), ", ") <> "}"
+  }
 }
 
 pub fn question(offered: List(options.Option)) -> jev.Question {
@@ -264,7 +377,10 @@ pub fn answer(
         Ok(agent) -> Ok(agent)
         Error(_) -> {
           let step = Step(..step, failed: True)
-          Ok(Agent(..agent, history: [step, ..agent.history]))
+          let visited =
+            [#(program_text(agent), step.action), ..agent.visited]
+            |> list.take(remembered_states)
+          Ok(Agent(..agent, history: [step, ..agent.history], visited:))
         }
       }
     }
@@ -274,11 +390,25 @@ pub fn answer(
 
 /// Apply an action as the next step.
 pub fn take(agent: Agent, step: Step) -> Result(Agent, String) {
+  let visited =
+    [#(program_text(agent), step.action), ..agent.visited]
+    |> list.take(remembered_states)
+  let agent = Agent(..agent, visited:)
   let Agent(buffer:, environment:, config:, history:, ..) = agent
   use buffer <- result.try(
     a.perform(step.action, buffer, environment, config.advance)
     |> result.replace_error("cannot " <> a.key(step.action) <> " here"),
   )
+  // Code does the navigation when Jev is only asked to fill holes.
+  // A function or record stays selected so it can be called or selected from.
+  let buffer = case config.focus_holes, buffer.projection {
+    True, #(p.Exp(e.Vacant), _) | False, _ -> buffer
+    True, _ ->
+      case buffer.target_type(buffer) {
+        Ok(t.Fun(..)) | Ok(t.Record(_)) | Ok(t.Var(_)) | Error(Nil) -> buffer
+        _ -> buffer.next_vacant(buffer) |> result.unwrap(buffer)
+      }
+  }
   let agent = Agent(..agent, buffer:, history: [step, ..history])
   case step.action {
     a.RunTests -> Ok(Agent(..agent, test_results: Some(test_results(agent))))
@@ -323,4 +453,62 @@ pub fn is_complete(agent: Agent) -> Bool {
 
 pub fn poly_to_string(poly: binding.Poly) {
   environment.render_poly(poly)
+}
+
+pub fn step_to_json(step: Step) -> Json {
+  let Step(
+    action:,
+    confidence:,
+    ranked:,
+    offered:,
+    input_tokens:,
+    thinking_ms:,
+    failed:,
+    label:,
+  ) = step
+  json.object([
+    #("action", a.to_json(action)),
+    #("label", json.string(label)),
+    #("confidence", json.float(confidence)),
+    #(
+      "ranked",
+      json.array(ranked, fn(entry) {
+        json.preprocessed_array([json.string(entry.0), json.float(entry.1)])
+      }),
+    ),
+    #("offered", json.int(offered)),
+    #("input_tokens", json.int(input_tokens)),
+    #("thinking_ms", json.int(thinking_ms)),
+    #("failed", json.bool(failed)),
+  ])
+}
+
+pub fn step_decoder() -> decode.Decoder(Step) {
+  let number =
+    decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])
+  use action <- decode.field("action", a.decoder())
+  use label <- decode.field("label", decode.string)
+  use confidence <- decode.field("confidence", number)
+  use ranked <- decode.field(
+    "ranked",
+    decode.list({
+      use name <- decode.field(0, decode.string)
+      use probability <- decode.field(1, number)
+      decode.success(#(name, probability))
+    }),
+  )
+  use offered <- decode.field("offered", decode.int)
+  use input_tokens <- decode.field("input_tokens", decode.int)
+  use thinking_ms <- decode.field("thinking_ms", decode.int)
+  use failed <- decode.field("failed", decode.bool)
+  decode.success(Step(
+    action:,
+    confidence:,
+    ranked:,
+    offered:,
+    input_tokens:,
+    thinking_ms:,
+    failed:,
+    label:,
+  ))
 }

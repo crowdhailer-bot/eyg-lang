@@ -259,7 +259,8 @@ pub fn perform(
     _ -> {
       use after <- result.map(apply(action, buffer, environment))
       let filled = case buffer.projection {
-        #(p.Exp(e.Vacant), _) -> advance && completes(action, after)
+        #(p.Exp(e.Vacant), _) ->
+          advance && completes(action, buffer.target_type(buffer), after)
         _ -> False
       }
       case filled {
@@ -270,14 +271,22 @@ pub fn perform(
   }
 }
 
-fn completes(action, after: Buffer) {
+// `expected` is the type the hole had before it was filled.
+fn completes(action, expected, after: Buffer) {
   case action {
     String(_) | Integer(_) | EmptyList | EmptyRecord -> True
     Variable(_) | Builtin(_) | Tag(_) | Reference(_) ->
-      // A value of unknown type might be a function or record, keep it selected.
-      case buffer.target_type(after) {
-        Ok(t.Fun(..)) | Ok(t.Record(_)) | Ok(t.Var(_)) | Error(Nil) -> False
-        _ -> True
+      case expected, buffer.target_type(after) {
+        // A function where a function is expected is not about to be called,
+        // and a record where a record is expected is not about to be selected from.
+        Ok(t.Fun(..)), Ok(t.Fun(..)) | Ok(t.Record(_)), Ok(t.Record(_)) -> True
+        // A value of unknown type might be a function or record, keep it selected.
+        _, Ok(t.Fun(..))
+        | _, Ok(t.Record(_))
+        | _, Ok(t.Var(_))
+        | _, Error(Nil)
+        -> False
+        _, _ -> True
       }
     _ -> False
   }
