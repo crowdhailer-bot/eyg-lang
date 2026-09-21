@@ -506,7 +506,7 @@ fn do_fits(expected, candidate, depth) {
 }
 
 fn expression_values(
-  buffer,
+  buffer: Buffer,
   environment: Environment,
   vocabulary: Vocabulary,
   config: Config,
@@ -516,6 +516,11 @@ fn expression_values(
     |> result.unwrap([])
     |> list.filter(fn(entry) { entry.0 != "_" && entry.0 != "$" })
     |> list.unique
+  // Choosing the selected variable again keeps it, see `action.perform`.
+  let selected = case buffer.projection {
+    #(p.Exp(e.Variable(name)), _) -> name
+    _ -> "_"
+  }
   let fields = buffer.fields(buffer)
   let variants = buffer.varients(buffer)
   // Known fields are offered directly, otherwise the label is asked for separately.
@@ -532,10 +537,11 @@ fn expression_values(
   list.flatten([
     list.map(scope, fn(entry) {
       let #(name, poly) = entry
-      option(
-        a.Variable(name),
-        "A variable of type " <> environment.render_poly(poly),
-      )
+      let description = case name == selected {
+        True -> "Keep this variable and move on to the next hole."
+        False -> "A variable of type " <> environment.render_poly(poly)
+      }
+      option(a.Variable(name), description)
     }),
     // A few literals are offered directly, many are chosen by their own question.
     case

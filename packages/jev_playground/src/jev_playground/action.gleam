@@ -258,10 +258,13 @@ pub fn perform(
       })
     _ -> {
       use after <- result.map(apply(action, buffer, environment))
-      let filled = case buffer.projection {
-        #(p.Exp(e.Vacant), _) ->
+      let filled = case buffer.projection, action {
+        #(p.Exp(e.Vacant), _), _ ->
           advance && completes(action, buffer.target_type(buffer), after)
-        _ -> False
+        // Choosing the selected variable again keeps it and moves on.
+        #(p.Exp(e.Variable(selected)), _), Variable(name) if selected == name ->
+          advance
+        _, _ -> False
       }
       case filled {
         True -> buffer.next_vacant(after) |> result.unwrap(after)

@@ -49,6 +49,18 @@ pub fn variables_in_scope_are_offered_test() {
   assert list.contains(keys(agent), "variable n")
 }
 
+pub fn choosing_the_selected_variable_again_moves_on_test() {
+  let agent =
+    take_all(new("`{a, b}` of `n`"), [
+      a.Function("n"),
+      a.Record(["a", "b"]),
+      a.Variable("n"),
+    ])
+  assert agent.program_text(agent) == "(n) -> { {a: «n», b: ?} }"
+  let agent = take_all(agent, [a.Variable("n")])
+  assert agent.program_text(agent) == "(n) -> { {a: n, b: «?»} }"
+}
+
 pub fn a_program_is_built_one_edit_at_a_time_test() {
   let agent =
     take_all(new("inc `n`"), [
