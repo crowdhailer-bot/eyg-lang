@@ -1,7 +1,7 @@
 //// Run evals with each variant against the real API and write a table of the results.
 //// Jev mostly picks the same edits for the same request, but close calls can flip,
 //// `repeat=3` runs each eval and variant three times.
-//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|ablations|holes|experiments [repeat=3] [eval ...]`
+//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|ablations|holes|highlight|experiments [repeat=3] [eval ...]`
 
 import argv
 import gleam/float
@@ -37,6 +37,9 @@ const hole_variants = [
   ["holes", "cursors=3"],
   ["holes", "holejumps"],
 ]
+
+/// The best highlight of the experiments against the default, to confirm it.
+const highlight_variants = [["holes"], ["holes", "mark=excerpt"]]
 
 /// Each earlier improvement turned off in turn.
 const ablation_variants = [
@@ -84,6 +87,7 @@ pub fn main() {
     "compounds" -> compound_variants
     "checked" -> checked_variants
     "ablations" -> ablation_variants
+    "highlight" -> highlight_variants
     "holes" -> hole_variants
     _ -> experiment_variants
   }
