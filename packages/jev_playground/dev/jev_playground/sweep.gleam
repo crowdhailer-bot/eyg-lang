@@ -1,6 +1,7 @@
 //// Run evals with each variant against the real API and write a table of the results.
-//// Jev picks the same edits for the same request, so each pair runs once.
-//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|experiments [eval ...]`
+//// Jev mostly picks the same edits for the same request, but close calls can flip,
+//// `repeat=3` runs each eval and variant three times.
+//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|experiments [repeat=3] [eval ...]`
 
 import argv
 import gleam/float
@@ -9,6 +10,7 @@ import gleam/io
 import gleam/javascript/array
 import gleam/javascript/promise.{type Promise}
 import gleam/list
+import gleam/result
 import gleam/string
 import jev_playground/client
 import jev_playground/eval
@@ -55,7 +57,13 @@ const experiment_variants = [
 ]
 
 pub fn main() {
-  let assert [set, ..slugs] = argv.load().arguments
+  let assert [set, ..rest] = argv.load().arguments
+  // `repeat=3` runs each eval and variant three times, as close calls can flip.
+  let #(repeats, slugs) = list.partition(rest, string.starts_with(_, "repeat="))
+  let repeats = case repeats {
+    ["repeat=" <> n, ..] -> int.parse(n) |> result.unwrap(1)
+    _ -> 1
+  }
   let variants = case set {
     "compounds" -> compound_variants
     "checked" -> checked_variants
@@ -69,7 +77,9 @@ pub fn main() {
     list.key_find(array.to_list(process.env()), "TYPESAFE_API_KEY")
   let runs =
     list.flat_map(evals, fn(the_eval) {
-      list.map(variants, fn(flags) { #(the_eval, eval.variant(flags)) })
+      list.flat_map(variants, fn(flags) {
+        list.repeat(#(the_eval, eval.variant(flags)), repeats)
+      })
     })
   use summaries <- promise.map(sequence(runs, [], client.Direct(key)))
   let report = table(summaries)
@@ -107,14 +117,15 @@ pub fn table(summaries: List(Summary)) -> String {
       row([
         name,
         ..list.map(variant_names, fn(variant) {
-          case
-            list.find(summaries, fn(s) {
+          let runs =
+            list.filter(summaries, fn(s) {
               s.eval == name && s.variant == variant
             })
-          {
-            Ok(s) if s.solved -> requests(s) <> " " <> dollars(s.cost)
-            Ok(s) -> "✗ " <> requests(s)
-            Error(Nil) -> ""
+          case runs {
+            [] -> ""
+            [s] if s.solved -> requests(s) <> " " <> dollars(s.cost)
+            [s] -> "✗ " <> requests(s)
+            _ -> repeated(runs)
           }
         })
       ])
@@ -173,5 +184,21 @@ fn requests(summary: Summary) {
       <> " steps in "
       <> int.to_string(summary.requests)
       <> " requests"
+  }
+}
+
+// How many of the repeated runs solved the eval and the median steps they took.
+fn repeated(runs: List(Summary)) {
+  let solved =
+    list.filter(runs, fn(s) { s.solved })
+    |> list.map(fn(s) { s.steps })
+    |> list.sort(int.compare)
+  let count =
+    int.to_string(list.length(solved))
+    <> "/"
+    <> int.to_string(list.length(runs))
+  case list.drop(solved, list.length(solved) / 2) {
+    [median, ..] -> count <> ", " <> int.to_string(median) <> " steps"
+    [] -> count
   }
 }
