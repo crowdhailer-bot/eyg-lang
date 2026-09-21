@@ -15,3 +15,5 @@ plinth = ">= 0.5.8 and < 1.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
+eyg_parser = ">= 0.5.0 and < 1.0.0"
+simplifile = ">= 2.4.0 and < 3.0.0"
