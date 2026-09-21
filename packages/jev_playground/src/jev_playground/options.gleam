@@ -58,6 +58,8 @@ pub type Config {
     /// Apply each compound instance before offering it and drop those that fail
     /// or add a type error. Slow, as every instance is analysed.
     check_compounds: Bool,
+    /// Offer to move to any hole by its number.
+    hole_jumps: Bool,
   )
 }
 
@@ -103,6 +105,7 @@ pub fn default_config() {
     jumps: True,
     highlight: Guillemets,
     check_compounds: False,
+    hole_jumps: False,
   )
 }
 

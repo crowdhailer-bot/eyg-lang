@@ -163,11 +163,39 @@ pub fn options(agent: Agent) -> List(options.Option) {
       }
     _, _ -> repeated
   }
+  let jumps = case agent.config.hole_jumps {
+    True -> hole_jumps(agent.buffer)
+    False -> []
+  }
   options.available(agent.buffer, agent.environment, vocabulary, agent.config)
+  |> list.append(jumps, _)
   |> list.filter(fn(option) {
     !list.contains(repeated, options.without_name(option.action))
   })
   |> list.take(jev.max_choice_options)
+}
+
+// Moving to any other hole, described by where it is, so Jev can fill the holes
+// in the order the task describes them.
+fn hole_jumps(buffer: Buffer) -> List(options.Option) {
+  let here = p.path(buffer.projection)
+  a.holes(buffer)
+  |> list.index_map(fn(hole, i) { #(i + 1, hole) })
+  |> list.filter(fn(hole) { p.path(hole.1) != here })
+  |> list.take(8)
+  |> list.map(fn(hole) {
+    let #(number, projection) = hole
+    let place = case role(buffer.update_position(buffer, projection)) {
+      Ok(role) -> ", " <> role
+      Error(Nil) -> ""
+    }
+    let action = a.JumpToHole(number)
+    options.Option(
+      action:,
+      name: a.key(action),
+      description: "Select hole " <> int.to_string(number) <> place <> ".",
+    )
+  })
 }
 
 const remembered_states = 12

@@ -302,3 +302,23 @@ pub fn checked_compounds_do_not_call_a_record_test() {
   assert list.contains(keys(False), "variable item, call selection(..)")
   assert !list.contains(keys(True), "variable item, call selection(..)")
 }
+
+pub fn any_hole_can_be_moved_to_by_number_test() {
+  let config =
+    options.Config(
+      ..options.default_config(),
+      focus_holes: True,
+      hole_jumps: True,
+    )
+  let agent =
+    agent.new("inc `n`", e.Vacant, environment.pure(), config)
+    |> take_all([a.Function("n"), a.Builtin("int_add"), a.Call])
+  let assert Ok(option) =
+    list.find(agent.options(agent), fn(option) {
+      options.key(option) == "move to hole 2"
+    })
+  assert option.description
+    == "Select hole 2, argument 2 of 2 to !int_add, which has type (Integer, Integer) -> Integer."
+  let agent = take_all(agent, [option.action])
+  assert agent.program_text(agent) == "(n) -> { !int_add(?, «?») }"
+}

@@ -24,6 +24,7 @@ pub fn every_action_round_trips_through_json_test() {
     a.Parent,
     a.NextVacant,
     a.JumpToError(2),
+    a.JumpToHole(3),
     a.Variable("x"),
     a.String(""),
     a.Integer(-3),

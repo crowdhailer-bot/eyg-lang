@@ -29,6 +29,8 @@ pub type Action {
   Parent
   NextVacant
   JumpToError(index: Int)
+  /// Select a hole by its number in reading order, starting from 1.
+  JumpToHole(number: Int)
   // Values
   Variable(name: String)
   String(value: String)
@@ -85,6 +87,7 @@ pub fn key(action: Action) -> String {
     Parent -> "select parent"
     NextVacant -> "move to next ?"
     JumpToError(index) -> "jump to type error " <> int.to_string(index + 1)
+    JumpToHole(number) -> "move to hole " <> int.to_string(number)
     Variable(name) -> "variable " <> slot(name)
     String(value) -> "string " <> quote(value)
     Integer(value) -> "integer " <> int.to_string(value)
@@ -188,6 +191,10 @@ pub fn apply(
     JumpToError(index) -> {
       use #(rev, _reason) <- result.try(error_at(buffer, index))
       moved(buffer, buffer.focus_at_reversed(buffer, rev))
+    }
+    JumpToHole(number) -> {
+      use hole <- result.try(list.drop(holes(buffer), number - 1) |> list.first)
+      moved(buffer, Ok(buffer.update_position(buffer, hole)))
     }
     Variable(name) -> with(buffer.insert_variable(buffer), name)
     String(value) -> {
@@ -379,7 +386,14 @@ fn error_at(buffer, index) {
 /// Actions that only move the focus, which need no reanalysis.
 pub fn is_navigation(action) {
   case action {
-    Next | Previous | Up | Down | Parent | NextVacant | JumpToError(_) -> True
+    Next
+    | Previous
+    | Up
+    | Down
+    | Parent
+    | NextVacant
+    | JumpToError(_)
+    | JumpToHole(_) -> True
     _ -> False
   }
 }
@@ -400,6 +414,7 @@ pub fn to_json(action: Action) -> json.Json {
     Parent -> with("parent", [])
     NextVacant -> with("next_vacant", [])
     JumpToError(index) -> with("jump_to_error", [#("index", json.int(index))])
+    JumpToHole(number) -> with("jump_to_hole", [#("number", json.int(number))])
     Variable(name) -> text("variable", name)
     String(value) -> text("string", value)
     Integer(value) -> with("integer", [#("value", json.int(value))])
@@ -492,6 +507,8 @@ pub fn decoder() -> decode.Decoder(Action) {
     "next_vacant" -> decode.success(NextVacant)
     "jump_to_error" ->
       decode.field("index", decode.int, fn(i) { decode.success(JumpToError(i)) })
+    "jump_to_hole" ->
+      decode.field("number", decode.int, fn(i) { decode.success(JumpToHole(i)) })
     "variable" -> decode.map(text, Variable)
     "string" -> decode.map(text, String)
     "integer" ->

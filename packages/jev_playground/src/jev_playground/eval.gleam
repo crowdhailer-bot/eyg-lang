@@ -51,6 +51,7 @@ pub type Variant {
     jumps: Bool,
     highlight: options.Highlight,
     check_compounds: Bool,
+    hole_jumps: Bool,
   )
 }
 
@@ -67,6 +68,7 @@ pub const improved = Variant(
   jumps: True,
   highlight: options.Guillemets,
   check_compounds: False,
+  hole_jumps: False,
 )
 
 /// Build a variant from flags, `compounds` adds all the mined compounds and
@@ -74,7 +76,8 @@ pub const improved = Variant(
 /// `flat`, `untyped` and `repeats` turn improvements off, `holes` keeps the selection on holes, `types` lists the type of every hole
 /// `cursors=3` asks what fills three holes at once, `nojumps` stops offering jumps to type errors
 /// `mark=comments`, `mark=unmarked` or `mark=excerpt` changes how the selection is shown
-/// and `checked` only offers compound instances that apply without a new type error.
+/// `checked` only offers compound instances that apply without a new type error
+/// and `holejumps` offers to move to any hole by its number.
 pub fn variant(flags: List(String)) -> Variant {
   let number = fn(prefix, default) {
     list.find_map(flags, fn(flag) {
@@ -105,6 +108,7 @@ pub fn variant(flags: List(String)) -> Variant {
     })
       |> result.unwrap(options.Guillemets),
     check_compounds: list.contains(flags, "checked"),
+    hole_jumps: list.contains(flags, "holejumps"),
   )
 }
 
@@ -121,6 +125,7 @@ pub fn variant_name(variant: Variant) {
     jumps:,
     highlight:,
     check_compounds:,
+    hole_jumps:,
   ) = variant
   let all = list.length(compound.mined())
   let flags =
@@ -146,6 +151,7 @@ pub fn variant_name(variant: Variant) {
         "mark" <> options.highlight_name(highlight),
       ),
       #(check_compounds, "checked"),
+      #(hole_jumps, "holejumps"),
     ]
     |> list.filter_map(fn(flag) {
       case flag.0 {
@@ -174,6 +180,7 @@ pub fn config(eval: Eval, variant: Variant) -> options.Config {
     jumps: variant.jumps,
     highlight: variant.highlight,
     check_compounds: variant.check_compounds,
+    hole_jumps: variant.hole_jumps,
   )
 }
 
@@ -609,6 +616,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
     False,
     decode.bool,
   )
+  use hole_jumps <- decode.optional_field("hole_jumps", False, decode.bool)
   use highlight <- decode.optional_field(
     "highlight",
     options.Guillemets,
@@ -634,6 +642,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
       jumps:,
       highlight:,
       check_compounds:,
+      hole_jumps:,
     )
   case find(slug) {
     Ok(eval) -> decode.success(Run(eval:, variant:, steps:, outcome:))
