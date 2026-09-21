@@ -63,7 +63,19 @@ pub const selection = text.Mark("«", "»")
 
 pub const question_id = "next_edit"
 
-const instructions = "Choose the single next edit that makes the most progress towards completing the task. The selected code is marked with « and » in `program`. Most edits replace or wrap the selection, `?` marks code still to be written."
+fn instructions(highlight) {
+  let marked = case highlight {
+    options.Guillemets | options.Excerpt ->
+      "The selected code is marked with « and » in `program`."
+    options.Comments ->
+      "The selected code is between `/* selection */` and `/* end */` in `program`."
+    options.Unmarked ->
+      "Where the selected code is in `program` is described by `selection`."
+  }
+  "Choose the single next edit that makes the most progress towards completing the task. "
+  <> marked
+  <> " Most edits replace or wrap the selection, `?` marks code still to be written."
+}
 
 const recent_actions = 6
 
@@ -145,12 +157,31 @@ const remembered_states = 12
 const in_a_row = 5
 
 pub fn program_text(agent: Agent) {
-  let marks =
-    list.map(extra_holes(agent), fn(hole) {
-      #(p.path(hole.1), text.Mark("⟨" <> int.to_string(hole.0) <> ":", "⟩"))
-    })
   let projection = agent.buffer.projection
-  text.marked(p.rebuild(projection), [#(p.path(projection), selection), ..marks])
+  text.marked(p.rebuild(projection), [
+    #(p.path(projection), selection),
+    ..hole_marks(agent)
+  ])
+}
+
+// The program as Jev sees it, with the selection shown as configured.
+fn shown_program(agent: Agent) {
+  let projection = agent.buffer.projection
+  let path = p.path(projection)
+  let marks = case agent.config.highlight {
+    options.Guillemets | options.Excerpt -> [#(path, selection)]
+    options.Comments -> [
+      #(path, text.Mark("/* selection */ ", " /* end */")),
+    ]
+    options.Unmarked -> []
+  }
+  text.marked(p.rebuild(projection), list.append(marks, hole_marks(agent)))
+}
+
+fn hole_marks(agent) {
+  list.map(extra_holes(agent), fn(hole) {
+    #(p.path(hole.1), text.Mark("⟨" <> int.to_string(hole.0) <> ":", "⟩"))
+  })
 }
 
 /// Holes after the selection that Jev is asked to fill in the same request,
@@ -251,8 +282,8 @@ pub fn state(agent: Agent) -> Json {
     list.flatten([
       [
         #("task", json.string(task)),
-        #("program", json.string(program_text(agent))),
-        #("selection", selection_json(buffer)),
+        #("program", json.string(shown_program(agent))),
+        #("selection", selection_json(buffer, config.highlight)),
         #("type_errors", json.array(errors, json.string)),
       ],
       case config.hole_types {
@@ -302,7 +333,13 @@ fn hole_types(buffer: Buffer) -> List(String) {
   })
 }
 
-fn selection_json(buffer: Buffer) {
+fn selection_json(buffer: Buffer, highlight) {
+  let code = case highlight, buffer.projection {
+    options.Excerpt, #(p.Exp(exp), _) | options.Unmarked, #(p.Exp(exp), _) -> [
+      #("code", json.string(text.print(exp))),
+    ]
+    _, _ -> []
+  }
   let type_ = case buffer.target_type(buffer) {
     Ok(t.Var(_)) | Error(Nil) -> []
     Ok(type_) -> [#("type", json.string(environment.show_type(type_)))]
@@ -313,7 +350,7 @@ fn selection_json(buffer: Buffer) {
   }
   json.object([
     #("kind", json.string(options.focus_kind(buffer))),
-    ..list.append(role, type_)
+    ..list.flatten([code, role, type_])
   ])
 }
 
@@ -375,12 +412,12 @@ fn pattern_text(pattern) {
   }
 }
 
-pub fn question(offered: List(options.Option)) -> jev.Question {
+pub fn question(offered: List(options.Option), highlight) -> jev.Question {
   let criteria =
     list.map(offered, fn(option) {
       #(options.key(option), Some(json.string(option.description)))
     })
-  jev.Choice(json.string(instructions), criteria)
+  jev.Choice(json.string(instructions(highlight)), criteria)
 }
 
 /// The candidates offered in the question for a slot.
@@ -417,7 +454,7 @@ pub fn request(
     })
   let request =
     jev.Request(model:, state: state(agent), questions: [
-      #(question_id, question(offered)),
+      #(question_id, question(offered, agent.config.highlight)),
       ..list.append(
         slot_questions,
         list.map(cursor_options(agent), fn(cursor) {

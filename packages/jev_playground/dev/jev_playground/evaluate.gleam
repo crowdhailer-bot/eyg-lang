@@ -18,6 +18,7 @@ import jev_playground/client
 import jev_playground/environment
 import jev_playground/eval
 import jev_playground/library
+import jev_playground/options
 import jev_playground/packages
 import plinth/javascript/date
 import plinth/node/process
@@ -96,6 +97,7 @@ pub fn run(
       #("hole_types", json.bool(variant.hole_types)),
       #("cursors", json.int(variant.cursors)),
       #("jumps", json.bool(variant.jumps)),
+      #("highlight", json.string(options.highlight_name(variant.highlight))),
       #("outcome", json.string(outcome_text)),
       #("steps", json.array(steps, agent.step_to_json)),
       #("input_tokens", json.int(tokens)),

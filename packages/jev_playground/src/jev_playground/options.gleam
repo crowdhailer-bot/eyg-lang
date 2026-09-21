@@ -53,7 +53,35 @@ pub type Config {
     cursors: Int,
     /// Offer to jump to each type error.
     jumps: Bool,
+    /// How the selection is shown in the program.
+    highlight: Highlight,
   )
+}
+
+pub type Highlight {
+  /// The selection is wrapped in « and ».
+  Guillemets
+  /// The selection is wrapped in comments.
+  Comments
+  /// Only the description of the selection says where it is.
+  Unmarked
+  /// Wrapped in « and », and the selected code is repeated in the description.
+  Excerpt
+}
+
+pub fn highlight_name(highlight) {
+  case highlight {
+    Guillemets -> "guillemets"
+    Comments -> "comments"
+    Unmarked -> "unmarked"
+    Excerpt -> "excerpt"
+  }
+}
+
+pub fn highlight_from_name(name) {
+  list.find([Guillemets, Comments, Unmarked, Excerpt], fn(highlight) {
+    highlight_name(highlight) == name
+  })
 }
 
 pub fn default_config() {
@@ -70,6 +98,7 @@ pub fn default_config() {
     hole_types: False,
     cursors: 1,
     jumps: True,
+    highlight: Guillemets,
   )
 }
 

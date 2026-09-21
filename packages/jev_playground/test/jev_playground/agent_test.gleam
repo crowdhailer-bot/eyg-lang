@@ -224,3 +224,20 @@ pub fn several_holes_are_filled_in_one_request_test() {
   assert extra.label == "at hole 2: integer 1"
   assert extra.input_tokens == 0
 }
+
+pub fn the_selection_can_be_shown_in_comments_or_only_described_test() {
+  let state = fn(highlight) {
+    let config = options.Config(..options.default_config(), highlight:)
+    agent.new("inc `n`", e.Vacant, environment.pure(), config)
+    |> take_all([a.Function("n"), a.Integer(1)])
+    |> agent.state
+    |> json.to_string
+  }
+  assert string.contains(
+    state(options.Comments),
+    "\"program\":\"(n) -> { /* selection */ 1 /* end */ }\"",
+  )
+  let unmarked = state(options.Unmarked)
+  assert string.contains(unmarked, "\"program\":\"(n) -> { 1 }\"")
+  assert string.contains(unmarked, "\"code\":\"1\"")
+}

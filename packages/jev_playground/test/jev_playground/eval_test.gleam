@@ -49,4 +49,8 @@ pub fn variants_are_named_by_their_flags_test() {
       evals.variant(["compounds=5", "instances=2", "holes"]),
     )
     == "compounds5-instances2-holes"
+  assert evals.variant_name(
+      evals.variant(["holes", "types", "cursors=3", "nojumps", "mark=comments"]),
+    )
+    == "holes-types-cursors3-nojumps-markcomments"
 }

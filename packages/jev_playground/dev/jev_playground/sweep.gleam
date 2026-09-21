@@ -35,9 +35,15 @@ const experiment_variants = [
   ["holes", "cursors=3"],
   ["holes", "types", "cursors=3"],
   ["holes", "nojumps"],
+  ["holes", "mark=comments"],
+  ["holes", "mark=unmarked"],
+  ["holes", "mark=excerpt"],
   [],
   ["types"],
   ["nojumps"],
+  ["mark=comments"],
+  ["mark=unmarked"],
+  ["mark=excerpt"],
 ]
 
 pub fn main() {
