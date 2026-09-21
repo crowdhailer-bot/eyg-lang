@@ -4,7 +4,6 @@
 
 import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/analysis/type_/binding
-import eyg/analysis/type_/binding/debug
 import eyg/analysis/type_/isomorphic as t
 import gleam/dict
 import gleam/int
@@ -165,7 +164,7 @@ pub fn state(agent: Agent) -> Json {
 fn selection_json(buffer: Buffer) {
   let type_ = case buffer.target_type(buffer) {
     Ok(t.Var(_)) | Error(Nil) -> []
-    Ok(type_) -> [#("type", json.string(debug.mono(type_)))]
+    Ok(type_) -> [#("type", json.string(environment.show_type(type_)))]
   }
   json.object([#("kind", json.string(options.focus_kind(buffer))), ..type_])
 }

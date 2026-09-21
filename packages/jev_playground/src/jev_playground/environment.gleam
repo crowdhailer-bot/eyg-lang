@@ -7,7 +7,9 @@ import eyg/analysis/type_/isomorphic as t
 import eyg/interpreter/state
 import eyg/ir/tree as ir
 import gleam/dict.{type Dict}
+import gleam/int
 import gleam/list
+import gleam/regexp
 import gleam/string
 import multiformats/cid/v1
 import touch_grass/harness/browser as harness
@@ -83,16 +85,16 @@ pub fn effect_signatures(environment: Environment) -> List(#(String, String)) {
       "perform "
         <> label
         <> "("
-        <> debug.mono(lift)
+        <> show_type(lift)
         <> ") returns "
-        <> debug.mono(lower),
+        <> show_type(lower),
     )
   })
 }
 
 pub fn render_poly(poly) {
   let #(type_, _) = binding.instantiate(poly, 0, dict.new())
-  debug.mono(type_)
+  show_type(type_)
 }
 
 /// The fields of a library with their types, nested records are flattened to
@@ -113,7 +115,7 @@ fn flatten(type_, prefix, depth) {
     _ ->
       case prefix {
         "" -> []
-        _ -> [#(string.drop_end(prefix, 1), debug.mono(type_))]
+        _ -> [#(string.drop_end(prefix, 1), show_type(type_))]
       }
   }
 }
@@ -122,5 +124,31 @@ fn rows_of(rows, acc) {
   case rows {
     t.RowExtend(label, value, rest) -> rows_of(rest, [#(label, value), ..acc])
     _ -> list.reverse(acc)
+  }
+}
+
+/// A type as shown to Jev: effect rows are left out and type variables are
+/// letters, `(List(116) <..117>) -> 116` becomes `(List(a)) -> a`.
+pub fn show_type(type_) -> String {
+  let text = debug.mono(type_)
+  let assert Ok(effects) = regexp.from_string(" <[^<>]*>")
+  let text = regexp.replace(effects, text, "")
+  let assert Ok(numbers) = regexp.from_string("\\b[0-9]+\\b")
+  let found =
+    regexp.scan(numbers, text)
+    |> list.map(fn(match) { match.content })
+    |> list.unique
+  list.index_fold(found, text, fn(text, number, i) {
+    let assert Ok(exact) = regexp.from_string("\\b" <> number <> "\\b")
+    regexp.replace(exact, text, letter(i))
+  })
+}
+
+fn letter(i) {
+  let letters = string.to_graphemes("abcdefghijklmnopqrstuvwxyz")
+  case list.drop(letters, i % 26) |> list.first, i / 26 {
+    Ok(l), 0 -> l
+    Ok(l), n -> l <> int.to_string(n)
+    Error(Nil), _ -> "t"
   }
 }

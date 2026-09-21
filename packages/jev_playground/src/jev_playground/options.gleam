@@ -4,7 +4,6 @@
 
 import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/analysis/type_/binding
-import eyg/analysis/type_/binding/debug
 import eyg/analysis/type_/binding/error
 import eyg/analysis/type_/isomorphic as t
 import eyg/ir/tree as ir
@@ -132,7 +131,10 @@ pub fn describe_error(reason) {
     error.MissingBuiltin(id) -> "there is no builtin `!" <> id <> "`"
     error.MissingReference(_) -> "the reference cannot be found"
     error.TypeMismatch(expected, given) ->
-      "expected " <> debug.mono(expected) <> " but found " <> debug.mono(given)
+      "expected "
+      <> environment.show_type(expected)
+      <> " but found "
+      <> environment.show_type(given)
     error.MissingRow(label) -> "the field or tag `" <> label <> "` is missing"
     error.Recursive -> "the type is recursive"
     error.SameTail(_, _) -> "the rows have the same tail"
@@ -512,7 +514,7 @@ fn expression_values(
     },
     list.map(labels, fn(label) {
       let type_ = case list.key_find(fields, label) {
-        Ok(type_) -> " of type " <> debug.mono(type_)
+        Ok(type_) -> " of type " <> environment.show_type(type_)
         Error(Nil) -> ""
       }
       option(
