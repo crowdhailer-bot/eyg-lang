@@ -29,6 +29,8 @@ pub const directory = "recordings/evals"
 pub type Outcome {
   Solved
   OutOfSteps
+  /// Three choices in a row below 0.2 confidence, no run that did this was solved.
+  Unsure
   Failed(reason: String)
 }
 
@@ -82,6 +84,7 @@ pub fn run(
   let outcome_text = case outcome {
     Solved -> "solved"
     OutOfSteps -> "out of steps"
+    Unsure -> "stopped unsure"
     Failed(reason) -> "failed: " <> reason
   }
   let record =
@@ -148,6 +151,15 @@ pub fn summary_line(summary: Summary) {
   )
 }
 
+// The last three requests were answered with less than 0.2 confidence.
+fn unsure(steps: List(agent.Step)) {
+  case list.filter(steps, fn(step) { step.input_tokens > 0 }) {
+    [a, b, c, ..] ->
+      a.confidence <. 0.2 && b.confidence <. 0.2 && c.confidence <. 0.2
+    _ -> False
+  }
+}
+
 // Steps filling extra holes are taken without a request of their own.
 fn requests(steps: List(agent.Step)) {
   list.count(steps, fn(step) { step.input_tokens > 0 })
@@ -186,9 +198,10 @@ fn loop(agent: agent.Agent, the_eval: eval.Eval, transport) {
                   <> "ms",
                 )
               })
-              case solved {
-                True -> promise.resolve(#(agent, Solved))
-                False -> loop(agent, the_eval, transport)
+              case solved, unsure(agent.history) {
+                True, _ -> promise.resolve(#(agent, Solved))
+                False, True -> promise.resolve(#(agent, Unsure))
+                False, False -> loop(agent, the_eval, transport)
               }
             }
           }
