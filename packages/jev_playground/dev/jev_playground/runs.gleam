@@ -109,6 +109,20 @@ pub fn main() {
     list.count(unsure, fn(pair) { pair == #(solved, streak) })
     |> int.to_string
   }
+  let total =
+    int.sum(
+      list.flat_map(runs, fn(run) {
+        list.map(run.steps, fn(s) { s.input_tokens })
+      }),
+    )
+  let saved = int.sum(list.map(runs, fn(run) { after_unsure(run.steps, 0) }))
+  io.println(
+    "stopping after three would have saved "
+    <> int.to_string(saved)
+    <> " of "
+    <> int.to_string(total)
+    <> " input tokens",
+  )
   io.println(
     "three choices in a row below 0.2 confidence: "
     <> count(True, True)
@@ -120,6 +134,18 @@ pub fn main() {
     <> count(False, False)
     <> " unsolved",
   )
+}
+
+// The tokens spent after the third choice in a row below 0.2 confidence.
+fn after_unsure(steps: List(agent.Step), streak) {
+  case steps {
+    [] -> 0
+    _ if streak >= 3 -> int.sum(list.map(steps, fn(step) { step.input_tokens }))
+    [step, ..rest] if step.input_tokens > 0 && step.confidence <. 0.2 ->
+      after_unsure(rest, streak + 1)
+    [step, ..rest] if step.input_tokens > 0 -> after_unsure(rest, 0)
+    [_, ..rest] -> after_unsure(rest, streak)
+  }
 }
 
 // The longest run of choices made with less than 0.2 confidence.
