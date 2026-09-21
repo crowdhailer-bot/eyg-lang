@@ -1,6 +1,6 @@
 //// Run evals with each variant against the real API and write a table of the results.
 //// Jev picks the same edits for the same request, so each pair runs once.
-//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- [eval ...]`
+//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|experiments [eval ...]`
 
 import argv
 import gleam/float
@@ -18,7 +18,7 @@ import plinth/node/process
 import simplifile
 
 /// Holes first, then compounds by number and instances, then the whole program.
-const variants = [
+const compound_variants = [
   ["holes"],
   ["compounds=5", "holes"],
   ["compounds", "holes"],
@@ -28,8 +28,25 @@ const variants = [
   ["compounds"],
 ]
 
+/// The other ways of offering choices, each against its baseline.
+const experiment_variants = [
+  ["holes"],
+  ["holes", "types"],
+  ["holes", "cursors=3"],
+  ["holes", "types", "cursors=3"],
+  ["holes", "nojumps"],
+  [],
+  ["types"],
+  ["nojumps"],
+]
+
 pub fn main() {
-  let evals = case argv.load().arguments {
+  let assert [set, ..slugs] = argv.load().arguments
+  let variants = case set {
+    "compounds" -> compound_variants
+    _ -> experiment_variants
+  }
+  let evals = case slugs {
     [] -> eval.all()
     slugs -> list.filter_map(slugs, eval.find)
   }

@@ -48,6 +48,7 @@ pub type Variant {
     hole_types: Bool,
     /// In hole mode, how many holes are filled in one request.
     cursors: Int,
+    jumps: Bool,
   )
 }
 
@@ -61,12 +62,13 @@ pub const improved = Variant(
   focus_holes: False,
   hole_types: False,
   cursors: 1,
+  jumps: True,
 )
 
 /// Build a variant from flags, `compounds` adds all the mined compounds and
 /// `compounds=5` the five most frequent, `instances=2` offers two instances of each,
 /// `flat`, `untyped` and `repeats` turn improvements off, `holes` keeps the selection on holes, `types` lists the type of every hole
-/// and `cursors=3` asks what fills three holes at once.
+/// `cursors=3` asks what fills three holes at once and `nojumps` stops offering jumps to type errors.
 pub fn variant(flags: List(String)) -> Variant {
   let number = fn(prefix, default) {
     list.find_map(flags, fn(flag) {
@@ -88,6 +90,7 @@ pub fn variant(flags: List(String)) -> Variant {
     focus_holes: list.contains(flags, "holes"),
     hole_types: list.contains(flags, "types"),
     cursors: number("cursors", 3) |> result.unwrap(1),
+    jumps: !list.contains(flags, "nojumps"),
   )
 }
 
@@ -101,6 +104,7 @@ pub fn variant_name(variant: Variant) {
     focus_holes:,
     hole_types:,
     cursors:,
+    jumps:,
   ) = variant
   let all = list.length(compound.mined())
   let flags =
@@ -120,6 +124,7 @@ pub fn variant_name(variant: Variant) {
       #(focus_holes, "holes"),
       #(hole_types, "types"),
       #(cursors > 1, "cursors" <> int.to_string(cursors)),
+      #(!jumps, "nojumps"),
     ]
     |> list.filter_map(fn(flag) {
       case flag.0 {
@@ -145,6 +150,7 @@ pub fn config(eval: Eval, variant: Variant) -> options.Config {
     focus_holes: variant.focus_holes,
     hole_types: variant.hole_types,
     cursors: variant.cursors,
+    jumps: variant.jumps,
   )
 }
 
@@ -574,6 +580,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
   use focus_holes <- decode.optional_field("focus_holes", False, decode.bool)
   use hole_types <- decode.optional_field("hole_types", False, decode.bool)
   use cursors <- decode.optional_field("cursors", 1, decode.int)
+  use jumps <- decode.optional_field("jumps", True, decode.bool)
   use steps <- decode.field("steps", decode.list(agent.step_decoder()))
   use outcome <- decode.field("outcome", decode.string)
   let variant =
@@ -586,6 +593,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
       focus_holes:,
       hole_types:,
       cursors:,
+      jumps:,
     )
   case find(slug) {
     Ok(eval) -> decode.success(Run(eval:, variant:, steps:, outcome:))

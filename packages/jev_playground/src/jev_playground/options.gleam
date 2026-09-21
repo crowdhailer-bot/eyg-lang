@@ -51,6 +51,8 @@ pub type Config {
     hole_types: Bool,
     /// In hole mode, how many holes Jev is asked to fill in one request.
     cursors: Int,
+    /// Offer to jump to each type error.
+    jumps: Bool,
   )
 }
 
@@ -67,6 +69,7 @@ pub fn default_config() {
     compound_instances: 5,
     hole_types: False,
     cursors: 1,
+    jumps: True,
   )
 }
 
@@ -102,16 +105,14 @@ pub fn available(
     True -> fills(singles, buffer, environment)
     False -> singles
   }
-  let navigation = case holes {
-    True ->
-      list.filter(navigation(buffer), fn(option) {
-        case option.action {
-          a.NextVacant | a.JumpToError(_) -> True
-          _ -> False
-        }
-      })
-    False -> navigation(buffer)
-  }
+  let navigation =
+    list.filter(navigation(buffer), fn(option) {
+      case option.action, holes {
+        a.JumpToError(_), _ -> config.jumps
+        a.NextVacant, _ -> True
+        _, holes -> !holes
+      }
+    })
   // Ordered by priority, builtins are last and dropped first if there are too many.
   // A long task can offer many names, each kind of binding is limited so they
   // do not crowd out values.

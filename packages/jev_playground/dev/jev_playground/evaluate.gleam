@@ -95,6 +95,7 @@ pub fn run(
       #("focus_holes", json.bool(variant.focus_holes)),
       #("hole_types", json.bool(variant.hole_types)),
       #("cursors", json.int(variant.cursors)),
+      #("jumps", json.bool(variant.jumps)),
       #("outcome", json.string(outcome_text)),
       #("steps", json.array(steps, agent.step_to_json)),
       #("input_tokens", json.int(tokens)),

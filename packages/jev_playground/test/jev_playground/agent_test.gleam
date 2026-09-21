@@ -98,6 +98,16 @@ pub fn type_errors_can_be_jumped_to_test() {
   assert string.contains(agent.program_text(agent), "«")
 }
 
+pub fn jumps_can_be_turned_off_test() {
+  let config = options.Config(..options.default_config(), jumps: False)
+  let agent =
+    agent.new("add", e.Vacant, environment.pure(), config)
+    |> take_all([a.Builtin("int_add"), a.Call, a.String("x"), a.Integer(1)])
+  assert agent.type_error_count(agent) == 1
+  assert !list.contains(keys(agent), "jump to type error 1")
+  assert list.contains(keys(agent), "move previous")
+}
+
 pub fn run_tests_reports_results_test() {
   let source =
     e.Record(
