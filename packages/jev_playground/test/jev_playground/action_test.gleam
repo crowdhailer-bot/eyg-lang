@@ -1,8 +1,14 @@
+import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/ir/tree as ir
+import gleam/dict
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
 import jev_playground/action as a
+import morph/buffer
+import morph/editable as e
+import morph/projection as p
 import multiformats/cid/v1
 
 pub fn every_action_round_trips_through_json_test() {
@@ -52,9 +58,25 @@ pub fn every_action_round_trips_through_json_test() {
     a.RunTests,
     a.Finish,
     a.Compound("variable x, select .f", [a.Variable("x"), a.Select("f")]),
+    a.AtHole([1, 0], 2, a.Integer(1)),
   ]
   list.each(actions, fn(action) {
     let encoded = json.to_string(a.to_json(action))
     assert json.parse(encoded, a.decoder()) == Ok(action)
   })
+}
+
+pub fn calls_take_at_most_eight_arguments_test() {
+  let params =
+    int.range(1, 11, [], fn(acc, i) { [e.Bind("p" <> int.to_string(i)), ..acc] })
+  let source =
+    e.Block(
+      [#(e.Bind("f"), e.Function(params, e.Integer(1)))],
+      e.Variable("f"),
+      True,
+    )
+  let buffer =
+    buffer.from_projection(p.focus_at(source, [1]), infer.pure(), dict.new())
+  assert buffer.target_arity(buffer) == Ok(10)
+  assert a.call_arity(buffer) == 8
 }

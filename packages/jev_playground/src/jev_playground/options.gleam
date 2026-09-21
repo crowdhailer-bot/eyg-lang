@@ -363,7 +363,7 @@ fn structure(buffer: Buffer, vocabulary: Vocabulary, config: Config) {
       })
     }),
     when(buffer.call_many(buffer), fn(_) {
-      let arity = int.max(buffer.target_arity(buffer) |> result.unwrap(1), 1)
+      let arity = a.call_arity(buffer)
       let holes = list.repeat("?", arity) |> string.join(", ")
       [
         named(
@@ -1027,7 +1027,9 @@ fn fills(singles: List(Option), buffer: Buffer, environment: Environment) {
       a.Variable(_) | a.Builtin(_) | a.Tag(_) ->
         case value_type(option.action, scope, environment) {
           Ok(t.Fun(..) as type_) -> {
-            let holes = list.repeat("?", arity(type_)) |> string.join(", ")
+            let holes =
+              list.repeat("?", int.min(arity(type_), a.max_arity))
+              |> string.join(", ")
             let name = case option.action {
               a.Variable(name) -> name
               a.Builtin(name) -> "!" <> name

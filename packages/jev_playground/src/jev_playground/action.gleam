@@ -202,10 +202,7 @@ pub fn apply(
     EmptyRecord -> done(buffer.create_empty_record(buffer))
     Record(labels) -> with(buffer.create_record(buffer), labels)
     Function(param) -> with(buffer.insert_function(buffer), param)
-    Call -> {
-      let arity = buffer.target_arity(buffer) |> result.unwrap(1)
-      with(buffer.call_many(buffer), int.max(arity, 1))
-    }
+    Call -> with(buffer.call_many(buffer), call_arity(buffer))
     CallWith -> done(buffer.call_with(buffer))
     Assign(name) -> with(buffer.assign(buffer), name)
     AssignBefore(name) -> with(buffer.assign_before(buffer), name)
@@ -258,6 +255,17 @@ pub fn apply(
       }
     }
   }
+}
+
+/// Calls take no more arguments than this, a function whose type is only known
+/// from how it is used can seem to take any number.
+pub const max_arity = 8
+
+/// The number of arguments a call of the selection takes.
+pub fn call_arity(buffer: Buffer) -> Int {
+  buffer.target_arity(buffer)
+  |> result.unwrap(1)
+  |> int.clamp(1, max_arity)
 }
 
 /// Every hole in the program, in the order they are written.
