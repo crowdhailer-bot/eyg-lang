@@ -31,3 +31,12 @@ pub fn list_functions_start_fails_its_check_test() {
     evals.check(eval, annotated(eval.start), environment())
   assert reason == "the record has no `sum`"
 }
+
+pub fn every_start_fails_its_check_test() {
+  let environment = environment()
+  list.each(evals.all(), fn(eval) {
+    let assert Ok(start) = evals.start(eval)
+    let assert Error(_) =
+      evals.check(eval, e.to_annotated(start, []), environment)
+  })
+}

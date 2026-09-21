@@ -8,7 +8,6 @@ import eyg/interpreter/value as v
 import eyg/parser
 import gleam/dict
 import gleam/dynamic/decode
-import gleam/int
 import gleam/list
 import gleam/option
 import gleam/result
@@ -115,6 +114,11 @@ pub fn all() -> List(Eval) {
     list_functions(),
     fibonacci_scaffold(),
     list_functions_scaffold(),
+    greeting(),
+    greeting_scaffold(),
+    user_record_scaffold(),
+    total_scaffold(),
+    describe_scaffold(),
   ]
 }
 
@@ -159,27 +163,11 @@ The function returns `go(n, 0, 1, [])`.",
     open_libraries: ["standard"],
     max_steps: 160,
     check: fn(value, environment) {
-      list.try_each(
-        [#(0, []), #(1, [0]), #(2, [0, 1]), #(6, [0, 1, 1, 2, 3, 5])],
-        fn(case_) {
-          let #(n, expected) = case_
-          let expected = v.LinkedList(list.map(expected, v.Integer))
-          case run.call(value, [v.Integer(n)], environment) {
-            Ok(got) if got == expected -> Ok(Nil)
-            Ok(got) ->
-              Error(
-                "for "
-                <> int.to_string(n)
-                <> " it returned "
-                <> simple_debug.inspect(got)
-                <> " not "
-                <> simple_debug.inspect(expected),
-              )
-            Error(reason) ->
-              Error("for " <> int.to_string(n) <> " it failed: " <> reason)
-          }
-        },
-      )
+      [#(0, []), #(1, [0]), #(2, [0, 1]), #(6, [0, 1, 1, 2, 3, 5])]
+      |> list.map(fn(case_) {
+        #([v.Integer(case_.0)], v.LinkedList(list.map(case_.1, v.Integer)))
+      })
+      |> calls(value, environment, _)
     },
   )
 }
@@ -260,6 +248,25 @@ fibonacci"
 let last = (items) -> { list.head(list.reverse(items)) }
 {length, sum, last}",
       )
+    "greeting" | "greeting-scaffold" -> "let {string} = " <> standard <> "
+let greet = (name) -> { string.append(\"Hello, \", name) }
+greet"
+    "user-record-scaffold" ->
+      "let user = (name, age) -> { {name: name, age: age} }
+user"
+    "total-scaffold" -> "let {list} = " <> standard <> "
+let total = (items) -> {
+  list.fold(items, 0, (item, sum) -> { !int_add(sum, !int_multiply(item.price, item.quantity)) })
+}
+total"
+    "describe-scaffold" ->
+      "let describe = (result) -> {
+  match result {
+    Ok(value) -> { value }
+    Error(reason) -> { \"unknown\" }
+  }
+}
+describe"
     _ -> ""
   }
 }
@@ -335,6 +342,140 @@ let last = (items) -> { todo }
 {length, sum, last}",
     max_steps: 80,
   )
+}
+
+/// A function written from nothing, the smallest plan.
+pub fn greeting() {
+  Eval(
+    slug: "greeting",
+    title: "Greet by name",
+    task: "Write a function `(name)` returning \"Hello, \" followed by the name, for \"Ada\" it returns \"Hello, Ada\".
+First destructure `{string}` from @standard, then define `greet = (name)`, the program ends with `greet`.
+The function returns `string.append` of \"Hello, \" and `name`.",
+    start: "",
+    open_libraries: ["standard"],
+    max_steps: 60,
+    check: fn(value, environment) {
+      calls(value, environment, [
+        #([v.String("Ada")], v.String("Hello, Ada")),
+        #([v.String("")], v.String("Hello, ")),
+      ])
+    },
+  )
+}
+
+/// One hole filled with a call taking a string literal.
+pub fn greeting_scaffold() {
+  Eval(
+    ..greeting(),
+    slug: "greeting-scaffold",
+    title: "Greet by name from a scaffold",
+    task: "Fill the hole so `greet` returns `string.append` of \"Hello, \" and `name`, for \"Ada\" it returns \"Hello, Ada\".",
+    start: "let {string} = " <> standard <> "
+let greet = (name) -> { todo }
+greet",
+    max_steps: 40,
+  )
+}
+
+/// One hole filled with a record.
+pub fn user_record_scaffold() {
+  Eval(
+    slug: "user-record-scaffold",
+    title: "Build a record from a scaffold",
+    task: "Fill the hole so `user` returns the record `{name: name, age: age}`.",
+    start: "let user = (name, age) -> { todo }
+user",
+    open_libraries: [],
+    max_steps: 40,
+    check: fn(value, environment) {
+      let record =
+        v.Record(
+          dict.from_list([#("name", v.String("Ada")), #("age", v.Integer(36))]),
+        )
+      calls(value, environment, [
+        #([v.String("Ada"), v.Integer(36)], record),
+      ])
+    },
+  )
+}
+
+/// One hole filled with nested builtin calls and field selections.
+pub fn total_scaffold() {
+  Eval(
+    slug: "total-scaffold",
+    title: "Total an order from a scaffold",
+    task: "Each item is a record with a `price` and a `quantity`, `total` folds over the items.
+Fill the hole with `!int_add` of `sum` and `!int_multiply` of `item.price` and `item.quantity`.",
+    start: "let {list} = " <> standard <> "
+let total = (items) -> { list.fold(items, 0, (item, sum) -> { todo }) }
+total",
+    open_libraries: ["standard"],
+    max_steps: 60,
+    check: fn(value, environment) {
+      let item = fn(price, quantity) {
+        v.Record(
+          dict.from_list([
+            #("price", v.Integer(price)),
+            #("quantity", v.Integer(quantity)),
+          ]),
+        )
+      }
+      calls(value, environment, [
+        #([v.LinkedList([])], v.Integer(0)),
+        #([v.LinkedList([item(2, 3), item(5, 1)])], v.Integer(11)),
+      ])
+    },
+  )
+}
+
+/// Two holes in the branches of a match.
+pub fn describe_scaffold() {
+  Eval(
+    slug: "describe-scaffold",
+    title: "Describe a result from a scaffold",
+    task: "Fill the two holes in `describe`, when the result is `Ok` it returns `value`, when it is `Error` it returns the string \"unknown\".",
+    start: "let describe = (result) -> {
+  match result {
+    Ok(value) -> { todo }
+    Error(reason) -> { todo }
+  }
+}
+describe",
+    open_libraries: [],
+    max_steps: 40,
+    check: fn(value, environment) {
+      calls(value, environment, [
+        #([v.ok(v.String("found"))], v.String("found")),
+        #([v.error(v.unit())], v.String("unknown")),
+      ])
+    },
+  )
+}
+
+/// Call a function with each list of arguments and compare what it returns.
+fn calls(
+  value: run.Value,
+  environment: Environment,
+  cases: List(#(List(run.Value), run.Value)),
+) -> Result(Nil, String) {
+  list.try_each(cases, fn(case_) {
+    let #(args, expected) = case_
+    let shown = string.join(list.map(args, simple_debug.inspect), ", ")
+    case run.call(value, args, environment) {
+      Ok(got) if got == expected -> Ok(Nil)
+      Ok(got) ->
+        Error(
+          "for ("
+          <> shown
+          <> ") it returned "
+          <> simple_debug.inspect(got)
+          <> " not "
+          <> simple_debug.inspect(expected),
+        )
+      Error(reason) -> Error("for (" <> shown <> ") it failed: " <> reason)
+    }
+  })
 }
 
 /// The checker stands in for tests: it runs when Jev runs the tests, when Jev
