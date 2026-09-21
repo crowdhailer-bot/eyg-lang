@@ -7,15 +7,19 @@ import eyg/interpreter/simple_debug
 import eyg/interpreter/value as v
 import eyg/parser
 import gleam/dict
+import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import gleam/option
 import gleam/result
 import gleam/string
+import jev_playground/action
+import jev_playground/agent
 import jev_playground/compound
 import jev_playground/environment.{type Environment}
 import jev_playground/options
 import jev_playground/run
+import morph/buffer
 import morph/editable as e
 
 pub type Eval {
@@ -331,4 +335,57 @@ let last = (items) -> { todo }
 {length, sum, last}",
     max_steps: 80,
   )
+}
+
+/// The checker stands in for tests: it runs when Jev runs the tests, when Jev
+/// says it has finished and whenever the program is complete.
+/// Returns the agent, with any problem shown as test results, and whether it is solved.
+pub fn after_step(eval: Eval, agent: agent.Agent, step: agent.Step) {
+  let asked = case step.action {
+    action.RunTests | action.Finish -> True
+    _ -> False
+  }
+  case asked || agent.is_complete(agent) {
+    False -> #(agent, False)
+    True ->
+      case check(eval, buffer.source(agent.buffer), agent.environment) {
+        Ok(Nil) -> {
+          let results =
+            option.Some("1 of 1 tests passed, the checker accepted the program")
+          #(agent.Agent(..agent, test_results: results), True)
+        }
+        Error(reason) -> {
+          let results = option.Some("The checker found a problem: " <> reason)
+          #(agent.Agent(..agent, test_results: results, finished: False), False)
+        }
+      }
+  }
+}
+
+/// A saved run of an eval.
+pub type Run {
+  Run(eval: Eval, variant: Variant, steps: List(agent.Step), outcome: String)
+}
+
+pub fn run_decoder() -> decode.Decoder(Run) {
+  use slug <- decode.field("eval", decode.string)
+  use compounds <- decode.field("compounds", decode.bool)
+  use slot_questions <- decode.field("slot_questions", decode.bool)
+  use type_filter <- decode.optional_field("type_filter", True, decode.bool)
+  use no_repeats <- decode.optional_field("no_repeats", True, decode.bool)
+  use focus_holes <- decode.optional_field("focus_holes", False, decode.bool)
+  use steps <- decode.field("steps", decode.list(agent.step_decoder()))
+  use outcome <- decode.field("outcome", decode.string)
+  let variant =
+    Variant(
+      compounds:,
+      slot_questions:,
+      type_filter:,
+      no_repeats:,
+      focus_holes:,
+    )
+  case find(slug) {
+    Ok(eval) -> decode.success(Run(eval:, variant:, steps:, outcome:))
+    Error(Nil) -> decode.failure(Run(fibonacci(), improved, [], ""), "eval")
+  }
 }

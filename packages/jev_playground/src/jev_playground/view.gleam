@@ -11,6 +11,7 @@ import jev_playground/action
 import jev_playground/agent
 import jev_playground/app.{type Model, type Selection}
 import jev_playground/environment
+import jev_playground/eval
 import jev_playground/library
 import jev_playground/options
 import lustre/attribute as a
@@ -52,6 +53,9 @@ fn header(model: Model) {
   let mode = case model.source {
     app.Live(model: jev_model, ..) -> jev_model
     app.Replay(demo:, ..) -> "replay · " <> demo.title
+    app.Recorded(run: option.Some(run), ..) ->
+      "eval · " <> run.eval.title <> " · " <> eval.variant_name(run.variant)
+    app.Recorded(name:, ..) -> "eval · " <> name
   }
   h.header([a.class("bar")], [
     h.span([a.class("logo")], [text("JEV")]),
@@ -92,7 +96,7 @@ fn status(model: Model) {
 
 fn task_panel(model: Model) {
   let readonly = case model.source {
-    app.Replay(..) -> True
+    app.Replay(..) | app.Recorded(..) -> True
     app.Live(..) -> False
   }
   let agent = model.agent

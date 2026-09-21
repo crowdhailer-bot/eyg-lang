@@ -22,6 +22,7 @@ import jev_playground/agent
 import jev_playground/client
 import jev_playground/demo
 import jev_playground/environment
+import jev_playground/eval
 import jev_playground/library
 import jev_playground/mock
 import jev_playground/options
@@ -35,6 +36,8 @@ import plinth/javascript/global
 pub type Source {
   Live(transport: client.Transport, model: String)
   Replay(demo: demo.Demo, actions: List(Action), speed: Float)
+  /// A saved eval run, replayed at the speed Jev answered.
+  Recorded(name: String, run: Option(eval.Run), speed: Float)
 }
 
 pub type Status {
@@ -80,6 +83,8 @@ pub type Message {
   LibrariesLoaded(
     Result(#(library.Bundle, dict.Dict(String, demo.Prepared)), String),
   )
+  RunLoaded(Result(eval.Run, String))
+  Replayed(generation: Int, step: agent.Step)
 }
 
 /// The number of recent selections shown, one more is kept while it fades out.
@@ -105,19 +110,19 @@ pub fn init(flags: #(String, String, String)) -> #(Model, Effect(Message)) {
     ["", "demo", slug, ..] ->
       case demo.find(slug) {
         Ok(demo) -> {
-          let speed =
-            list.key_find(query, "speed")
-            |> result.try(fn(speed) {
-              // `float.parse` needs a decimal point, `?speed=2` is written as a whole number.
-              result.lazy_or(float.parse(speed), fn() {
-                int.parse(speed) |> result.map(int.to_float)
-              })
-            })
-            |> result.unwrap(1.0)
-          #(Ok(Replay(demo:, actions: [], speed:)), demo.task, True)
+          #(
+            Ok(Replay(demo:, actions: [], speed: speed(query))),
+            demo.task,
+            True,
+          )
         }
         Error(Nil) -> #(Error("no demo " <> slug), "", False)
       }
+    ["", "eval", name] -> #(
+      Ok(Recorded(name:, run: None, speed: speed(query))),
+      "",
+      True,
+    )
     // `?task=..` starts Jev on the task straight away, for sharing and recording runs.
     _ ->
       case list.key_find(query, "task") {
@@ -137,6 +142,17 @@ pub fn init(flags: #(String, String, String)) -> #(Model, Effect(Message)) {
   }
 }
 
+fn speed(query) {
+  list.key_find(query, "speed")
+  |> result.try(fn(speed) {
+    // `float.parse` needs a decimal point, `?speed=2` is written as a whole number.
+    result.lazy_or(float.parse(speed), fn() {
+      int.parse(speed) |> result.map(int.to_float)
+    })
+  })
+  |> result.unwrap(1.0)
+}
+
 fn live(origin) {
   let assert Ok(origin) = origin.from_string(origin)
   Live(transport: client.Proxy(origin), model: jev.latest)
@@ -145,6 +161,7 @@ fn live(origin) {
 fn base(source) {
   case source {
     Replay(demo:, ..) -> demo.environment
+    Recorded(..) -> environment.pure()
     Live(..) -> environment.browser()
   }
 }
@@ -152,6 +169,8 @@ fn base(source) {
 fn new(source, task, environment) {
   let config = case source {
     Replay(demo:, ..) -> demo.config
+    Recorded(run: Some(run), ..) -> eval.config(run.eval, run.variant)
+    Recorded(run: None, ..) -> options.default_config()
     Live(..) ->
       options.Config(..options.default_config(), search_libraries: True)
   }
@@ -225,10 +244,15 @@ fn loaded(model: Model, result) {
     Ok(#(source, task, environment)) -> {
       let fresh = new(source, task, environment)
       let model = Model(..fresh, running: model.running)
-      case model.running {
+      case source, model.running {
+        // A recorded run is loaded once the environment it ran in is ready.
+        Recorded(name:, run: None, ..), _ -> #(
+          Model(..model, status: Loading),
+          load_run(origin_of(), name),
+        )
         // Pause on the empty program so a recording shows the start.
-        True -> #(model, delay(1500, Continue(model.generation)))
-        False -> #(model, effect.none())
+        _, True -> #(model, delay(1500, Continue(model.generation)))
+        _, False -> #(model, effect.none())
       }
     }
     Error(reason) -> #(
@@ -272,6 +296,31 @@ pub fn update(model: Model, message) -> #(Model, Effect(Message)) {
       answered(model, result)
     JevAnswered(..) -> #(model, effect.none())
     LibrariesLoaded(result) -> loaded(model, result)
+    RunLoaded(Ok(run)) ->
+      case model.source {
+        Recorded(name:, speed:, ..) -> {
+          let source = Recorded(name:, run: Some(run), speed:)
+          let start = eval.start(run.eval) |> result.unwrap(e.Vacant)
+          let agent =
+            agent.new(
+              run.eval.task,
+              start,
+              model.environment,
+              eval.config(run.eval, run.variant),
+            )
+          let model =
+            Model(..model, source:, task: run.eval.task, agent:, status: Idle)
+          #(model, delay(1500, Continue(model.generation)))
+        }
+        _ -> #(model, effect.none())
+      }
+    RunLoaded(Error(reason)) -> #(
+      Model(..model, status: Failed(reason), running: False),
+      effect.none(),
+    )
+    Replayed(generation, step) if generation == model.generation ->
+      replayed(model, step)
+    Replayed(..) -> #(model, effect.none())
     Ticked(now) ->
       case model.status {
         Thinking(..) -> #(Model(..model, now:), tick())
@@ -312,6 +361,21 @@ fn request(model: Model) {
         })
       #(effect, offered)
     }
+    Recorded(run: Some(run), speed:, ..) -> {
+      let offered = agent.options(model.agent)
+      let step = list.length(model.agent.history)
+      let effect = case list.drop(run.steps, step) |> list.first {
+        Ok(recorded) ->
+          delay(
+            float.round(int.to_float(recorded.thinking_ms) /. speed),
+            Replayed(generation, recorded),
+          )
+        Error(Nil) ->
+          dispatch(JevAnswered(generation, Error("the run " <> run.outcome)))
+      }
+      #(effect, offered)
+    }
+    Recorded(run: None, ..) -> #(effect.none(), [])
     Replay(actions:, speed:, ..) -> {
       let offered = agent.options(model.agent)
       let step = list.length(model.agent.history)
@@ -347,37 +411,60 @@ fn answered(model: Model, result) {
           Model(..model, status: Failed(reason), running: False),
           effect.none(),
         )
-        Ok(agent) -> {
-          let assert [step, ..] = agent.history
-          let id = list.length(agent.history)
-          let name = step.label
-          let selections =
-            [Selection(id:, name:, step:), ..model.selections]
-            |> list.take(shown + 1)
-          let tokens = model.tokens + step.input_tokens
-          let model = Model(..model, agent:, selections:, tokens:)
-          case agent.finished {
-            True -> #(
-              Model(..model, status: Finished, running: False),
-              scroll(),
-            )
-            False -> {
-              let pause = case model.source {
-                Replay(speed:, ..) ->
-                  float.round(int.to_float(pause_ms) /. speed)
-                Live(..) -> pause_ms
-              }
-              #(
-                Model(..model, status: Waiting),
-                effect.batch([
-                  delay(pause, Continue(model.generation)),
-                  scroll(),
-                ]),
-              )
-            }
+        Ok(agent) -> applied(model, agent)
+      }
+  }
+}
+
+// Replay a step saved from an eval run, checking the program as the run did.
+fn replayed(model: Model, step: agent.Step) {
+  let agent = case agent.take(model.agent, step) {
+    Ok(agent) -> agent
+    Error(_) ->
+      agent.Agent(..model.agent, history: [
+        agent.Step(..step, failed: True),
+        ..model.agent.history
+      ])
+  }
+  let agent = case model.source {
+    Recorded(run: Some(run), ..) -> {
+      let #(agent, solved) = eval.after_step(run.eval, agent, step)
+      agent.Agent(..agent, finished: agent.finished || solved)
+    }
+    _ -> agent
+  }
+  applied(model, agent)
+}
+
+fn applied(model: Model, agent: agent.Agent) {
+  case agent.history {
+    [] -> #(model, effect.none())
+    [step, ..] -> {
+      let id = list.length(agent.history)
+      let name = step.label
+      let selections =
+        [Selection(id:, name:, step:), ..model.selections]
+        |> list.take(shown + 1)
+      let tokens = model.tokens + step.input_tokens
+      let model = Model(..model, agent:, selections:, tokens:)
+      case agent.finished {
+        True -> #(Model(..model, status: Finished, running: False), scroll())
+        False -> {
+          let pause = case model.source {
+            Replay(speed:, ..) | Recorded(speed:, ..) ->
+              float.round(int.to_float(pause_ms) /. speed)
+            Live(..) -> pause_ms
           }
+          #(
+            Model(..model, status: Waiting),
+            effect.batch([
+              delay(pause, Continue(model.generation)),
+              scroll(),
+            ]),
+          )
         }
       }
+    }
   }
 }
 
@@ -411,4 +498,16 @@ pub fn thinking_ms(model: Model) -> Option(Int) {
     Thinking(started:) -> Some(float.round(model.now -. started))
     _ -> None
   }
+}
+
+fn load_run(origin, name) {
+  effect.from(fn(dispatch) {
+    get_json(origin <> "/evals/" <> name <> ".json", eval.run_decoder())
+    |> promise.map(fn(result) { dispatch(RunLoaded(result)) })
+    Nil
+  })
+}
+
+fn origin_of() {
+  location.origin(window.location(window.self()))
 }

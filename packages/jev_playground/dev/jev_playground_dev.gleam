@@ -46,6 +46,15 @@ fn handle(request: glen.Request, key) {
         Error(_) -> promise.resolve(not_found())
       }
     ["favicon.ico"] -> promise.resolve(not_found())
+    ["evals", name] ->
+      case simplifile.read_bits(filepath.join("recordings/evals", name)) {
+        Ok(bits) ->
+          response.new(200)
+          |> response.prepend_header("content-type", "application/json")
+          |> response.set_body(glen.Bits(bits))
+          |> promise.resolve
+        Error(_) -> promise.resolve(not_found())
+      }
     ["libraries.json"] | ["demos.json"] ->
       case simplifile.read_bits("dist/" <> request.path) {
         Ok(bits) ->

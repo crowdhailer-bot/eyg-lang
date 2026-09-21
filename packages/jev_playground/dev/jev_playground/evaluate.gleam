@@ -10,17 +10,14 @@ import gleam/javascript/array
 import gleam/javascript/promise
 import gleam/json
 import gleam/list
-import gleam/option.{Some}
 import gleam/string
 import jev
-import jev_playground/action
 import jev_playground/agent
 import jev_playground/client
 import jev_playground/environment
 import jev_playground/eval
 import jev_playground/library
 import jev_playground/packages
-import morph/buffer
 import plinth/javascript/date
 import plinth/node/process
 import simplifile
@@ -111,7 +108,7 @@ fn loop(agent: agent.Agent, the_eval: eval.Eval, transport) {
             Error(reason) -> promise.resolve(#(agent, Failed(reason)))
             Ok(agent) -> {
               let assert [step, ..] = agent.history
-              let #(agent, solved) = checked(agent, step, the_eval)
+              let #(agent, solved) = eval.after_step(the_eval, agent, step)
               io.println(
                 string.pad_start(
                   int.to_string(list.length(agent.history)),
@@ -138,26 +135,5 @@ fn loop(agent: agent.Agent, the_eval: eval.Eval, transport) {
           }
       }
     }
-  }
-}
-
-// The checker stands in for tests, it runs when Jev runs the tests, when Jev
-// says it has finished and whenever the program is complete.
-fn checked(agent: agent.Agent, step: agent.Step, the_eval: eval.Eval) {
-  let source = buffer.source(agent.buffer)
-  let asked = case step.action {
-    action.RunTests | action.Finish -> True
-    _ -> False
-  }
-  case asked || agent.is_complete(agent) {
-    False -> #(agent, False)
-    True ->
-      case eval.check(the_eval, source, agent.environment) {
-        Ok(Nil) -> #(agent, True)
-        Error(reason) -> {
-          let results = Some("The checker found a problem: " <> reason)
-          #(agent.Agent(..agent, test_results: results, finished: False), False)
-        }
-      }
   }
 }
