@@ -1,6 +1,6 @@
 //// Run an eval against the real API until the checker accepts the program.
 //// Every step is saved so the run can be replayed at real speed and recorded.
-//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/evaluate --runtime bun -- fibonacci [compounds] [flat] [untyped] [repeats]`
+//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/evaluate --runtime bun -- fibonacci [flags]`, the flags are listed at `eval.variant`.
 
 import argv
 import gleam/float
@@ -91,6 +91,7 @@ pub fn run(
       #("type_filter", json.bool(variant.type_filter)),
       #("no_repeats", json.bool(variant.no_repeats)),
       #("focus_holes", json.bool(variant.focus_holes)),
+      #("hole_types", json.bool(variant.hole_types)),
       #("outcome", json.string(outcome_text)),
       #("steps", json.array(steps, agent.step_to_json)),
       #("input_tokens", json.int(tokens)),

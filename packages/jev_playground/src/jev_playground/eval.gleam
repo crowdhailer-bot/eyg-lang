@@ -45,6 +45,7 @@ pub type Variant {
     type_filter: Bool,
     no_repeats: Bool,
     focus_holes: Bool,
+    hole_types: Bool,
   )
 }
 
@@ -56,11 +57,12 @@ pub const improved = Variant(
   type_filter: True,
   no_repeats: True,
   focus_holes: False,
+  hole_types: False,
 )
 
 /// Build a variant from flags, `compounds` adds all the mined compounds and
 /// `compounds=5` the five most frequent, `instances=2` offers two instances of each,
-/// `flat`, `untyped` and `repeats` turn improvements off, `holes` keeps the selection on holes.
+/// `flat`, `untyped` and `repeats` turn improvements off, `holes` keeps the selection on holes, `types` lists the type of every hole.
 pub fn variant(flags: List(String)) -> Variant {
   let number = fn(prefix, default) {
     list.find_map(flags, fn(flag) {
@@ -80,6 +82,7 @@ pub fn variant(flags: List(String)) -> Variant {
     type_filter: !list.contains(flags, "untyped"),
     no_repeats: !list.contains(flags, "repeats"),
     focus_holes: list.contains(flags, "holes"),
+    hole_types: list.contains(flags, "types"),
   )
 }
 
@@ -91,6 +94,7 @@ pub fn variant_name(variant: Variant) {
     type_filter:,
     no_repeats:,
     focus_holes:,
+    hole_types:,
   ) = variant
   let all = list.length(compound.mined())
   let flags =
@@ -108,6 +112,7 @@ pub fn variant_name(variant: Variant) {
       #(!type_filter, "untyped"),
       #(!no_repeats, "repeats"),
       #(focus_holes, "holes"),
+      #(hole_types, "types"),
     ]
     |> list.filter_map(fn(flag) {
       case flag.0 {
@@ -131,6 +136,7 @@ pub fn config(eval: Eval, variant: Variant) -> options.Config {
     type_filter: variant.type_filter,
     no_repeats: variant.no_repeats,
     focus_holes: variant.focus_holes,
+    hole_types: variant.hole_types,
   )
 }
 
@@ -558,6 +564,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
   use type_filter <- decode.optional_field("type_filter", True, decode.bool)
   use no_repeats <- decode.optional_field("no_repeats", True, decode.bool)
   use focus_holes <- decode.optional_field("focus_holes", False, decode.bool)
+  use hole_types <- decode.optional_field("hole_types", False, decode.bool)
   use steps <- decode.field("steps", decode.list(agent.step_decoder()))
   use outcome <- decode.field("outcome", decode.string)
   let variant =
@@ -568,6 +575,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
       type_filter:,
       no_repeats:,
       focus_holes:,
+      hole_types:,
     )
   case find(slug) {
     Ok(eval) -> decode.success(Run(eval:, variant:, steps:, outcome:))

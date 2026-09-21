@@ -47,6 +47,8 @@ pub type Config {
     focus_holes: Bool,
     /// The most instances of one compound offered at a time.
     compound_instances: Int,
+    /// List the type each hole must have in the state.
+    hole_types: Bool,
   )
 }
 
@@ -61,6 +63,7 @@ pub fn default_config() {
     no_repeats: True,
     focus_holes: False,
     compound_instances: 5,
+    hole_types: False,
   )
 }
 

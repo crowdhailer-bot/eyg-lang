@@ -167,3 +167,17 @@ pub fn answer_applies_the_chosen_option_test() {
   assert step.ranked == [#("function (?) ->", 0.9), #("integer 1", 0.1)]
   assert step.label == "function (n) ->"
 }
+
+pub fn holes_can_be_listed_with_their_types_test() {
+  let config = options.Config(..options.default_config(), hole_types: True)
+  let agent =
+    agent.new("inc `n`", e.Vacant, environment.pure(), config)
+    |> take_all([a.Function("n"), a.Builtin("int_add"), a.Call])
+  assert agent.program_text(agent) == "(n) -> { !int_add(«?», ?) }"
+  assert list.length(agent.holes(agent.buffer)) == 2
+  let state = json.to_string(agent.state(agent))
+  assert string.contains(
+    state,
+    "\"holes\":[\"1 (selected): Integer\",\"2: Integer\"]",
+  )
+}

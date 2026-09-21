@@ -183,6 +183,10 @@ pub fn state(agent: Agent) -> Json {
         #("selection", selection_json(buffer)),
         #("type_errors", json.array(errors, json.string)),
       ],
+      case config.hole_types {
+        True -> [#("holes", json.array(hole_types(buffer), json.string))]
+        False -> []
+      },
       case environment.effects {
         [] -> []
         _ -> [
@@ -207,6 +211,43 @@ pub fn state(agent: Agent) -> Json {
       [#("recent_edits", json.preprocessed_array(recent))],
     ]),
   )
+}
+
+/// Every hole in the program, in the order they are written.
+pub fn holes(buffer: Buffer) -> List(p.Projection) {
+  let top = p.all(p.rebuild(buffer.projection))
+  case top {
+    #(p.Exp(e.Vacant), _) -> [top]
+    _ -> do_holes(top, [])
+  }
+}
+
+fn do_holes(projection, found) {
+  case navigation.next_vacant(projection) {
+    Ok(hole) ->
+      case list.any(found, fn(h) { p.path(h) == p.path(hole) }) {
+        True -> list.reverse(found)
+        False -> do_holes(hole, [hole, ..found])
+      }
+    Error(Nil) -> list.reverse(found)
+  }
+}
+
+// The type each hole must have, so Jev can see what fits beyond the selection.
+fn hole_types(buffer: Buffer) -> List(String) {
+  let here = p.path(buffer.projection)
+  list.index_map(holes(buffer), fn(hole, i) {
+    let path = p.path(hole)
+    let type_ = case infer.type_at(buffer.analysis, list.reverse(path)) {
+      Ok(t.Var(_)) | Error(Nil) -> "any type"
+      Ok(type_) -> environment.show_type(type_)
+    }
+    let selected = case path == here {
+      True -> " (selected)"
+      False -> ""
+    }
+    int.to_string(i + 1) <> selected <> ": " <> type_
+  })
 }
 
 fn selection_json(buffer: Buffer) {
