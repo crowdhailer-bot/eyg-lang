@@ -38,6 +38,7 @@ pub fn every_action_round_trips_through_json_test() {
     a.Record(["a", "b"]),
     a.Function("n"),
     a.Call,
+    a.CallTaking(3),
     a.CallWith,
     a.Assign("x"),
     a.AssignBefore("y"),

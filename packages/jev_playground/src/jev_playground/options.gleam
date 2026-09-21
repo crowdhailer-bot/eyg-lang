@@ -1027,9 +1027,8 @@ fn fills(singles: List(Option), buffer: Buffer, environment: Environment) {
       a.Variable(_) | a.Builtin(_) | a.Tag(_) ->
         case value_type(option.action, scope, environment) {
           Ok(t.Fun(..) as type_) -> {
-            let holes =
-              list.repeat("?", int.min(arity(type_), a.max_arity))
-              |> string.join(", ")
+            let arity = int.min(arity(type_), a.max_arity)
+            let holes = list.repeat("?", arity) |> string.join(", ")
             let name = case option.action {
               a.Variable(name) -> name
               a.Builtin(name) -> "!" <> name
@@ -1039,7 +1038,7 @@ fn fills(singles: List(Option), buffer: Buffer, environment: Environment) {
             let key = "call " <> name <> "(" <> holes <> ")"
             let called =
               named(
-                a.Compound(key, [option.action, a.Call]),
+                a.Compound(key, [option.action, a.CallTaking(arity)]),
                 key,
                 option.description
                   <> ", called with the cursor on its first argument.",

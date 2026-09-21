@@ -44,6 +44,9 @@ pub type Action {
   // Structure
   Function(param: String)
   Call
+  /// Call with a number of arguments known before, as the type of the selection
+  /// can be lost while a program is part way through a compound move.
+  CallTaking(arity: Int)
   CallWith
   Assign(name: String)
   AssignBefore(name: String)
@@ -96,6 +99,8 @@ pub fn key(action: Action) -> String {
       "record {" <> string.join(list.map(labels, slot), ", ") <> "}"
     Function(param) -> "function (" <> slot(param) <> ") ->"
     Call -> "call selection(..)"
+    CallTaking(arity) ->
+      "call selection(" <> string.join(list.repeat("?", arity), ", ") <> ")"
     CallWith -> "pass selection to ?(..)"
     Assign(name) -> "let " <> slot(name) <> " ="
     AssignBefore(name) -> "let " <> slot(name) <> " = above"
@@ -203,6 +208,7 @@ pub fn apply(
     Record(labels) -> with(buffer.create_record(buffer), labels)
     Function(param) -> with(buffer.insert_function(buffer), param)
     Call -> with(buffer.call_many(buffer), call_arity(buffer))
+    CallTaking(arity) -> with(buffer.call_many(buffer), arity)
     CallWith -> done(buffer.call_with(buffer))
     Assign(name) -> with(buffer.assign(buffer), name)
     AssignBefore(name) -> with(buffer.assign_before(buffer), name)
@@ -408,6 +414,7 @@ pub fn to_json(action: Action) -> json.Json {
     Record(labels) -> texts("record", labels)
     Function(param) -> text("function", param)
     Call -> with("call", [])
+    CallTaking(arity) -> with("call_taking", [#("arity", json.int(arity))])
     CallWith -> with("call_with", [])
     Assign(name) -> text("assign", name)
     AssignBefore(name) -> text("assign_before", name)
@@ -502,6 +509,10 @@ pub fn decoder() -> decode.Decoder(Action) {
     "record" -> decode.map(texts, Record)
     "function" -> decode.map(text, Function)
     "call" -> decode.success(Call)
+    "call_taking" -> {
+      use arity <- decode.field("arity", decode.int)
+      decode.success(CallTaking(arity))
+    }
     "call_with" -> decode.success(CallWith)
     "assign" -> decode.map(text, Assign)
     "assign_before" -> decode.map(text, AssignBefore)

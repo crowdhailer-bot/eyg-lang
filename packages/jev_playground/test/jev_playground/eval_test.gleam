@@ -1,8 +1,11 @@
 import eyg/parser
 import gleam/list
+import gleam/string
+import jev_playground/agent
 import jev_playground/environment
 import jev_playground/eval as evals
 import jev_playground/library
+import jev_playground/options
 import jev_playground/packages
 import morph/editable as e
 
@@ -53,4 +56,20 @@ pub fn variants_are_named_by_their_flags_test() {
       evals.variant(["holes", "types", "cursors=3", "nojumps", "mark=comments"]),
     )
     == "holes-types-cursors3-nojumps-markcomments"
+}
+
+pub fn a_recursive_call_in_a_scaffold_takes_every_argument_test() {
+  let eval = evals.fibonacci_scaffold()
+  let assert Ok(start) = evals.start(eval)
+  let config = evals.config(eval, evals.variant(["holes"]))
+  let agent = agent.new(eval.task, start, environment(), config)
+  let assert Ok(option) =
+    list.find(agent.options(agent), fn(option) {
+      options.key(option) == "call go(?, ?, ?, ?)"
+    })
+  let assert Ok(agent) = agent.take(agent, agent.scripted(option.action))
+  assert string.contains(
+    agent.program_text(agent),
+    "Gt(_) -> { go(«?», ?, ?, ?) }",
+  )
 }
