@@ -56,6 +56,9 @@ pub fn variants_are_named_by_their_flags_test() {
       evals.variant(["holes", "types", "cursors=3", "nojumps", "mark=comments"]),
     )
     == "holes-types-cursors3-nojumps-markcomments"
+  assert evals.variant_name(evals.variant(["holes", "mark=excerpt"])) == "holes"
+  assert evals.variant_name(evals.variant(["holes", "mark=guillemets"]))
+    == "holes-markguillemets"
 }
 
 pub fn a_recursive_call_in_a_scaffold_takes_every_argument_test() {

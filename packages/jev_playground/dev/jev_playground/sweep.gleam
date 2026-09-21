@@ -38,8 +38,8 @@ const hole_variants = [
   ["holes", "holejumps"],
 ]
 
-/// The best highlight of the experiments against the default, to confirm it.
-const highlight_variants = [["holes"], ["holes", "mark=excerpt"]]
+/// The default highlight, repeating the selected code, against « and » alone.
+const highlight_variants = [["holes", "mark=guillemets"], ["holes"]]
 
 /// Each earlier improvement turned off in turn.
 const ablation_variants = [
@@ -66,13 +66,13 @@ const experiment_variants = [
   ["holes", "nojumps"],
   ["holes", "mark=comments"],
   ["holes", "mark=unmarked"],
-  ["holes", "mark=excerpt"],
+  ["holes", "mark=guillemets"],
   [],
   ["types"],
   ["nojumps"],
   ["mark=comments"],
   ["mark=unmarked"],
-  ["mark=excerpt"],
+  ["mark=guillemets"],
 ]
 
 pub fn main() {

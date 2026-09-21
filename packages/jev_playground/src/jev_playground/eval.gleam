@@ -66,7 +66,7 @@ pub const improved = Variant(
   hole_types: False,
   cursors: 1,
   jumps: True,
-  highlight: options.Guillemets,
+  highlight: options.Excerpt,
   check_compounds: False,
   hole_jumps: False,
 )
@@ -75,7 +75,7 @@ pub const improved = Variant(
 /// `compounds=5` the five most frequent, `instances=2` offers two instances of each,
 /// `flat`, `untyped` and `repeats` turn improvements off, `holes` keeps the selection on holes, `types` lists the type of every hole
 /// `cursors=3` asks what fills three holes at once, `nojumps` stops offering jumps to type errors
-/// `mark=comments`, `mark=unmarked` or `mark=excerpt` changes how the selection is shown
+/// `mark=guillemets`, `mark=comments` or `mark=unmarked` changes how the selection is shown, the default is `excerpt`
 /// `checked` only offers compound instances that apply without a new type error
 /// and `holejumps` offers to move to any hole by its number.
 pub fn variant(flags: List(String)) -> Variant {
@@ -106,7 +106,7 @@ pub fn variant(flags: List(String)) -> Variant {
         _ -> Error(Nil)
       }
     })
-      |> result.unwrap(options.Guillemets),
+      |> result.unwrap(improved.highlight),
     check_compounds: list.contains(flags, "checked"),
     hole_jumps: list.contains(flags, "holejumps"),
   )
@@ -147,7 +147,7 @@ pub fn variant_name(variant: Variant) {
       #(cursors > 1, "cursors" <> int.to_string(cursors)),
       #(!jumps, "nojumps"),
       #(
-        highlight != options.Guillemets,
+        highlight != improved.highlight,
         "mark" <> options.highlight_name(highlight),
       ),
       #(check_compounds, "checked"),
@@ -617,6 +617,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
     decode.bool,
   )
   use hole_jumps <- decode.optional_field("hole_jumps", False, decode.bool)
+  // Runs saved before the highlight was recorded marked the selection with « and ».
   use highlight <- decode.optional_field(
     "highlight",
     options.Guillemets,

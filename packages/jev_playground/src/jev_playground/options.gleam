@@ -103,7 +103,7 @@ pub fn default_config() {
     hole_types: False,
     cursors: 1,
     jumps: True,
-    highlight: Guillemets,
+    highlight: Excerpt,
     check_compounds: False,
     hole_jumps: False,
   )
