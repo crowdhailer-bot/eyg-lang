@@ -29,7 +29,7 @@ pub const directory = "recordings/evals"
 pub type Outcome {
   Solved
   OutOfSteps
-  /// Three choices in a row below 0.2 confidence, no run that did this was solved.
+  /// Three choices in a row below 0.2 confidence, 1 of 357 solved runs did this.
   Unsure
   Failed(reason: String)
 }
