@@ -3,7 +3,7 @@
 //// field of the program, it passes when it returns `True({})`.
 
 import eyg/interpreter/break
-import eyg/interpreter/expression
+import eyg/interpreter/builtin
 import eyg/interpreter/simple_debug
 import eyg/interpreter/state
 import eyg/interpreter/value as v
@@ -28,8 +28,8 @@ pub fn evaluate(
   source: ir.Node(List(Int)),
   environment: Environment,
 ) -> Result(Value, String) {
-  expression.execute(source, [])
-  |> resolve(environment)
+  state.step(state.E(source), builtin.default([]), state.Empty)
+  |> finish(budget, environment)
 }
 
 /// Call a function value with arguments, effects are not allowed.
@@ -38,34 +38,51 @@ pub fn call(
   args: List(Value),
   environment: Environment,
 ) -> Result(Value, String) {
-  expression.call(func, list.map(args, fn(arg) { #(arg, []) }))
-  |> resolve(environment)
+  let env = builtin.default([])
+  let k =
+    list.fold_right(args, state.Empty, fn(k, arg) {
+      state.Stack(state.CallWith(arg, env), [], k)
+    })
+  state.step(state.V(func), env, k)
+  |> finish(budget, environment)
 }
 
-fn resolve(return, environment) {
-  case return {
-    Ok(value) -> Ok(value)
-    Error(#(
+/// Programs Jev writes may never finish, for example when a recursive call does
+/// not count down, so evaluation stops after this many steps.
+const budget = 1_000_000
+
+fn finish(next, remaining, environment) {
+  case next {
+    state.Loop(c, e, k) if remaining > 0 ->
+      finish(state.step(c, e, k), remaining - 1, environment)
+    state.Loop(..) -> Error("the program did not finish within a million steps")
+    state.Break(Ok(value)) -> Ok(value)
+    state.Break(Error(#(
       break.UndefinedReference(ir.Pinned(ir.Release(module:, ..)) as reference),
       _,
       env,
       k,
-    ))
-    | Error(#(
+    )))
+    | state.Break(Error(#(
         break.UndefinedReference(ir.Content(module) as reference),
         _,
         env,
         k,
-      )) ->
+      ))) ->
       case environment.library_by_module(environment, module) {
         Ok(library) ->
-          expression.resume(library.value, env, k) |> resolve(environment)
+          finish(
+            state.step(state.V(library.value), env, k),
+            remaining,
+            environment,
+          )
         Error(Nil) ->
           Error("unknown reference " <> ir.reference_to_string(reference))
       }
-    Error(#(break.UnhandledEffect(label, _lift), _, _, _)) ->
+    state.Break(Error(#(break.UnhandledEffect(label, _lift), _, _, _))) ->
       Error("the effect " <> label <> " was performed but is not handled")
-    Error(#(reason, _, _, _)) -> Error(simple_debug.describe(reason))
+    state.Break(Error(#(reason, _, _, _))) ->
+      Error(simple_debug.describe(reason))
   }
 }
 
