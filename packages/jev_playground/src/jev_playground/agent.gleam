@@ -145,7 +145,79 @@ const remembered_states = 12
 const in_a_row = 5
 
 pub fn program_text(agent: Agent) {
-  text.projection(agent.buffer.projection, selection)
+  let marks =
+    list.map(extra_holes(agent), fn(hole) {
+      #(p.path(hole.1), text.Mark("⟨" <> int.to_string(hole.0) <> ":", "⟩"))
+    })
+  let projection = agent.buffer.projection
+  text.marked(p.rebuild(projection), [#(p.path(projection), selection), ..marks])
+}
+
+/// Holes after the selection that Jev is asked to fill in the same request,
+/// with the number each is shown with. Only in hole mode with several cursors.
+pub fn extra_holes(agent: Agent) -> List(#(Int, p.Projection)) {
+  let Agent(buffer:, config:, ..) = agent
+  case config.focus_holes && config.cursors > 1, buffer.projection {
+    True, #(p.Exp(e.Vacant), _) -> {
+      let here = p.path(buffer.projection)
+      let numbered =
+        list.index_map(a.holes(buffer), fn(hole, i) { #(i + 1, hole) })
+      let #(before, after) =
+        list.split_while(numbered, fn(hole) { p.path(hole.1) != here })
+      list.append(list.drop(after, 1), before)
+      |> list.take(config.cursors - 1)
+    }
+    _, _ -> []
+  }
+}
+
+const leave = "leave it for later"
+
+fn cursor_id(number) {
+  "hole_" <> int.to_string(number)
+}
+
+// What could fill each extra hole, only edits that need no further question.
+fn cursor_options(agent: Agent) {
+  let vocabulary = vocabulary.with_task(agent.task_vocabulary, source(agent))
+  list.map(extra_holes(agent), fn(hole) {
+    let #(number, projection) = hole
+    let at = buffer.update_position(agent.buffer, projection)
+    let offered =
+      options.available(at, agent.environment, vocabulary, agent.config)
+      |> list.filter(fn(option) { is_fill(option.action) })
+      |> list.take(jev.max_choice_options - 1)
+    #(number, projection, offered)
+  })
+}
+
+fn cursor_question(number, offered: List(options.Option)) {
+  let instructions =
+    "Choose what fills the hole marked ⟨"
+    <> int.to_string(number)
+    <> ":?⟩ in `program`, or leave it for later if the task does not yet say."
+  let criteria =
+    list.map(offered, fn(option) {
+      #(options.key(option), Some(json.string(option.description)))
+    })
+  jev.Choice(json.string(instructions), [
+    #(leave, Some(json.string("Do not fill this hole yet."))),
+    ..criteria
+  ])
+}
+
+// An edit that fills the selection, rather than moving, checking or undoing.
+fn is_fill(action) {
+  case action {
+    a.RunTests
+    | a.Finish
+    | a.Undo
+    | a.Delete
+    | a.OpenLibrary(_)
+    | a.ChooseString
+    | a.ChooseInteger -> False
+    _ -> !a.is_navigation(action) && options.slot(action) == Error(Nil)
+  }
 }
 
 /// The state given to Jev, everything it needs to judge the next edit.
@@ -213,30 +285,10 @@ pub fn state(agent: Agent) -> Json {
   )
 }
 
-/// Every hole in the program, in the order they are written.
-pub fn holes(buffer: Buffer) -> List(p.Projection) {
-  let top = p.all(p.rebuild(buffer.projection))
-  case top {
-    #(p.Exp(e.Vacant), _) -> [top]
-    _ -> do_holes(top, [])
-  }
-}
-
-fn do_holes(projection, found) {
-  case navigation.next_vacant(projection) {
-    Ok(hole) ->
-      case list.any(found, fn(h) { p.path(h) == p.path(hole) }) {
-        True -> list.reverse(found)
-        False -> do_holes(hole, [hole, ..found])
-      }
-    Error(Nil) -> list.reverse(found)
-  }
-}
-
 // The type each hole must have, so Jev can see what fits beyond the selection.
 fn hole_types(buffer: Buffer) -> List(String) {
   let here = p.path(buffer.projection)
-  list.index_map(holes(buffer), fn(hole, i) {
+  list.index_map(a.holes(buffer), fn(hole, i) {
     let path = p.path(hole)
     let type_ = case infer.type_at(buffer.analysis, list.reverse(path)) {
       Ok(t.Var(_)) | Error(Nil) -> "any type"
@@ -366,7 +418,13 @@ pub fn request(
   let request =
     jev.Request(model:, state: state(agent), questions: [
       #(question_id, question(offered)),
-      ..slot_questions
+      ..list.append(
+        slot_questions,
+        list.map(cursor_options(agent), fn(cursor) {
+          let #(number, _, offered) = cursor
+          #(cursor_id(number), cursor_question(number, offered))
+        }),
+      )
     ])
   #(request, offered)
 }
@@ -415,18 +473,62 @@ pub fn answer(
         )
       // A failed edit is shown to Jev in the recent edits rather than ending the run.
       case take(agent, step) {
-        Ok(agent) -> Ok(agent)
-        Error(_) -> {
-          let step = Step(..step, failed: True)
-          let visited =
-            [#(program_text(agent), step.action), ..agent.visited]
-            |> list.take(remembered_states)
-          Ok(Agent(..agent, history: [step, ..agent.history], visited:))
-        }
+        Ok(after) ->
+          case is_fill(action) {
+            True ->
+              Ok(fill_extra_holes(after, cursor_options(agent), evaluation))
+            False -> Ok(after)
+          }
+        Error(_) -> Ok(failed(agent, step))
       }
     }
     _ -> Error("expected a choice answer")
   }
+}
+
+fn failed(agent: Agent, step: Step) {
+  let step = Step(..step, failed: True)
+  let visited =
+    [#(program_text(agent), step.action), ..agent.visited]
+    |> list.take(remembered_states)
+  Agent(..agent, history: [step, ..agent.history], visited:)
+}
+
+// Each extra hole Jev chose an edit for is filled as its own step, the tokens
+// and time of the request are counted on the main step.
+fn fill_extra_holes(agent, cursors, evaluation: jev.Evaluation) -> Agent {
+  list.fold(cursors, agent, fn(agent, cursor) {
+    let #(number, projection, offered) = cursor
+    let chosen = case dict.get(evaluation.answers, cursor_id(number)) {
+      Ok(jev.ChoiceAnswer(choice:, probabilities:, confidence:))
+        if choice != leave
+      -> {
+        use option <- result.map(
+          list.find(offered, fn(option) { options.key(option) == choice }),
+        )
+        let action = a.AtHole(p.path(projection), number, option.action)
+        Step(
+          action:,
+          label: a.key(action),
+          confidence:,
+          ranked: jev.ranked(probabilities) |> list.take(8),
+          offered: list.length(offered) + 1,
+          input_tokens: 0,
+          thinking_ms: 0,
+          failed: False,
+        )
+      }
+      _ -> Error(Nil)
+    }
+    case chosen {
+      Ok(step) ->
+        case take(agent, step) {
+          Ok(agent) -> agent
+          Error(_) -> failed(agent, step)
+        }
+      Error(Nil) -> agent
+    }
+  })
 }
 
 /// Apply an action as the next step.

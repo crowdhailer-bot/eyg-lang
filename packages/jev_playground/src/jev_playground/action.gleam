@@ -16,6 +16,7 @@ import gleam/string
 import jev_playground/environment.{type Environment}
 import morph/buffer.{type Buffer}
 import morph/editable as e
+import morph/navigation
 import morph/projection as p
 import multiformats/cid/v1
 
@@ -67,6 +68,8 @@ pub type Action {
   Finish
   /// A named sequence of actions applied as one choice.
   Compound(name: String, steps: List(Action))
+  /// Fill the hole at the path, numbered as it was shown, leaving the selection where it was.
+  AtHole(path: List(Int), number: Int, action: Action)
 }
 
 /// The option name shown to Jev, unique for each action.
@@ -115,6 +118,8 @@ pub fn key(action: Action) -> String {
     RunTests -> "run tests"
     Finish -> "finish"
     Compound(name:, ..) -> name
+    AtHole(number:, action:, ..) ->
+      "at hole " <> int.to_string(number) <> ": " <> key(action)
   }
 }
 
@@ -239,6 +244,39 @@ pub fn apply(
       list.try_fold(steps, buffer, fn(buffer, step) {
         apply(step, buffer, environment)
       })
+    AtHole(path:, action:, ..) -> {
+      let here = p.path(buffer.projection)
+      use at <- result.try(buffer.focus_at(buffer, path))
+      use Nil <- result.try(case at.projection {
+        #(p.Exp(e.Vacant), _) -> Ok(Nil)
+        _ -> Error(Nil)
+      })
+      use filled <- result.try(apply(action, at, environment))
+      case here == path {
+        True -> Ok(buffer.next_vacant(filled) |> result.unwrap(filled))
+        False -> buffer.focus_at(filled, here)
+      }
+    }
+  }
+}
+
+/// Every hole in the program, in the order they are written.
+pub fn holes(buffer: Buffer) -> List(p.Projection) {
+  let top = p.all(p.rebuild(buffer.projection))
+  case top {
+    #(p.Exp(e.Vacant), _) -> [top]
+    _ -> do_holes(top, [])
+  }
+}
+
+fn do_holes(projection, found) {
+  case navigation.next_vacant(projection) {
+    Ok(hole) ->
+      case list.any(found, fn(h) { p.path(h) == p.path(hole) }) {
+        True -> list.reverse(found)
+        False -> do_holes(hole, [hole, ..found])
+      }
+    Error(Nil) -> list.reverse(found)
   }
 }
 
@@ -396,6 +434,12 @@ pub fn to_json(action: Action) -> json.Json {
         #("name", json.string(name)),
         #("steps", json.array(steps, to_json)),
       ])
+    AtHole(path:, number:, action:) ->
+      with("at_hole", [
+        #("path", json.array(path, json.int)),
+        #("number", json.int(number)),
+        #("action", to_json(action)),
+      ])
   }
 }
 
@@ -488,6 +532,12 @@ pub fn decoder() -> decode.Decoder(Action) {
       use name <- decode.field("name", decode.string)
       use steps <- decode.field("steps", decode.list(decoder()))
       decode.success(Compound(name, steps))
+    }
+    "at_hole" -> {
+      use path <- decode.field("path", decode.list(decode.int))
+      use number <- decode.field("number", decode.int)
+      use action <- decode.field("action", decoder())
+      decode.success(AtHole(path:, number:, action:))
     }
     _ -> decode.failure(Finish, "Action")
   }

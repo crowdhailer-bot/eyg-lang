@@ -80,9 +80,8 @@ pub fn table(summaries: List(Summary)) -> String {
               s.eval == name && s.variant == variant
             })
           {
-            Ok(s) if s.solved ->
-              int.to_string(s.steps) <> " steps " <> dollars(s.cost)
-            Ok(s) -> "✗ " <> int.to_string(s.steps) <> " steps"
+            Ok(s) if s.solved -> requests(s) <> " " <> dollars(s.cost)
+            Ok(s) -> "✗ " <> requests(s)
             Error(Nil) -> ""
           }
         })
@@ -101,6 +100,9 @@ pub fn table(summaries: List(Summary)) -> String {
       int.to_string(list.count(runs, fn(s) { s.solved }))
       <> " of "
       <> int.to_string(list.length(runs))
+    }),
+    total("requests", fn(runs: List(Summary)) {
+      int.to_string(int.sum(list.map(runs, fn(s) { s.requests })))
     }),
     total("steps to solve", fn(runs: List(Summary)) {
       list.filter(runs, fn(s) { s.solved })
@@ -128,4 +130,16 @@ pub fn table(summaries: List(Summary)) -> String {
 
 fn dollars(cost) {
   "$" <> float.to_string(float.to_precision(cost, 4))
+}
+
+// Steps, and the requests they took when several holes were filled at once.
+fn requests(summary: Summary) {
+  case summary.requests == summary.steps {
+    True -> int.to_string(summary.steps) <> " steps"
+    False ->
+      int.to_string(summary.steps)
+      <> " steps in "
+      <> int.to_string(summary.requests)
+      <> " requests"
+  }
 }

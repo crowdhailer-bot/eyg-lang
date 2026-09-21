@@ -48,6 +48,8 @@ pub type Summary {
     solved: Bool,
     outcome: String,
     steps: Int,
+    /// Several steps are taken from one request when Jev fills several holes.
+    requests: Int,
     compound_steps: Int,
     tokens: Int,
     cost: Float,
@@ -92,6 +94,7 @@ pub fn run(
       #("no_repeats", json.bool(variant.no_repeats)),
       #("focus_holes", json.bool(variant.focus_holes)),
       #("hole_types", json.bool(variant.hole_types)),
+      #("cursors", json.int(variant.cursors)),
       #("outcome", json.string(outcome_text)),
       #("steps", json.array(steps, agent.step_to_json)),
       #("input_tokens", json.int(tokens)),
@@ -116,6 +119,7 @@ pub fn run(
     solved: outcome == Solved,
     outcome: outcome_text,
     steps: list.length(steps),
+    requests: requests(steps),
     compound_steps:,
     tokens:,
     cost:,
@@ -130,6 +134,7 @@ pub fn summary_line(summary: Summary) {
       summary.eval <> "-" <> summary.variant,
       summary.outcome,
       int.to_string(summary.steps) <> " steps",
+      int.to_string(summary.requests) <> " requests",
       int.to_string(summary.tokens) <> " tokens",
       "$" <> float.to_string(float.to_precision(summary.cost, 4)),
       float.to_string(float.to_precision(summary.seconds, 1)) <> "s",
@@ -139,10 +144,16 @@ pub fn summary_line(summary: Summary) {
   )
 }
 
+// Steps filling extra holes are taken without a request of their own.
+fn requests(steps: List(agent.Step)) {
+  list.count(steps, fn(step) { step.input_tokens > 0 })
+}
+
 fn loop(agent: agent.Agent, the_eval: eval.Eval, transport) {
-  case list.length(agent.history) >= the_eval.max_steps {
+  case requests(agent.history) >= the_eval.max_steps {
     True -> promise.resolve(#(agent, OutOfSteps))
     False -> {
+      let before = list.length(agent.history)
       let #(request, offered) = agent.request(agent, jev.latest)
       use reply <- promise.await(client.system_one(transport, request))
       case reply {
@@ -153,24 +164,24 @@ fn loop(agent: agent.Agent, the_eval: eval.Eval, transport) {
             Ok(agent) -> {
               let assert [step, ..] = agent.history
               let #(agent, solved) = eval.after_step(the_eval, agent, step)
-              io.println(
-                string.pad_start(
-                  int.to_string(list.length(agent.history)),
-                  4,
-                  " ",
+              list.take(agent.history, list.length(agent.history) - before)
+              |> list.reverse
+              |> list.index_map(fn(step, i) {
+                io.println(
+                  string.pad_start(int.to_string(before + i + 1), 4, " ")
+                  <> " "
+                  <> step.label
+                  <> case step.failed {
+                    True -> " (failed)"
+                    False -> ""
+                  }
+                  <> " "
+                  <> float.to_string(float.to_precision(step.confidence, 2))
+                  <> " "
+                  <> int.to_string(step.thinking_ms)
+                  <> "ms",
                 )
-                <> " "
-                <> step.label
-                <> case step.failed {
-                  True -> " (failed)"
-                  False -> ""
-                }
-                <> " "
-                <> float.to_string(float.to_precision(step.confidence, 2))
-                <> " "
-                <> int.to_string(thinking_ms)
-                <> "ms",
-              )
+              })
               case solved {
                 True -> promise.resolve(#(agent, Solved))
                 False -> loop(agent, the_eval, transport)

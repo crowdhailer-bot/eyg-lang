@@ -174,10 +174,43 @@ pub fn holes_can_be_listed_with_their_types_test() {
     agent.new("inc `n`", e.Vacant, environment.pure(), config)
     |> take_all([a.Function("n"), a.Builtin("int_add"), a.Call])
   assert agent.program_text(agent) == "(n) -> { !int_add(«?», ?) }"
-  assert list.length(agent.holes(agent.buffer)) == 2
+  assert list.length(a.holes(agent.buffer)) == 2
   let state = json.to_string(agent.state(agent))
   assert string.contains(
     state,
     "\"holes\":[\"1 (selected): Integer\",\"2: Integer\"]",
   )
+}
+
+pub fn several_holes_are_filled_in_one_request_test() {
+  let config =
+    options.Config(..options.default_config(), focus_holes: True, cursors: 2)
+  let agent =
+    agent.new("inc `n` by 1", e.Vacant, environment.pure(), config)
+    |> take_all([a.Function("n"), a.Builtin("int_add"), a.Call])
+  assert agent.program_text(agent) == "(n) -> { !int_add(«?», ⟨2:?⟩) }"
+  let #(request, offered) = agent.request(agent, jev.latest)
+  let assert Ok(jev.Choice(criteria:, ..)) =
+    list.key_find(request.questions, "hole_2")
+  let keys = list.map(criteria, fn(criterion) { criterion.0 })
+  assert list.contains(keys, "leave it for later")
+  assert list.contains(keys, "integer 1")
+  let choose = fn(key) {
+    jev.ChoiceAnswer(key, dict.from_list([#(key, 1.0)]), 1.0)
+  }
+  let evaluation =
+    jev.Evaluation(
+      "jev-1.13.0",
+      dict.from_list([
+        #("next_edit", choose("variable n")),
+        #("hole_2", choose("integer 1")),
+      ]),
+      jev.Usage(100, 1),
+    )
+  let assert Ok(agent) = agent.answer(agent, offered, evaluation, 50)
+  assert agent.program_text(agent) == "(n) -> { !int_add(n, «1») }"
+  let assert [extra, main, ..] = agent.history
+  assert main.input_tokens == 100
+  assert extra.label == "at hole 2: integer 1"
+  assert extra.input_tokens == 0
 }

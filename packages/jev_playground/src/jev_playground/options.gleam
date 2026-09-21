@@ -49,6 +49,8 @@ pub type Config {
     compound_instances: Int,
     /// List the type each hole must have in the state.
     hole_types: Bool,
+    /// In hole mode, how many holes Jev is asked to fill in one request.
+    cursors: Int,
   )
 }
 
@@ -64,6 +66,7 @@ pub fn default_config() {
     focus_holes: False,
     compound_instances: 5,
     hole_types: False,
+    cursors: 1,
   )
 }
 
