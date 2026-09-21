@@ -59,6 +59,72 @@ pub fn resolve(type_, bindings) {
   }
 }
 
+/// Resolve the variables of a scheme that were bound after it was made,
+/// as when the scope of a node is read once inference has finished.
+pub fn resolve_poly(poly: Poly, bindings) -> Poly {
+  case poly {
+    t.Var(#(False, i)) ->
+      case dict.get(bindings, i) {
+        Ok(Bound(mono)) -> unquantified(resolve(mono, bindings))
+        _ -> poly
+      }
+    t.Var(#(True, _)) -> poly
+    t.Fun(arg, eff, ret) ->
+      t.Fun(
+        resolve_poly(arg, bindings),
+        resolve_poly(eff, bindings),
+        resolve_poly(ret, bindings),
+      )
+    t.Integer -> t.Integer
+    t.Binary -> t.Binary
+    t.String -> t.String
+    t.Empty -> t.Empty
+    t.List(el) -> t.List(resolve_poly(el, bindings))
+    t.Record(rows) -> t.Record(resolve_poly(rows, bindings))
+    t.Union(rows) -> t.Union(resolve_poly(rows, bindings))
+    t.RowExtend(label, field, rest) ->
+      t.RowExtend(
+        label,
+        resolve_poly(field, bindings),
+        resolve_poly(rest, bindings),
+      )
+    t.EffectExtend(label, #(lift, reply), rest) ->
+      t.EffectExtend(
+        label,
+        #(resolve_poly(lift, bindings), resolve_poly(reply, bindings)),
+        resolve_poly(rest, bindings),
+      )
+    t.Never -> t.Never
+    t.Promise(inner) -> t.Promise(resolve_poly(inner, bindings))
+  }
+}
+
+// A resolved type as a scheme that quantifies none of its variables.
+fn unquantified(mono: Mono) -> Poly {
+  case mono {
+    t.Var(i) -> t.Var(#(False, i))
+    t.Fun(arg, eff, ret) ->
+      t.Fun(unquantified(arg), unquantified(eff), unquantified(ret))
+    t.Integer -> t.Integer
+    t.Binary -> t.Binary
+    t.String -> t.String
+    t.Empty -> t.Empty
+    t.List(el) -> t.List(unquantified(el))
+    t.Record(rows) -> t.Record(unquantified(rows))
+    t.Union(rows) -> t.Union(unquantified(rows))
+    t.RowExtend(label, field, rest) ->
+      t.RowExtend(label, unquantified(field), unquantified(rest))
+    t.EffectExtend(label, #(lift, reply), rest) ->
+      t.EffectExtend(
+        label,
+        #(unquantified(lift), unquantified(reply)),
+        unquantified(rest),
+      )
+    t.Never -> t.Never
+    t.Promise(inner) -> t.Promise(unquantified(inner))
+  }
+}
+
 pub fn poly(level, bindings) {
   let #(i, bindings) = new(level, bindings)
   #(t.Var(#(False, i)), bindings)

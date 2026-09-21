@@ -655,3 +655,14 @@ fn repeat_build(
     False -> repeat_build(times - 1, wrap(node), wrap)
   }
 }
+
+pub fn scope_is_resolved_with_what_is_learnt_later_test() {
+  let source = "(x) -> { let y = !int_add(x, 1)\n y }"
+  let tree = parse(source)
+  let analysis = j.check_with_references(j.pure(), dict.new(), tree)
+  let spans = ir.get_annotation(tree)
+  let assert Ok(last) = list.last(spans)
+  let assert Ok(scope) = j.scope_at(analysis, last)
+  assert list.key_find(scope, "x") == Ok(t.Integer)
+  assert list.key_find(scope, "y") == Ok(t.Integer)
+}

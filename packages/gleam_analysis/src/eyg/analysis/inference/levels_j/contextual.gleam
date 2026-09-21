@@ -140,7 +140,11 @@ pub fn type_at(inference: Analysis(_), desired) {
 
 pub fn scope_at(inference: Analysis(_), desired) {
   use #(_result, _type, _effect, scope) <- try(info_at(inference, desired))
-  Ok(scope)
+  Ok(
+    list.map(scope, fn(entry) {
+      #(entry.0, binding.resolve_poly(entry.1, inference.bindings))
+    }),
+  )
 }
 
 pub fn arity_at(inference: Analysis(_), desired) {
