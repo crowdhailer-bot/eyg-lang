@@ -1,5 +1,6 @@
 import eyg/interpreter/value as v
 import eyg/parser
+import gleam/bit_array
 import gleam/json
 import gleam/list
 import gleam/option.{Some}
@@ -193,4 +194,12 @@ pub fn compounds_are_built_from_the_context_test() {
     keys(options.NoContextCompounds),
     "context.domain_names({})",
   )
+}
+
+pub fn requests_can_be_answered_over_http_test() {
+  let #(status, body, _) =
+    dnsimple.respond(dnsimple.fixture(), "GET", "/v2/whoami", <<>>)
+  assert status == 200
+  let assert Ok(text) = bit_array.to_string(body)
+  assert string.contains(text, "ada@lovelace.dev")
 }

@@ -182,6 +182,20 @@ pub fn handle(
   }
 }
 
+/// Answer a DNSimple API request made over HTTP, for a page to call the account.
+pub fn respond(
+  account: Account,
+  method: String,
+  path: String,
+  body: BitArray,
+) -> #(Int, BitArray, Account) {
+  let method = http.parse_method(method) |> result.unwrap(http.Get)
+  serve(
+    account,
+    operation.Operation(method:, path:, query: None, headers: [], body:),
+  )
+}
+
 fn serve(
   account: Account,
   operation: operation.Operation(BitArray),
