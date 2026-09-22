@@ -10,6 +10,8 @@ import gleam/javascript/array
 import gleam/javascript/promise
 import gleam/json
 import gleam/list
+import gleam/option.{None, Some}
+import gleam/result
 import gleam/string
 import jev
 import jev_playground/action
@@ -17,6 +19,7 @@ import jev_playground/agent
 import jev_playground/client
 import jev_playground/environment
 import jev_playground/eval
+import jev_playground/hub
 import jev_playground/library
 import jev_playground/options
 import jev_playground/packages
@@ -62,14 +65,34 @@ pub type Summary {
   )
 }
 
+/// An eval with a context fetches it from the hub by content id and runs in the
+/// browser's environment, as the overlay agent does.
+/// Others have the libraries of `eyg_packages`.
+pub fn environment_for(
+  the_eval: eval.Eval,
+) -> promise.Promise(Result(environment.Environment, String)) {
+  case the_eval.context {
+    Some(cid) -> {
+      use source <- promise.map(hub.module(cid))
+      use source <- result.try(source)
+      library.context(source, environment.browser())
+    }
+    None ->
+      promise.resolve({
+        use bundle <- result.try(packages.bundle())
+        library.environment(bundle, environment.pure())
+      })
+  }
+}
+
 /// Run the eval and save every step.
 pub fn run(
   the_eval: eval.Eval,
   variant,
   transport,
 ) -> promise.Promise(Summary) {
-  let assert Ok(bundle) = packages.bundle()
-  let assert Ok(environment) = library.environment(bundle, environment.pure())
+  use environment <- promise.await(environment_for(the_eval))
+  let assert Ok(environment) = environment
   let assert Ok(start) = eval.start(the_eval)
   let config = eval.config(the_eval, variant)
   let agent = agent.new(the_eval.task, start, environment, config)
