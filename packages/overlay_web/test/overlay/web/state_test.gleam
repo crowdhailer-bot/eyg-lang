@@ -729,3 +729,19 @@ pub fn package_context_test() {
     state.status
   assert "\"hi\"" == response
 }
+
+pub fn dnsimple_is_called_through_the_hub_with_the_session_token_test() {
+  let code =
+    "perform DNSimple({method: GET({}), path: \"/v2/whoami\", query: None({}), headers: [], body: !string_to_binary(\"\")})"
+  let status = chat_completion("") |> with_code("abc", code) |> streaming
+  let state = State(..init_default(), status:)
+  let #(state, actions) = state.update(state, state.LlmStreamFinished(Ok(Nil)))
+  let assert state.Executing([call]) = state.status
+  let assert tools.Handling(..) = call.call
+  let assert [system.GetSessionStorageItem(key:, resume:)] = actions
+  assert key == "overlay.spotless.DNSimple"
+  let assert system.Fetch(request:, resume: _) = resume(Ok(Some("t0k3n")))
+  assert request.host == "eyg.test"
+  assert request.path == "/proxy/dnsimple/v2/whoami"
+  assert list.key_find(request.headers, "authorization") == Ok("Bearer t0k3n")
+}

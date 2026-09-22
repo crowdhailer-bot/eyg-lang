@@ -15,9 +15,12 @@ import eyg/parser/debug
 import eyg/parser/parser.{type Reason} as _
 import gleam/dynamic/decode
 import gleam/list
+import gleam/option.{Some}
 import gleam/string
 import multiformats/cid/v1
 import oas/generator/utils
+import ogre/operation
+import ogre/origin
 import overlay/llm/chat
 import overlay/llm/tool
 import pal/platform/browser
@@ -31,6 +34,8 @@ pub type Context {
     counter: Int,
     effects: List(system.Effect(#(Int, state.Value(Meta)))),
     context: cache.Module(Meta),
+    /// The hub, which proxies calls to services such as DNSimple.
+    origin: origin.Origin,
   )
 }
 
@@ -265,11 +270,15 @@ fn loop(
               let ctx = Context(..ctx, counter: id + 1, effects:)
               #(ctx, output, Handling(id, env, k))
             }
-            browser.Spotless(..) -> #(
-              ctx,
-              output,
-              Aborted("Spotless integration not supported in harness"),
-            )
+            browser.Spotless(service:, operation:) -> {
+              let id = ctx.counter
+              let effect =
+                spotless(service, operation, ctx.origin)
+                |> system.map(fn(v) { #(id, v) })
+              let effects = [effect, ..ctx.effects]
+              let ctx = Context(..ctx, counter: id + 1, effects:)
+              #(ctx, output, Handling(id, env, k))
+            }
           }
         }
         Error(reason) -> #(ctx, output, Exception(reason))
@@ -451,4 +460,52 @@ fn apply_effect(
     }
     _ -> #(ctx, progress)
   }
+}
+
+// Services such as DNSimple are called through the hub with a token from a
+// spotless authorization. The token is kept in session storage, so a person
+// authorizes a service once for a session.
+fn spotless(
+  service: harness.Service,
+  operation: operation.Operation(BitArray),
+  origin: origin.Origin,
+) -> system.Effect(state.Value(Meta)) {
+  let key = token_key(service)
+  use stored <- system.GetSessionStorageItem(key)
+  case stored {
+    Ok(Some(token)) -> service_call(service, operation, token, origin)
+    _ -> {
+      use result <- system.Spotless(service, origin)
+      case result {
+        Ok(response) -> {
+          let token = response.access_token
+          use _ <- system.SetSessionStorageItem(key, token)
+          service_call(service, operation, token, origin)
+        }
+        Error(reason) ->
+          system.Done(v.error(v.String("failed to authorize: " <> reason)))
+      }
+    }
+  }
+}
+
+/// Where the token for a service is kept for the session.
+pub fn token_key(service: harness.Service) -> String {
+  "overlay.spotless." <> harness.effect_label(service)
+}
+
+fn service_call(service, operation, token, origin) {
+  let authorized =
+    operation.set_header(operation, "authorization", "Bearer " <> token)
+  let request = case service {
+    harness.DNSimple ->
+      authorized
+      |> operation.prefix_path("/proxy/dnsimple")
+      |> operation.to_request(origin)
+    harness.GitHub ->
+      operation.to_request(authorized, origin.https("api.github.com"))
+    harness.Vimeo ->
+      operation.to_request(authorized, origin.https("api.vimeo.com"))
+  }
+  browser.fetch(request)
 }
