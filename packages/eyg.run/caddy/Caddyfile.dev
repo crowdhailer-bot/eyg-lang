@@ -23,6 +23,11 @@
 			header_up Host ollama.com
 		}
 	}
+	handle /v1/systemone {
+		reverse_proxy https://api.typesafe.ai {
+			header_up Host api.typesafe.ai
+		}
+	}
 	handle {
 		header Access-Control-Allow-Origin "*"
 		reverse_proxy frontend:8080

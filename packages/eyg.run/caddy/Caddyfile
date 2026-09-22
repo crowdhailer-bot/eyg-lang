@@ -24,6 +24,11 @@
 			header_up Host ollama.com
 		}
 	}
+	handle /v1/systemone {
+		reverse_proxy https://api.typesafe.ai {
+			header_up Host api.typesafe.ai
+		}
+	}
 	handle_path /overlay/* {
 		root * /var/overlay
 		try_files {path} {path}/index.html /index.html
