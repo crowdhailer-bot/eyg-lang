@@ -338,3 +338,11 @@ pub fn many_strings_are_asked_for_in_their_own_question_test() {
     list.key_find(request.questions, "string")
   assert list.contains(criteria, #("\"m\"", None))
 }
+
+pub fn an_edit_is_not_offered_when_its_text_has_no_candidates_test() {
+  let agent = new("")
+  assert agent.candidates(agent, options.LabelSlot) == []
+  assert !list.any(agent.options(agent), fn(o) {
+    options.slot(o.action) == Ok(options.LabelSlot)
+  })
+}

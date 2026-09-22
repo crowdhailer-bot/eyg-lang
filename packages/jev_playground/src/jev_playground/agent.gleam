@@ -176,6 +176,13 @@ pub fn options(agent: Agent) -> List(options.Option) {
   |> list.filter(fn(option) {
     !list.contains(repeated, options.without_name(option.action))
   })
+  // An edit waiting for text is asked for in its own question, which has to have candidates.
+  |> list.filter(fn(option) {
+    case options.slot(option.action) {
+      Ok(slot) -> candidates(agent, slot) != []
+      Error(Nil) -> True
+    }
+  })
   |> list.take(jev.max_choice_options)
 }
 
