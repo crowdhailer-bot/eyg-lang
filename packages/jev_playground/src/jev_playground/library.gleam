@@ -307,3 +307,12 @@ pub fn context(
     ),
   )
 }
+
+/// The release of `@standard` a program may reference, as published on the hub.
+pub fn standard_release() -> ir.Release {
+  let assert Ok(#(module, _)) =
+    v1.from_string(
+      "baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja",
+    )
+  ir.Release("standard", 1, module)
+}

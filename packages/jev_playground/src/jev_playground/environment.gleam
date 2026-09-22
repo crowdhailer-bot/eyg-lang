@@ -267,3 +267,18 @@ pub fn library_parameters(library: Library, path: String) -> List(String) {
     _ -> []
   }
 }
+
+/// Write a pinned release as its package name, `@standard:1:baguq…` becomes
+/// `@standard`, which is how code is read and written everywhere but the tree.
+pub fn shorten_packages(code: String, environment: Environment) -> String {
+  list.fold(environment.libraries, code, fn(code, library) {
+    let pinned =
+      "@"
+      <> library.name
+      <> ":"
+      <> int.to_string(library.release.version)
+      <> ":"
+      <> v1.to_string(library.release.module)
+    string.replace(code, pinned, "@" <> library.name)
+  })
+}
