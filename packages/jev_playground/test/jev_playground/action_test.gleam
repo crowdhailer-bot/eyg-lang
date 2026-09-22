@@ -61,6 +61,7 @@ pub fn every_action_round_trips_through_json_test() {
     a.Finish,
     a.Compound("variable x, select .f", [a.Variable("x"), a.Select("f")]),
     a.AtHole([1, 0], 2, a.Integer(1)),
+    a.Insert("context.count(todo)"),
   ]
   list.each(actions, fn(action) {
     let encoded = json.to_string(a.to_json(action))

@@ -6,6 +6,7 @@ import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/analysis/type_/binding/error
 import eyg/analysis/type_/isomorphic as t
 import eyg/ir/tree as ir
+import eyg/parser
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -75,6 +76,8 @@ pub type Action {
   Compound(name: String, steps: List(Action))
   /// Fill the hole at the path, numbered as it was shown, leaving the selection where it was.
   AtHole(path: List(Int), number: Int, action: Action)
+  /// Replace the selection with code, where `todo` is a hole, and move to its first hole.
+  Insert(code: String)
 }
 
 /// The option name shown to Jev, unique for each action.
@@ -128,6 +131,7 @@ pub fn key(action: Action) -> String {
     Compound(name:, ..) -> name
     AtHole(number:, action:, ..) ->
       "at hole " <> int.to_string(number) <> ": " <> key(action)
+    Insert(code) -> "insert " <> string.replace(code, "todo", "?")
   }
 }
 
@@ -254,6 +258,23 @@ pub fn apply(
       list.try_fold(steps, buffer, fn(buffer, step) {
         apply(step, buffer, environment)
       })
+    Insert(code) -> {
+      use tree <- result.try(
+        parser.all_from_string(code) |> result.replace_error(Nil),
+      )
+      case buffer.projection {
+        #(p.Exp(_), zoom) -> {
+          let exp = todo_holes(e.from_annotated(tree))
+          let inserted =
+            buffer.update_code(buffer, #(p.Exp(exp), zoom), context, refs)
+          case exp {
+            e.Vacant -> Ok(inserted)
+            _ -> Ok(buffer.next_vacant(inserted) |> result.unwrap(inserted))
+          }
+        }
+        _ -> Error(Nil)
+      }
+    }
     AtHole(path:, action:, ..) -> {
       let here = p.path(buffer.projection)
       use at <- result.try(buffer.focus_at(buffer, path))
@@ -464,6 +485,7 @@ pub fn to_json(action: Action) -> json.Json {
         #("name", json.string(name)),
         #("steps", json.array(steps, to_json)),
       ])
+    Insert(code) -> text("insert", code)
     AtHole(path:, number:, action:) ->
       with("at_hole", [
         #("path", json.array(path, json.int)),
@@ -569,6 +591,7 @@ pub fn decoder() -> decode.Decoder(Action) {
       use steps <- decode.field("steps", decode.list(decoder()))
       decode.success(Compound(name, steps))
     }
+    "insert" -> decode.map(text, Insert)
     "at_hole" -> {
       use path <- decode.field("path", decode.list(decode.int))
       use number <- decode.field("number", decode.int)
@@ -619,4 +642,34 @@ fn placeholder_cid() {
       "baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja",
     )
   module
+}
+
+/// Holes have no syntax, a scaffold marks them with the variable `todo`.
+pub fn todo_holes(source: e.Expression) -> e.Expression {
+  case source {
+    e.Variable("todo") -> e.Vacant
+    e.Block(assigns, then, open) ->
+      e.Block(
+        list.map(assigns, fn(assign) { #(assign.0, todo_holes(assign.1)) }),
+        todo_holes(then),
+        open,
+      )
+    e.Call(func, args) -> e.Call(todo_holes(func), list.map(args, todo_holes))
+    e.Function(params, body) -> e.Function(params, todo_holes(body))
+    e.List(items, tail) ->
+      e.List(list.map(items, todo_holes), option.map(tail, todo_holes))
+    e.Record(fields, original) ->
+      e.Record(
+        list.map(fields, fn(field) { #(field.0, todo_holes(field.1)) }),
+        option.map(original, todo_holes),
+      )
+    e.Select(from, label) -> e.Select(todo_holes(from), label)
+    e.Case(top, matches, otherwise) ->
+      e.Case(
+        todo_holes(top),
+        list.map(matches, fn(match) { #(match.0, todo_holes(match.1)) }),
+        option.map(otherwise, todo_holes),
+      )
+    _ -> source
+  }
 }

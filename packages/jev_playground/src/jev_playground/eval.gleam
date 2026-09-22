@@ -242,7 +242,7 @@ pub fn start(eval: Eval) -> Result(e.Expression, String) {
     "" -> Ok(e.Vacant)
     source ->
       parser.all_from_string(source)
-      |> result.map(fn(tree) { holes(e.from_annotated(tree)) })
+      |> result.map(fn(tree) { action.todo_holes(e.from_annotated(tree)) })
       |> result.replace_error("the start of " <> eval.slug <> " does not parse")
   }
 }
@@ -389,36 +389,6 @@ total"
 describe"
     "dnsimple-" <> question -> dnsimple_solution(question)
     _ -> ""
-  }
-}
-
-/// Holes have no syntax, a scaffold marks them with the variable `todo`.
-pub fn holes(source: e.Expression) -> e.Expression {
-  case source {
-    e.Variable("todo") -> e.Vacant
-    e.Block(assigns, then, open) ->
-      e.Block(
-        list.map(assigns, fn(assign) { #(assign.0, holes(assign.1)) }),
-        holes(then),
-        open,
-      )
-    e.Call(func, args) -> e.Call(holes(func), list.map(args, holes))
-    e.Function(params, body) -> e.Function(params, holes(body))
-    e.List(items, tail) ->
-      e.List(list.map(items, holes), option.map(tail, holes))
-    e.Record(fields, original) ->
-      e.Record(
-        list.map(fields, fn(field) { #(field.0, holes(field.1)) }),
-        option.map(original, holes),
-      )
-    e.Select(from, label) -> e.Select(holes(from), label)
-    e.Case(top, matches, otherwise) ->
-      e.Case(
-        holes(top),
-        list.map(matches, fn(match) { #(match.0, holes(match.1)) }),
-        option.map(otherwise, holes),
-      )
-    _ -> source
   }
 }
 

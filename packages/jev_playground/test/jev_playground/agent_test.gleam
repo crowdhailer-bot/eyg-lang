@@ -323,3 +323,8 @@ pub fn any_hole_can_be_moved_to_by_number_test() {
   let agent = take_all(agent, [option.action])
   assert agent.program_text(agent) == "(n) -> { !int_add(?, «?») }"
 }
+
+pub fn code_can_be_inserted_with_holes_test() {
+  let agent = take_all(new(""), [a.Insert("!int_add(todo, 1)")])
+  assert agent.program_text(agent) == "!int_add(«?», 1)"
+}
