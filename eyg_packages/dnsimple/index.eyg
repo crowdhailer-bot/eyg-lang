@@ -1,0 +1,453 @@
+let readme = "# DNSimple
+
+Answer questions about the DNSimple account and change it.
+Every function calls the DNSimple API, the platform adds the token.
+Functions that take no input are called with an empty record, `context.domains({})`.
+
+## Reading
+
+- `account({})` is the account, `{id, email, plan}`.
+- `domains({})` lists every domain, `{name, state, auto_renew, expires_on}`.
+  `state` is \"registered\" or \"hosted\", `expires_on` is \"2027-03-15\" or \"\" when not registered.
+- `domain_names({})` lists the name of every domain.
+- `domain(name)` is one domain.
+- `records(domain)` lists the DNS records of a domain, `{id, name, type, content, ttl, priority}`.
+  `name` is \"\" for the domain itself and \"www\" for www.example.com.
+- `records_of_type(domain, type)` keeps records of a type such as \"A\", \"MX\" or \"TXT\".
+- `record_values(domain, type)` is the content of each record of a type, the addresses of \"A\" records.
+- `name_servers(domain)` lists the name servers a registered domain is delegated to.
+- `is_available(domain)` is `True({})` when a domain can be registered.
+- `without_auto_renew({})` lists the names of domains that do not renew.
+- `expiring_before(date)` lists the names of domains that expire before a date such as \"2027-01-01\".
+
+## Changing
+
+- `add_record(domain, name, type, content)` adds a record and returns it, use \"\" as the name for the domain itself.
+- `change_record(domain, name, type, content)` sets the content of matching records and returns how many changed.
+- `remove_record(domain, name, type)` deletes matching records and returns how many were deleted.
+- `enable_auto_renew(domain)` and `disable_auto_renew(domain)` change whether a domain renews.
+
+## Lists
+
+- `count(items)` is the number of items, `sum(numbers)` adds numbers up.
+- `map(items, function)` applies a function to every item, `context.map(context.domain_names({}), context.name_servers)`.
+- `filter(items, keep)` keeps the items for which `keep` returns `True({})`.
+- `flatten(lists)` joins a list of lists.
+
+## Examples
+
+```eyg
+context.count(context.records(\"example.com\"))
+```
+
+```eyg
+context.sum(context.map(context.domain_names({}), (name) -> { context.count(context.records(name)) }))
+```
+"
+
+let abort = (reason) -> { !never(perform Abort(reason)) }
+
+// Decoding the JSON the API returns, the decoders are those of the `@json`
+// package so that the context references no other module.
+
+let move = (from, to) -> {
+  !list_fold(from, to, (item, acc) -> { [item, ..acc] })
+}
+
+let take = (parsed) -> {
+  match !list_pop(parsed) {
+    Ok({head, tail}) -> { {head, tail} }
+    Error(_) -> { abort("Unexpected end of JSON") }
+  }
+}
+
+let drop = !fix((self, parsed, under) -> {
+  match !list_pop(parsed) {
+    Ok({head, tail}) -> {
+      match !int_compare(head.depth, under) {
+        Gt(_) -> { self(tail, under) }
+        Eq(_) -> { parsed }
+        Lt(_) -> { parsed }
+      }
+    }
+    Error(_) -> { [] }
+  }
+})
+
+let boolean = (parsed) -> {
+  let {head, tail} = take(parsed)
+  match head.term {
+    True(_) -> { {value: True({}), rest: tail} }
+    False(_) -> { {value: False({}), rest: tail} }
+    | (_) -> { abort("Expected boolean") }
+  }
+}
+
+let integer = (parsed) -> {
+  let {head, tail} = take(parsed)
+  match head.term {
+    Integer(value) -> { {value, rest: tail} }
+    Null(_) -> { {value: 0, rest: tail} }
+    | (_) -> { abort("Expected integer") }
+  }
+}
+
+let string = (parsed) -> {
+  let {head, tail} = take(parsed)
+  match head.term {
+    String(value) -> { {value, rest: tail} }
+    Null(_) -> { {value: "", rest: tail} }
+    | (_) -> { abort("Expected string") }
+  }
+}
+
+let list = (item_decoder) -> {
+  (parsed) -> {
+    let {head, tail} = take(parsed)
+    match head.term {
+      Array(_) -> {
+        let under = head.depth
+        let read_items = !fix((self, rest, acc) -> {
+          match !list_pop(rest) {
+            Ok({head, tail}) -> {
+              match !int_compare(head.depth, under) {
+                Gt(_) -> {
+                  let decoded = item_decoder(rest)
+                  self(decoded.rest, [decoded.value, ..acc])
+                }
+                Eq(_) -> { {value: move(acc, []), rest} }
+                Lt(_) -> { {value: move(acc, []), rest} }
+              }
+            }
+            Error(_) -> { {value: move(acc, []), rest} }
+          }
+        })
+        read_items(tail, [])
+      }
+      | (_) -> { abort("Expected list") }
+    }
+  }
+}
+
+let do_field = !fix((self, parsed, at, seek) -> {
+  match !list_pop(parsed) {
+    Ok({head, tail}) -> {
+      match !int_compare(head.depth, at) {
+        Lt(_) -> { Error(seek) }
+        Eq(_) -> {
+          match head.term {
+            Field(label) -> {
+              match !equal(label, seek) {
+                True(_) -> { Ok(tail) }
+                False(_) -> { self(tail, at, seek) }
+              }
+            }
+            | (_) -> { self(tail, at, seek) }
+          }
+        }
+        Gt(_) -> { self(tail, at, seek) }
+      }
+    }
+    Error(_) -> { Error(seek) }
+  }
+})
+
+let field = (label, decoder) -> {
+  (parsed) -> {
+    let {head} = take(parsed)
+    match do_field(parsed, head.depth, label) {
+      Ok(rest) -> { decoder(rest).value }
+      Error(_) -> { abort(!string_append("Missing field ", label)) }
+    }
+  }
+}
+
+let object = (decoder) -> {
+  (parsed) -> {
+    let {head, tail} = take(parsed)
+    match head.term {
+      Object(_) -> { {value: decoder(tail), rest: drop(tail, head.depth)} }
+      | (_) -> { abort("Expected object") }
+    }
+  }
+}
+
+let parse = (body, decoder) -> {
+  match perform DecodeJSON(body) {
+    Ok(flat) -> {
+      handle Abort(
+        (message, _resume) -> { Error(message) },
+        (_) -> { Ok(decoder(flat).value) }
+      )
+    }
+    Error(reason) -> { Error(reason) }
+  }
+}
+
+let data = (decoder) -> { object(field("data", decoder)) }
+
+// Encoding request bodies.
+
+let quote = (value) -> {
+  let escaped = !string_replace(!string_replace(value, "\\", "\\\\"), "\"", "\\\"")
+  !string_append("\"", !string_append(escaped, "\""))
+}
+
+let json_object = (pairs) -> {
+  let joined = !list_fold(pairs, "", (pair, acc) -> {
+    let entry = !string_append(!string_append(quote(pair.key), ":"), pair.value)
+    match !equal(acc, "") {
+      True(_) -> { entry }
+      False(_) -> { !string_append(!string_append(acc, ","), entry) }
+    }
+  })
+  !string_append("{", !string_append(joined, "}"))
+}
+
+// Calling the API.
+
+let call = (method, path, query, body) -> {
+  let operation = {
+    method,
+    path,
+    query,
+    headers: [
+      {key: "accept", value: "application/json"},
+      {key: "content-type", value: "application/json"}
+    ],
+    body: !string_to_binary(body)
+  }
+  match perform DNSimple(operation) {
+    Ok(response) -> {
+      match !int_compare(response.status, 400) {
+        Lt(_) -> { response.body }
+        | (_) -> {
+          abort(!string_append("DNSimple answered with status ", !int_to_string(response.status)))
+        }
+      }
+    }
+    Error(reason) -> { abort(reason) }
+  }
+}
+
+let decoded = (body, decoder) -> {
+  match parse(body, decoder) {
+    Ok(value) -> { value }
+    Error(reason) -> { abort(reason) }
+  }
+}
+
+let get = (path, decoder) -> {
+  decoded(call(GET({}), path, Some("per_page=100"), ""), decoder)
+}
+
+let account = (_) -> {
+  get("/v2/whoami", data(object((fields) -> {
+    field("account", object((account) -> {
+      {
+        id: field("id", integer)(account),
+        email: field("email", string)(account),
+        plan: field("plan_identifier", string)(account)
+      }
+    }))(fields)
+  })))
+}
+
+let at = (suffix) -> {
+  !string_append(!string_append("/v2/", !int_to_string(account({}).id)), suffix)
+}
+
+let both = (a, b) -> {
+  match a {
+    True(_) -> { b }
+    False(_) -> { False({}) }
+  }
+}
+
+// Lists.
+
+let map = (items, function) -> {
+  move(!list_fold(items, [], (item, acc) -> { [function(item), ..acc] }), [])
+}
+
+let filter = (items, keep) -> {
+  move(!list_fold(items, [], (item, acc) -> {
+    match keep(item) {
+      True(_) -> { [item, ..acc] }
+      False(_) -> { acc }
+    }
+  }), [])
+}
+
+let count = (items) -> {
+  !list_fold(items, 0, (_, total) -> { !int_add(total, 1) })
+}
+
+let sum = (numbers) -> {
+  !list_fold(numbers, 0, (number, total) -> { !int_add(total, number) })
+}
+
+let flatten = (lists) -> {
+  move(!list_fold(lists, [], (items, acc) -> {
+    !list_fold(items, acc, (item, acc) -> { [item, ..acc] })
+  }), [])
+}
+
+// Domains.
+
+let domain_decoder = object((fields) -> {
+  {
+    name: field("name", string)(fields),
+    state: field("state", string)(fields),
+    auto_renew: field("auto_renew", boolean)(fields),
+    expires_on: field("expires_on", string)(fields)
+  }
+})
+
+let domains = (_) -> { get(at("/domains"), data(list(domain_decoder))) }
+
+let domain_names = (_) -> { map(domains({}), (domain) -> { domain.name }) }
+
+let domain = (name) -> { get(at(!string_append("/domains/", name)), data(domain_decoder)) }
+
+let registrar = (domain, suffix) -> {
+  at(!string_append(!string_append("/registrar/domains/", domain), suffix))
+}
+
+let name_servers = (domain) -> { get(registrar(domain, "/delegation"), data(list(string))) }
+
+let is_available = (domain) -> {
+  get(registrar(domain, "/check"), data(object(field("available", boolean))))
+}
+
+let without_auto_renew = (_) -> {
+  let off = filter(domains({}), (domain) -> {
+    match domain.auto_renew {
+      True(_) -> { False({}) }
+      False(_) -> { True({}) }
+    }
+  })
+  map(off, (domain) -> { domain.name })
+}
+
+let date_number = (date) -> {
+  match !int_parse(!string_replace(date, "-", "")) {
+    Ok(number) -> { number }
+    Error(_) -> { 0 }
+  }
+}
+
+let expiring_before = (date) -> {
+  let limit = date_number(date)
+  let expiring = filter(domains({}), (domain) -> {
+    match !equal(domain.expires_on, "") {
+      True(_) -> { False({}) }
+      False(_) -> {
+        match !int_compare(date_number(domain.expires_on), limit) {
+          Lt(_) -> { True({}) }
+          | (_) -> { False({}) }
+        }
+      }
+    }
+  })
+  map(expiring, (domain) -> { domain.name })
+}
+
+let enable_auto_renew = (domain) -> {
+  let _ = call(PUT({}), registrar(domain, "/auto_renewal"), None({}), "")
+  {}
+}
+
+let disable_auto_renew = (domain) -> {
+  let _ = call(DELETE({}), registrar(domain, "/auto_renewal"), None({}), "")
+  {}
+}
+
+// Records.
+
+let record_decoder = object((fields) -> {
+  {
+    id: field("id", integer)(fields),
+    name: field("name", string)(fields),
+    type: field("type", string)(fields),
+    content: field("content", string)(fields),
+    ttl: field("ttl", integer)(fields),
+    priority: field("priority", integer)(fields)
+  }
+})
+
+let records_path = (domain) -> {
+  at(!string_append(!string_append("/zones/", domain), "/records"))
+}
+
+let records = (domain) -> { get(records_path(domain), data(list(record_decoder))) }
+
+let records_of_type = (domain, type) -> {
+  filter(records(domain), (record) -> { !equal(record.type, type) })
+}
+
+let record_values = (domain, type) -> {
+  map(records_of_type(domain, type), (record) -> { record.content })
+}
+
+let add_record = (domain, name, type, content) -> {
+  let body = json_object([
+    {key: "name", value: quote(name)},
+    {key: "type", value: quote(type)},
+    {key: "content", value: quote(content)},
+    {key: "ttl", value: "3600"}
+  ])
+  decoded(call(POST({}), records_path(domain), None({}), body), data(record_decoder))
+}
+
+let matching = (domain, name, type) -> {
+  filter(records(domain), (record) -> {
+    both(!equal(record.name, name), !equal(record.type, type))
+  })
+}
+
+let record_path = (domain, record) -> {
+  !string_append(!string_append(records_path(domain), "/"), !int_to_string(record.id))
+}
+
+let change_record = (domain, name, type, content) -> {
+  let found = matching(domain, name, type)
+  let body = json_object([{key: "content", value: quote(content)}])
+  let _ = map(found, (record) -> {
+    call(PATCH({}), record_path(domain, record), None({}), body)
+  })
+  count(found)
+}
+
+let remove_record = (domain, name, type) -> {
+  let found = matching(domain, name, type)
+  let _ = map(found, (record) -> {
+    call(DELETE({}), record_path(domain, record), None({}), "")
+  })
+  count(found)
+}
+
+{
+  readme,
+  account,
+  domains,
+  domain_names,
+  domain,
+  records,
+  records_of_type,
+  record_values,
+  name_servers,
+  is_available,
+  without_auto_renew,
+  expiring_before,
+  add_record,
+  change_record,
+  remove_record,
+  enable_auto_renew,
+  disable_auto_renew,
+  count,
+  sum,
+  map,
+  filter,
+  flatten
+}
