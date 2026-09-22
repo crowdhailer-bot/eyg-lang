@@ -46,6 +46,16 @@ export default defineConfig({
         target: hub,
         changeOrigin: true,
       },
+      // The hub proxies DNSimple with the token from a spotless authorization.
+      '/proxy': {
+        target: hub,
+        changeOrigin: true,
+      },
+      // Jev is called with the person's own key, TypeSafe refuses browsers.
+      '/v1': {
+        target: 'https://api.typesafe.ai',
+        changeOrigin: true,
+      },
     },
     watch: {
       usePolling: true, // needed in Docker

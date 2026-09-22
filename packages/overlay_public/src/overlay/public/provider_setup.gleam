@@ -64,6 +64,7 @@ fn render_form(model: state.State) {
             ),
             provider_option(setup.provider, provider_setup.Ollama),
             provider_option(setup.provider, provider_setup.Mistral),
+            provider_option(setup.provider, provider_setup.Jev),
           ],
         ),
       ]),
