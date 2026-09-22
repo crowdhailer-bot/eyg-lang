@@ -1,9 +1,13 @@
 import eyg/interpreter/value as v
 import eyg/parser
+import gleam/json
 import gleam/list
+import gleam/string
+import jev_playground/agent
 import jev_playground/dnsimple
 import jev_playground/environment
 import jev_playground/library
+import jev_playground/options
 import jev_playground/packages
 import jev_playground/run
 import morph/editable as e
@@ -114,4 +118,37 @@ pub fn auto_renew_is_changed_test() {
     run("context.enable_auto_renew(\"notes.garden\")")
   let assert Ok(domain) = dnsimple.find_domain(account, "notes.garden")
   assert domain.auto_renew
+}
+
+fn agent(code, effects) {
+  let assert Ok(environment) = library.context(source(), environment.browser())
+  let code = case code {
+    "?" -> "todo"
+    code -> code
+  }
+  let assert Ok(tree) = parser.all_from_string(code)
+  let config =
+    options.Config(..options.default_config(), focus_holes: True, effects:)
+  agent.new("", e.from_annotated(tree), environment, config)
+}
+
+pub fn effects_can_be_hidden_test() {
+  let hidden =
+    agent.options(agent("?", options.NoEffects)) |> list.map(options.key)
+  assert !list.contains(hidden, "perform Print")
+  let shown =
+    agent.options(agent("?", options.EffectSignatures)) |> list.map(options.key)
+  assert list.contains(shown, "perform Print")
+}
+
+pub fn the_effects_of_each_call_can_be_shown_test() {
+  let program = "context.count(context.records(\"lovelace.dev\"))"
+  let state = fn(effects) {
+    json.to_string(agent.state(agent(program, effects)))
+  }
+  assert string.contains(
+    state(options.EffectNodes),
+    "context.records(\\\"lovelace.dev\\\") performs DNSimple",
+  )
+  assert !string.contains(state(options.EffectSignatures), "effects_performed")
 }

@@ -342,7 +342,7 @@ pub fn state(agent: Agent) -> Json {
       [
         #("task", json.string(task)),
         #("program", json.string(shown_program(agent))),
-        #("selection", selection_json(buffer, config.highlight)),
+        #("selection", selection_json(buffer, config)),
         #("type_errors", json.array(errors, json.string)),
       ],
       case environment.context_readme(environment) {
@@ -353,9 +353,20 @@ pub fn state(agent: Agent) -> Json {
         True -> [#("holes", json.array(hole_types(buffer), json.string))]
         False -> []
       },
-      case environment.effects {
-        [] -> []
-        _ -> [
+      case environment.effects, config.effects {
+        [], _ | _, options.NoEffects -> []
+        _, options.EffectNodes -> [
+          #(
+            "effects",
+            json.object(
+              list.map(environment.effect_signatures(environment), fn(effect) {
+                #(effect.0, json.string(effect.1))
+              }),
+            ),
+          ),
+          #("effects_performed", json.array(effect_nodes(buffer), json.string)),
+        ]
+        _, _ -> [
           #(
             "effects",
             json.object(
@@ -396,8 +407,8 @@ fn hole_types(buffer: Buffer) -> List(String) {
   })
 }
 
-fn selection_json(buffer: Buffer, highlight) {
-  let code = case highlight, buffer.projection {
+fn selection_json(buffer: Buffer, config: options.Config) {
+  let code = case config.highlight, buffer.projection {
     options.Excerpt, #(p.Exp(exp), _) | options.Unmarked, #(p.Exp(exp), _) -> [
       #("code", json.string(text.print(exp))),
     ]
@@ -411,9 +422,17 @@ fn selection_json(buffer: Buffer, highlight) {
     Ok(role) -> [#("role", json.string(role))]
     Error(Nil) -> []
   }
+  let performs = case config.effects {
+    options.EffectNodes ->
+      case effects_at(buffer, p.path(buffer.projection)) {
+        [] -> []
+        labels -> [#("performs", json.string(string.join(labels, ", ")))]
+      }
+    _ -> []
+  }
   json.object([
     #("kind", json.string(options.focus_kind(buffer))),
-    ..list.flatten([code, role, type_])
+    ..list.flatten([code, role, type_, performs])
   ])
 }
 
@@ -773,4 +792,67 @@ pub fn step_decoder() -> decode.Decoder(Step) {
     failed:,
     label:,
   ))
+}
+
+// Each call in the program that performs effects, as `context.records("a")
+// performs DNSimple`, in reading order.
+fn effect_nodes(buffer: Buffer) -> List(String) {
+  calls(p.rebuild(buffer.projection), [], [])
+  |> list.reverse
+  |> list.filter_map(fn(call) {
+    let #(exp, path) = call
+    case effects_at(buffer, path) {
+      [] -> Error(Nil)
+      labels -> Ok(short(exp) <> " performs " <> string.join(labels, ", "))
+    }
+  })
+}
+
+// Every call with its path, as `projection.path` gives it, outermost first.
+fn calls(exp, path, found) {
+  let child = fn(found, exp, index) {
+    calls(exp, list.append(path, index), found)
+  }
+  case exp {
+    e.Call(func, args) -> {
+      let found = child([#(exp, path), ..found], func, [0])
+      list.index_fold(args, found, fn(found, arg, i) {
+        child(found, arg, [i + 1])
+      })
+    }
+    e.Select(value, _) -> child(found, value, [0])
+    e.Function(params, body) -> child(found, body, [list.length(params)])
+    e.Block(assigns, then, _) -> {
+      let found =
+        list.index_fold(assigns, found, fn(found, assign, i) {
+          child(found, assign.1, [i, 1])
+        })
+      child(found, then, [list.length(assigns)])
+    }
+    e.List(items, _) ->
+      list.index_fold(items, found, fn(found, item, i) {
+        child(found, item, [i])
+      })
+    e.Record(fields, _) ->
+      list.index_fold(fields, found, fn(found, field, i) {
+        child(found, field.1, [i * 2 + 1])
+      })
+    e.Case(top, _, _) -> child(found, top, [0])
+    _ -> found
+  }
+}
+
+fn effects_at(buffer: Buffer, path) -> List(String) {
+  case infer.effect_at(buffer.analysis, list.reverse(path)) {
+    Ok(effect) -> environment.effect_labels(effect) |> list.unique
+    Error(Nil) -> []
+  }
+}
+
+fn short(exp) {
+  let code = text.print(exp) |> string.replace("\n", " ")
+  case string.length(code) > 60 {
+    True -> string.slice(code, 0, 57) <> "..."
+    False -> code
+  }
 }

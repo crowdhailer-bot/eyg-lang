@@ -175,3 +175,22 @@ pub fn context_readme(environment: Environment) -> Option(String) {
     _ -> None
   }
 }
+
+/// The labels of the effects in an effect row, `DNSimple` or `Abort`.
+pub fn effect_labels(row) -> List(String) {
+  case row {
+    t.EffectExtend(label, _, rest) -> [label, ..effect_labels(rest)]
+    _ -> []
+  }
+}
+
+/// The effects a function performs when it is given all its arguments.
+pub fn performs(type_, arity) -> List(String) {
+  case type_, arity {
+    t.Fun(_, effect, return), n if n > 1 ->
+      list.append(effect_labels(effect), performs(return, n - 1))
+    t.Fun(_, effect, _), _ -> effect_labels(effect)
+    _, _ -> []
+  }
+  |> list.unique
+}

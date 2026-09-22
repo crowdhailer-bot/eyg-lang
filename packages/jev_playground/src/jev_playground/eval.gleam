@@ -58,6 +58,7 @@ pub type Variant {
     check_compounds: Bool,
     hole_jumps: Bool,
     context_compounds: options.ContextCompounds,
+    effects: options.EffectsShown,
   )
 }
 
@@ -76,6 +77,7 @@ pub const improved = Variant(
   check_compounds: False,
   hole_jumps: False,
   context_compounds: options.ContextCalls,
+  effects: options.EffectSignatures,
 )
 
 /// Build a variant from flags, `compounds` adds all the mined compounds and
@@ -85,7 +87,8 @@ pub const improved = Variant(
 /// `mark=guillemets`, `mark=comments` or `mark=unmarked` changes how the selection is shown, the default is `excerpt`
 /// `checked` only offers compound instances that apply without a new type error
 /// `holejumps` offers to move to any hole by its number
-/// and `ctx=none` or `ctx=calls` sets how compounds are built from a context.
+/// `ctx=none` or `ctx=calls` sets how compounds are built from a context
+/// and `effects=hidden`, `signatures`, `calls` or `nodes` sets how effects are shown.
 pub fn variant(flags: List(String)) -> Variant {
   let number = fn(prefix, default) {
     list.find_map(flags, fn(flag) {
@@ -124,6 +127,13 @@ pub fn variant(flags: List(String)) -> Variant {
       }
     })
       |> result.unwrap(improved.context_compounds),
+    effects: list.find_map(flags, fn(flag) {
+      case flag {
+        "effects=" <> name -> options.effects_from_name(name)
+        _ -> Error(Nil)
+      }
+    })
+      |> result.unwrap(improved.effects),
   )
 }
 
@@ -142,6 +152,7 @@ pub fn variant_name(variant: Variant) {
     check_compounds:,
     hole_jumps:,
     context_compounds:,
+    effects:,
   ) = variant
   let all = list.length(compound.mined())
   let flags =
@@ -172,6 +183,7 @@ pub fn variant_name(variant: Variant) {
         context_compounds != improved.context_compounds,
         "ctx" <> options.context_compounds_name(context_compounds),
       ),
+      #(effects != improved.effects, "effects" <> options.effects_name(effects)),
     ]
     |> list.filter_map(fn(flag) {
       case flag.0 {
@@ -202,6 +214,7 @@ pub fn config(eval: Eval, variant: Variant) -> options.Config {
     check_compounds: variant.check_compounds,
     hole_jumps: variant.hole_jumps,
     context_compounds: variant.context_compounds,
+    effects: variant.effects,
   )
 }
 
@@ -653,6 +666,16 @@ pub fn run_decoder() -> decode.Decoder(Run) {
     decode.bool,
   )
   use hole_jumps <- decode.optional_field("hole_jumps", False, decode.bool)
+  use effects <- decode.optional_field(
+    "effects",
+    options.EffectSignatures,
+    decode.then(decode.string, fn(name) {
+      case options.effects_from_name(name) {
+        Ok(shown) -> decode.success(shown)
+        Error(Nil) -> decode.failure(options.EffectSignatures, "EffectsShown")
+      }
+    }),
+  )
   use context_compounds <- decode.optional_field(
     "context_compounds",
     options.ContextCalls,
@@ -691,6 +714,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
       check_compounds:,
       hole_jumps:,
       context_compounds:,
+      effects:,
     )
   case find(slug) {
     Ok(eval) -> decode.success(Run(eval:, variant:, steps:, outcome:))

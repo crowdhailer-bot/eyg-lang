@@ -62,7 +62,36 @@ pub type Config {
     hole_jumps: Bool,
     /// How compound moves are built from the module in scope as `context`.
     context_compounds: ContextCompounds,
+    /// How effects are shown and offered.
+    effects: EffectsShown,
   )
+}
+
+/// How effects are shown to Jev and offered as edits.
+pub type EffectsShown {
+  /// Effects are not listed or offered, a program reaches them through the context.
+  NoEffects
+  /// Every effect is listed with its types, and offered to perform or handle.
+  EffectSignatures
+  /// As signatures, and each call of a context function offered says what it performs.
+  EffectCalls
+  /// As calls, and the effects of the program and the selection are shown.
+  EffectNodes
+}
+
+pub fn effects_name(shown) {
+  case shown {
+    NoEffects -> "hidden"
+    EffectSignatures -> "signatures"
+    EffectCalls -> "calls"
+    EffectNodes -> "nodes"
+  }
+}
+
+pub fn effects_from_name(name) {
+  list.find([NoEffects, EffectSignatures, EffectCalls, EffectNodes], fn(shown) {
+    effects_name(shown) == name
+  })
 }
 
 /// How compound moves are built from the functions of the module in scope as `context`.
@@ -117,6 +146,7 @@ pub fn default_config() {
     check_compounds: False,
     hole_jumps: False,
     context_compounds: ContextCalls,
+    effects: EffectSignatures,
   )
 }
 
@@ -591,7 +621,10 @@ fn expression_values(
     list.map(variants, fn(variant) { variant.0 })
     |> list.append(vocabulary.tags)
     |> list.unique
-  let effects = environment.effect_signatures(environment)
+  let effects = case config.effects {
+    NoEffects -> []
+    _ -> environment.effect_signatures(environment)
+  }
   list.flatten([
     list.map(scope, fn(entry) {
       let #(name, poly) = entry
@@ -1135,7 +1168,7 @@ fn context_compounds(buffer: Buffer, config: Config, holes: Bool) {
           let arity = int.min(arity(type_), a.max_arity)
           case !holes || fits(expected, returned(type_, arity)) {
             False -> Error(Nil)
-            True -> Ok(context_call(label, type_, arity))
+            True -> Ok(context_call(label, type_, arity, config.effects))
           }
         })
       // Code already written can be passed to a function that takes one input,
@@ -1164,10 +1197,19 @@ fn context_compounds(buffer: Buffer, config: Config, holes: Bool) {
   }
 }
 
-fn context_call(label, type_, arity) {
+fn context_call(label, type_, arity, shown) {
   let reach = [a.Variable("context"), a.Select(label), a.CallTaking(arity)]
+  let performs = case shown, environment.performs(type_, arity) {
+    EffectCalls, [_, ..] as labels | EffectNodes, [_, ..] as labels ->
+      ", it performs " <> string.join(labels, ", ")
+    _, _ -> ""
+  }
   let description =
-    "Call `context." <> label <> "`, of type " <> environment.show_type(type_)
+    "Call `context."
+    <> label
+    <> "`, of type "
+    <> environment.show_type(type_)
+    <> performs
   case type_ {
     // A function that ignores its input is given `{}`.
     t.Fun(t.Var(_), _, _) if arity == 1 -> {
