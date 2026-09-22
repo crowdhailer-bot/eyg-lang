@@ -13,12 +13,12 @@ import gleam/list
 import gleam/result
 import gleam/string
 import jev_playground/action.{type Action}
-import jev_playground/client
 import jev_playground/compound
 import jev_playground/environment
 import jev_playground/packages
 import jev_playground/synthesis
 import morph/editable as e
+import plinth/javascript/performance
 import simplifile
 
 /// A top level definition of a file, built on its own.
@@ -38,7 +38,7 @@ pub fn main() {
   let definitions = definitions(environment)
   let results =
     list.map(definitions, fn(definition) {
-      let start = client.now()
+      let start = performance.now()
       let environment =
         environment.Environment(
           ..environment,
@@ -46,7 +46,7 @@ pub fn main() {
           bindings: definition.bindings,
         )
       let result = synthesis.script(definition.source, environment)
-      let ms = float.round(client.now() -. start)
+      let ms = float.round(performance.now() -. start)
       let outcome = case result {
         Ok(actions) -> int.to_string(list.length(actions)) <> " steps"
         Error(reason) -> reason

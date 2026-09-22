@@ -7,12 +7,12 @@ import gleam/int
 import gleam/io
 import gleam/list
 import jev_playground/agent
-import jev_playground/client
 import jev_playground/demo
 import jev_playground/library
 import jev_playground/mock
 import jev_playground/packages
 import morph/editable as e
+import plinth/javascript/performance
 
 pub fn main() {
   let assert [slug, count] = argv.load().arguments
@@ -27,14 +27,14 @@ pub fn main() {
     list.take(actions, count)
     |> list.index_fold(#(agent, #(0.0, 0.0, 0.0)), fn(acc, action, i) {
       let #(agent, #(o, m, a)) = acc
-      let t0 = client.now()
+      let t0 = performance.now()
       let offered = agent.options(agent)
-      let t1 = client.now()
+      let t1 = performance.now()
       let assert Ok(#(evaluation, ms)) =
         mock.answer(offered, agent.candidates(agent, _), action, i)
-      let t2 = client.now()
+      let t2 = performance.now()
       let assert Ok(agent) = agent.answer(agent, offered, evaluation, ms)
-      let t3 = client.now()
+      let t3 = performance.now()
       #(agent, #(o +. t1 -. t0, m +. t2 -. t1, a +. t3 -. t2))
     })
   let #(o, m, a) = totals

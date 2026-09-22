@@ -21,6 +21,7 @@ import jev_playground/library
 import jev_playground/options
 import jev_playground/packages
 import plinth/javascript/date
+import plinth/javascript/performance
 import plinth/node/process
 import simplifile
 
@@ -72,9 +73,9 @@ pub fn run(
   let assert Ok(start) = eval.start(the_eval)
   let config = eval.config(the_eval, variant)
   let agent = agent.new(the_eval.task, start, environment, config)
-  let started = client.now()
+  let started = performance.now()
   use #(agent, outcome) <- promise.map(loop(agent, the_eval, transport))
-  let seconds = { client.now() -. started } /. 1000.0
+  let seconds = { performance.now() -. started } /. 1000.0
   let steps = list.reverse(agent.history)
   let tokens = int.sum(list.map(steps, fn(step) { step.input_tokens }))
   let thinking = int.sum(list.map(steps, fn(step) { step.thinking_ms }))

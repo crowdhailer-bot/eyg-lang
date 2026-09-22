@@ -35,6 +35,7 @@ import plinth/browser/element
 import plinth/browser/location
 import plinth/browser/window
 import plinth/javascript/global
+import plinth/javascript/performance
 
 pub type Source {
   Live(transport: client.Transport, model: String)
@@ -187,7 +188,7 @@ fn new(source, task, environment) {
     generation: 0,
     offered: [],
     selections: [],
-    now: client.now(),
+    now: performance.now(),
     tokens: 0,
   )
 }
@@ -337,7 +338,7 @@ fn ask(model: Model) {
   case model.agent.finished || steps >= max_steps {
     True -> #(Model(..model, status: Finished, running: False), effect.none())
     False -> {
-      let now = client.now()
+      let now = performance.now()
       let #(request_effect, offered) = request(model)
       let model = Model(..model, status: Thinking(started: now), now:, offered:)
       #(model, effect.batch([request_effect, tick()]))
@@ -484,7 +485,7 @@ fn dispatch(message) {
 
 fn tick() {
   effect.from(fn(dispatch) {
-    global.set_timeout(100, fn() { dispatch(Ticked(client.now())) })
+    global.set_timeout(100, fn() { dispatch(Ticked(performance.now())) })
     Nil
   })
 }

@@ -9,6 +9,7 @@ import gleam/string
 import jev
 import ogre/operation
 import ogre/origin.{type Origin}
+import plinth/javascript/performance
 
 pub type Transport {
   /// Call TypeSafe with the key, for use outside the browser.
@@ -36,11 +37,11 @@ pub fn system_one(
 }
 
 fn send(request, attempt) {
-  let start = now()
+  let start = performance.now()
   use response <- promise.await(
     fetch.send_bits(request) |> promise.try_await(fetch.read_bytes_body),
   )
-  let thinking_ms = float.round(now() -. start)
+  let thinking_ms = float.round(performance.now() -. start)
   case response {
     Error(reason) -> promise.resolve(Error(string.inspect(reason)))
     Ok(response) ->
@@ -62,6 +63,3 @@ fn send(request, attempt) {
       }
   }
 }
-
-@external(javascript, "../jev_playground_ffi.mjs", "now")
-pub fn now() -> Float
