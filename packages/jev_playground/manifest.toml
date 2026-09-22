@@ -49,7 +49,7 @@ packages = [
   { name = "multiformats", version = "4.0.0", build_tools = ["gleam"], requirements = ["base32", "gleam_javascript", "gleam_stdlib", "gleb128"], otp_app = "multiformats", source = "hex", outer_checksum = "48D290956A6F21086EE9C0C2B69ACAF5DC0067EE7E4605990445E5BDC85B7AAE" },
   { name = "mysig", version = "0.6.0", build_tools = ["gleam"], requirements = ["filepath", "gleam_http", "gleam_javascript", "gleam_json", "gleam_stdlib", "glen", "glen_node", "javascript_mutable_reference", "lustre", "marceau", "midas", "midas_node", "plinth", "simplifile", "snag"], otp_app = "mysig", source = "hex", outer_checksum = "20DB393EDFFE0B8AD24C2DB5E0A1ED392E421DA42298F002BEA52AED02B71450" },
   { name = "ogre", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_http", "gleam_stdlib"], otp_app = "ogre", source = "hex", outer_checksum = "A27BAED51012CCC0E18A9E139DF8EB600CAEBA181403EC3FDC5C0EFA86A60FDC" },
-  { name = "plinth", version = "0.11.0", build_tools = ["gleam"], requirements = ["gleam_javascript", "gleam_json", "gleam_stdlib"], otp_app = "plinth", source = "hex", outer_checksum = "D30FDE8FC11EB76538AB498ACFF5399D0AE27993C74D63BE05AFE8CE80C4C839" },
+  { name = "plinth", version = "0.11.0", build_tools = ["gleam"], requirements = ["gleam_javascript", "gleam_json", "gleam_stdlib"], source = "git", repo = "https://github.com/crowdhailer-bot/plinth.git", commit = "b72102e444fd3e2f773b529bbd714b583427fd42" },
   { name = "shellout", version = "1.8.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "shellout", source = "hex", outer_checksum = "C416356D45151F298108C9DB9CD1EDE0313F620B5EDBB5766CD7237659D87841" },
   { name = "simplifile", version = "2.7.0", build_tools = ["gleam"], requirements = ["filepath", "gleam_stdlib"], otp_app = "simplifile", source = "hex", outer_checksum = "A2727627B063E87351934C7F7F008F2D1FDB16F6DE0B8C79F9E46459CFC9C164" },
   { name = "snag", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "snag", source = "hex", outer_checksum = "274F41D6C3ECF99F7686FDCE54183333E41D2C1CA5A3A673F9A8B2C7A4401077" },
@@ -80,7 +80,7 @@ morph = { path = "../morph" }
 multiformats = { version = ">= 4.0.0 and < 5.0.0" }
 mysig = { version = ">= 0.5.0 and < 1.0.0" }
 ogre = { version = ">= 1.1.0 and < 2.0.0" }
-plinth = { version = ">= 0.10.2 and < 1.0.0" }
+plinth = { git = "https://github.com/crowdhailer-bot/plinth.git", ref = "b72102e444fd3e2f773b529bbd714b583427fd42" }
 simplifile = { version = ">= 2.4.0 and < 3.0.0" }
 snag = { version = ">= 1.1.0 and < 2.0.0" }
 touch_grass = { version = ">= 0.2.5 and < 1.0.0" }
