@@ -2,10 +2,6 @@ export function now() {
   return performance.now();
 }
 
-export function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 // Keep the selection in view by scrolling the program panel vertically only.
 export function scroll_to_selection() {
   const selection = document.querySelector(".code .selection");

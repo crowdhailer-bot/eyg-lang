@@ -49,7 +49,7 @@ fn send(request, attempt) {
         Error(failure) ->
           case jev.retry_delay(failure, attempt), attempt < attempts {
             Ok(delay), True -> {
-              use Nil <- promise.await(sleep(delay))
+              use Nil <- promise.await(promise.wait(delay))
               send(request, attempt + 1)
             }
             _, _ -> {
@@ -65,6 +65,3 @@ fn send(request, attempt) {
 
 @external(javascript, "../jev_playground_ffi.mjs", "now")
 pub fn now() -> Float
-
-@external(javascript, "../jev_playground_ffi.mjs", "sleep")
-pub fn sleep(ms: Int) -> Promise(Nil)
