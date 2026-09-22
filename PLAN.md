@@ -136,3 +136,19 @@ Look at each file in the eyg_packages directory.
 - [x] Suggest and test any other improvements that will allow jev to work towards the correct solution quicker.
   - `packages/jev_playground/research/improvements.md`
   - [x] Stop a run after three choices in a row below 0.2 confidence, 1 of 357 solved runs did so
+
+### Contexts and effects
+
+- [x] Add effect nodes, what each call in the program performs, and measure the ways of showing effects
+  - `effect_at` in `eyg_analysis`, `effects=hidden|signatures|calls|nodes|callsonly` are variant flags
+- [x] Use Jev from the overlay page
+  - Jev is a provider, requests go to `/v1` on the page's origin, which forwards them to TypeSafe with the person's key
+  - Jev is shown what each new program returns and the answer is the program it finishes with
+- [x] Create the best DNSimple context, `eyg_packages/dnsimple`
+  - [x] Pass on the message DNSimple gives when a call fails
+  - [x] Take a host wherever a domain is taken, Jev wrote `api.lovelace.dev` as the domain in every run
+- [x] Evals that reference the context by content id, shared to the local hub, with no scaffold
+  - [x] The context readme is in the state and compounds are built from the functions of the context
+  - [x] Twenty questions a person might ask of their DNSimple account, each started from an empty program
+  - [x] Offer to select each argument of a complete program, and fix the selection after a wrap and after a function argument
+- [x] Review the ways of building compounds from a context and of showing effects, `packages/jev_playground/research/contexts.md`

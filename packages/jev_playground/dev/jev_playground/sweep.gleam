@@ -1,7 +1,7 @@
 //// Run evals with each variant against the real API and write a table of the results.
 //// Jev mostly picks the same edits for the same request, but close calls can flip,
 //// `repeat=3` runs each eval and variant three times.
-//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|ablations|holes|highlight|context|strategies|effects|final|experiments [repeat=3] [eval ...]`
+//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|ablations|holes|highlight|context|strategies|without|effects|final|experiments [repeat=3] [eval ...]`
 
 import argv
 import gleam/float
@@ -49,14 +49,22 @@ const context_variants = [
   ["ctx=none"],
 ]
 
-/// Each way of building compounds from a context, in hole mode.
+/// Each way of building compounds from a context, in hole mode, with Jev only
+/// shown what a program returns.
 const strategy_variants = [
-  ["holes", "ctx=none"],
-  ["holes", "ctx=bare"],
-  ["holes", "ctx=unit"],
-  ["holes", "ctx=calls"],
-  ["holes", "ctx=chains"],
-  ["holes", "ctx=examples"],
+  ["holes", "blind", "ctx=none"],
+  ["holes", "blind", "ctx=bare"],
+  ["holes", "blind", "ctx=unit"],
+  ["holes", "blind", "ctx=calls"],
+  ["holes", "blind", "ctx=chains"],
+  ["holes", "blind", "ctx=examples"],
+]
+
+/// The context readme and argument jumps each left out in turn.
+const without_variants = [
+  ["holes", "blind"],
+  ["holes", "blind", "noreadme"],
+  ["holes", "blind", "noargjumps"],
 ]
 
 /// Each way of showing effects, in hole mode.
@@ -68,12 +76,14 @@ const effect_variants = [
   ["holes", "effects=callsonly"],
 ]
 
-/// The best ways found of offering a context and showing effects, against each other.
+/// Each way of showing effects when Jev is only shown what a program returns,
+/// as a person asking a question would be.
 const final_variants = [
-  ["holes", "effects=hidden"],
-  ["holes", "effects=calls"],
-  ["holes", "effects=callsonly"],
-  ["holes", "effects=callsonly", "ctx=examples"],
+  ["holes", "blind", "effects=hidden"],
+  ["holes", "blind", "effects=signatures"],
+  ["holes", "blind", "effects=calls"],
+  ["holes", "blind", "effects=nodes"],
+  ["holes", "blind", "effects=callsonly"],
 ]
 
 /// Each earlier improvement turned off in turn.
@@ -124,6 +134,7 @@ pub fn main() {
     "ablations" -> ablation_variants
     "context" -> context_variants
     "strategies" -> strategy_variants
+    "without" -> without_variants
     "effects" -> effect_variants
     "final" -> final_variants
     "highlight" -> highlight_variants

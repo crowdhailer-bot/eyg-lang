@@ -38,6 +38,7 @@ Since the later sweeps a run stops after three choices in a row below 0.2 confid
 | `user-record-scaffold` | `user = (name, age) -> { todo }` | a record of two fields |
 | `total-scaffold` | a fold with the reducer's body missing | nested builtin calls selecting two fields |
 | `describe-scaffold` | a match with both branch bodies missing | a variable and a string |
+| `dnsimple-*` | empty, with the DNSimple context in scope | one to nine edits, twenty questions about an account |
 
 Tasks name everything the program needs in backticks, as Jev can only choose from what is offered.
 
@@ -47,6 +48,9 @@ No variant solved `fibonacci`, `list-functions` or `greeting` from an empty prog
 Every one of 28 runs of the first two ran out of steps, whichever of the 14 variants in the [experiments](#other-variants) was used.
 Jev is good at the next local edit and poor at holding a plan:
 it builds the first definition, then wraps, deletes and undoes rather than moving on to the next part of the task.
+
+With a context in scope, a module whose functions are shaped like the questions asked of it, an empty program is enough:
+twenty questions about a DNSimple account are all answered from `?`, see [contexts](./contexts.md).
 
 ## From a scaffold
 

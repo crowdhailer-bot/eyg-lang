@@ -26,6 +26,10 @@ The variants are listed at `eval.variant` and compared with `sweep`, see [evals]
 | No jumps to type errors, `nojumps` | No change, see [cursors and jumps](./cursors_and_jumps.md). |
 | Several holes per request, `cursors=2` or `3` | Worse: 10 of 18 against 16 of 18, with 74 to 100% more tokens, see [cursors and jumps](./cursors_and_jumps.md). |
 | Moving to any hole by its number, `holejumps` | Worse: 12 of 18 against 16 of 18, the moves were seldom chosen and their options shifted other choices. |
+| A context in scope with its functions offered as calls, `ctx=calls` and above | From an empty program, 16 of 60 DNSimple questions solved without context compounds, 59 with calls, 60 with the readme examples as well, see [contexts](./contexts.md#compounds-from-the-context). |
+| The readme of the context in the state | 60 of 60 against 55, with a third fewer tokens, before the readme examples were offered as compounds. |
+| Effects shown only on the context calls that perform them, `effects=callsonly` | As many questions solved as any other way of showing effects, for 40% fewer tokens than listing signatures. |
+| Selecting an argument of a complete program, and moving on from a wrap or a function argument | Four questions went from 0 of 15 blind runs each to 15 of 15, see [contexts](./contexts.md#what-blind-runs-found). |
 | Stop a run after three choices in a row below 0.2 confidence | Over 544 runs 1 of 357 solved runs and 65 of 187 unsolved runs did this, stopping there would have saved 18% of all input tokens. |
 
 ## Ablations

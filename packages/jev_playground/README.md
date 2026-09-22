@@ -14,12 +14,13 @@ Jev cannot generate text, so names and literals are offered from the task, the p
 | `vocabulary` | Names, labels, strings and numbers offered for edits that need text. |
 | `agent` | Builds the state and questions for a step and applies the chosen actions. No IO. |
 | `environment`, `library` | The effects, libraries and scope a program is checked and run in. |
+| `dnsimple` | A DNSimple account served from memory, for evals that use the DNSimple context. |
 | `run` | Evaluates programs, resolving library references, and runs their `tests`. |
 | `synthesis` | Finds the actions that build a target program, used for demos and research. |
 | `compound` | Compound moves mined from `eyg_packages`, see [compound moves](./research/compound_moves.md). |
 | `mock` | Stands in for Jev when replaying a script. |
 | `demo` | Scripted runs, each a task and the program Jev should reach. |
-| `eval` | Tasks with a starting program and a checker, and the variants they are run with. |
+| `eval` | Tasks with a starting program and a checker, and the variants they are run with. Twenty ask about a DNSimple account. |
 | `client` | Sends requests with fetch, directly or through the dev server proxy. |
 | `app`, `view`, `web` | The Lustre page. |
 
@@ -49,6 +50,9 @@ TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compound
 ```
 
 The flags of a variant are listed at `eval.variant`, `sweep` runs every eval with a set of variants and writes a table.
+An eval with a context fetches it from the hub by content id, `EYG_HUB` sets the hub, `http://localhost:8080` by default,
+and runs in the browser environment the overlay page gives, see [contexts](./research/contexts.md).
+`dnsimple` in the list of evals stands for the twenty questions about a DNSimple account.
 Jev mostly answers the same request the same way but close calls flip, `repeat=3` runs each eval and variant three times.
 A run stops after three choices in a row below 0.2 confidence, which 1 of 357 solved runs did.
 http://localhost:8095/eval/<file> replays a saved run, named without `.json`, at the speed Jev answered, the [evals](./research/evals.md) have the results.
