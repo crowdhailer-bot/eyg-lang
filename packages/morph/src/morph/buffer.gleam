@@ -311,6 +311,11 @@ pub fn call_with(buffer: Buffer) {
   fn(context, refs) { update_code(buffer, new, context, refs) }
 }
 
+pub fn call_with_taking(buffer: Buffer, arity) {
+  use new <- result.map(t.call_with_taking(buffer.projection, arity))
+  fn(context, refs) { update_code(buffer, new, context, refs) }
+}
+
 pub fn source(buffer: Buffer) {
   buffer.projection
   |> p.rebuild

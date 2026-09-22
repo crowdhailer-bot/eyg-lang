@@ -279,6 +279,19 @@ pub fn call_many(zip) {
   }
 }
 
+/// Pass the selection to a function still to be written, which takes `arity`
+/// arguments, the rest left as holes.
+pub fn call_with_taking(zip, arity) {
+  case zip {
+    #(p.Exp(arg), rest) ->
+      Ok(#(
+        p.Exp(e.Vacant),
+        [p.CallFn([arg, ..list.repeat(e.Vacant, arity - 1)]), ..rest],
+      ))
+    _ -> Error(Nil)
+  }
+}
+
 pub fn call_with(zip) {
   case zip {
     // #(p.Exp(e.Call(f, args)), rest) ->
