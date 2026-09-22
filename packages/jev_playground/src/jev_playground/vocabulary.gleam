@@ -75,7 +75,7 @@ pub fn from_task(task: String) -> Vocabulary {
     names: identifiers,
     labels: identifiers,
     tags:,
-    strings: quoted,
+    strings: list.append(quoted, literal_words(task)) |> list.unique,
     integers:,
     records:,
     patterns: list.filter_map(code, parse_pattern),
@@ -192,6 +192,38 @@ fn matches(pattern, text) {
       _ -> Error(Nil)
     }
   })
+}
+
+// Values people write without quotes: names and addresses with dots, dates and
+// capitalised codes such as MX. A name with a subdomain, www.notes.garden, is
+// also offered as its first label and the rest, www and notes.garden.
+// Code in backticks is left out, `list.fold` is not a value.
+fn literal_words(task) {
+  let assert Ok(code) = regexp.from_string("`[^`]*`|\"[^\"]*\"")
+  let text = regexp.replace(code, task, " ")
+  let dotted =
+    matches(
+      "(?<![\\w.@-])([A-Za-z0-9][A-Za-z0-9-]*(?:\\.[A-Za-z0-9-]+)+)",
+      text,
+    )
+  let dates = matches("(?<![\\w-])([0-9]{4}-[0-9]{2}-[0-9]{2})(?![\\w-])", text)
+  let codes = matches("(?<![\\w.])([A-Z]{1,5})(?![\\w.])", text)
+  let parts =
+    list.flat_map(dotted, fn(word) {
+      case string.split_once(word, ".") {
+        Ok(#(first, rest)) ->
+          case string.contains(rest, "."), is_address(word) {
+            True, False -> [first, rest]
+            _, _ -> []
+          }
+        Error(Nil) -> []
+      }
+    })
+  list.flatten([dotted, parts, dates, codes])
+}
+
+fn is_address(word) {
+  string.to_graphemes(word) |> list.all(fn(g) { is_digit(g) || g == "." })
 }
 
 // Words after `!` are builtins, not names to bind.
