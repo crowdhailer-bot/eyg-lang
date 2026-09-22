@@ -5,6 +5,7 @@ import eyg/interpreter/simple_debug
 import eyg/interpreter/state as istate
 import eyg/interpreter/value as v
 import eyg/parser/parser as _
+import gleam/float
 import gleam/http/response.{Response}
 import gleam/int
 import gleam/list
@@ -27,6 +28,7 @@ import overlay/web/libraries
 import overlay/web/provider_setup
 import overlay/web/tools
 import pal/system
+import plinth/javascript/performance
 import touch_grass/harness/browser as harness
 import touch_grass/http
 import touch_grass/interface
@@ -67,6 +69,8 @@ pub type AgentStatus {
     agent: agent.Agent,
     offered: List(options.Option),
     last: Option(jev_session.LastRun),
+    /// When the request went out, so the edit records how long Jev took.
+    asked: Float,
   )
   /// A complete program Jev built is running, `finished` when it is the answer.
   Answering(agent: agent.Agent, calls: tools.Calls, finished: Bool)
@@ -296,8 +300,8 @@ pub fn update(
     }
     JevAnswered(result) ->
       case state.status {
-        Building(agent:, offered:, last:) ->
-          jev_answered(state, agent, offered, last, result)
+        Building(agent:, offered:, last:, asked:) ->
+          jev_answered(state, agent, offered, last, asked, result)
         _ -> #(state, [])
       }
     CacheMessage(message) -> {
@@ -538,10 +542,17 @@ fn ask_jev(state: State, agent: agent.Agent, last) {
     system.Fetch(request, fn(result) {
       system.Done(JevAnswered(result.map_error(result, string.inspect)))
     })
-  #(State(..state, status: Building(agent:, offered:, last:)), [effect])
+  #(State(..state, status: Building(agent:, offered:, last:, asked: now())), [
+    effect,
+  ])
 }
 
-fn jev_answered(state: State, agent, offered, last, result) {
+fn now() {
+  performance.now()
+}
+
+fn jev_answered(state: State, agent, offered, last, asked, result) {
+  let thinking_ms = float.round(now() -. asked)
   let evaluation = case result {
     Ok(response) ->
       jev.system_one_response(response) |> result.map_error(string.inspect)
@@ -550,7 +561,7 @@ fn jev_answered(state: State, agent, offered, last, result) {
   case evaluation {
     Error(reason) -> jev_finished(state, "Jev could not be asked: " <> reason)
     Ok(evaluation) ->
-      case jev_session.answered(agent, offered, evaluation, last) {
+      case jev_session.answered(agent, offered, evaluation, last, thinking_ms) {
         Error(reason) -> jev_finished(state, reason)
         Ok(jev_session.Ask(agent)) -> ask_jev(state, agent, last)
         Ok(jev_session.Done(agent, output)) ->

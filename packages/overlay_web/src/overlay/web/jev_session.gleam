@@ -89,8 +89,9 @@ pub fn answered(
   offered: List(options.Option),
   evaluation: jev.Evaluation,
   last: Option(LastRun),
+  thinking_ms: Int,
 ) -> Result(Next, String) {
-  use agent <- result.map(agent.answer(agent, offered, evaluation, 0))
+  use agent <- result.map(agent.answer(agent, offered, evaluation, thinking_ms))
   next(agent, last)
 }
 
