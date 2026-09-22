@@ -1067,6 +1067,50 @@ pub fn dnsimple_questions() -> List(Eval) {
         |> v.LinkedList,
       ),
     ),
+    question(
+      "ttl-total",
+      "What do the ttls of every record on lovelace.dev add up to?",
+      answers(v.Integer(7 * 3600)),
+    ),
+    question(
+      "busiest",
+      "Which of my domains has the most DNS records?",
+      answers_any([v.String("lovelace.dev"), dnsimple.strings(["lovelace.dev"])]),
+    ),
+    question(
+      "cname-hosts",
+      "What do the CNAME records across all of my domains point at?",
+      answers(
+        dnsimple.strings(["lovelace.dev", "hosting.example.net", "babbage.org"]),
+      ),
+    ),
+    question(
+      "www-everywhere",
+      "Give every domain a www A record pointing at 203.0.113.9.",
+      changes("not every domain has a www record", fn(account) {
+        list.all(account.domains, fn(domain: dnsimple.Domain) {
+          list.any(domain.records, fn(r) {
+            r.name == "www" && r.type_ == "A" && r.content == "203.0.113.9"
+          })
+        })
+      }),
+    ),
+    question(
+      "drop-txt",
+      "Delete every TXT record in my account.",
+      changes("a TXT record is still there", fn(account) {
+        !list.any(account.domains, fn(domain: dnsimple.Domain) {
+          list.any(domain.records, fn(r) { r.type_ == "TXT" })
+        })
+      }),
+    ),
+    question(
+      "mail-hosts",
+      "Which mail servers does analytical.engineering use, in order of priority?",
+      answers(
+        dnsimple.strings(["aspmx.l.google.com", "alt1.aspmx.l.google.com"]),
+      ),
+    ),
   ]
 }
 
@@ -1137,6 +1181,51 @@ fn dnsimple_solution(question) {
       "@standard.list.flat_map(context.list_domains({}), (domain) -> {
   context.list_zone_records(domain.name)
 })"
+    "ttl-total" ->
+      "@standard.list.fold(context.list_zone_records(\"lovelace.dev\"), 0, (record, total) -> {
+  @standard.integer.add(total, record.ttl)
+})"
+    "busiest" ->
+      "@standard.list.fold(context.list_domains({}), {name: \"\", count: 0}, (domain, best) -> {
+  let count = @standard.list.length(context.list_zone_records(domain.name))
+  match !int_compare(count, best.count) {
+    Gt(_) -> { {name: domain.name, count: count} }
+    Eq(_) -> { best }
+    Lt(_) -> { best }
+  }
+}).name"
+    "cname-hosts" ->
+      "@standard.list.map(
+  @standard.list.filter(
+    (record) -> { !equal(record.type, \"CNAME\") },
+    @standard.list.flat_map(context.list_domains({}), (domain) -> {
+      context.list_zone_records(domain.name)
+    })
+  ),
+  (record) -> { record.content }
+)"
+    "www-everywhere" ->
+      "@standard.list.map(context.list_domains({}), (domain) -> {
+  context.create_zone_record(domain.name, {name: \"www\", type: \"A\", content: \"203.0.113.9\", ttl: 3600})
+})"
+    "drop-txt" ->
+      "@standard.list.map(context.list_domains({}), (domain) -> {
+  @standard.list.map(
+    @standard.list.filter(
+      (record) -> { !equal(record.type, \"TXT\") },
+      context.list_zone_records(domain.name)
+    ),
+    (record) -> { context.delete_zone_record(domain.name, record.id) }
+  )
+})"
+    "mail-hosts" ->
+      "@standard.list.map(
+  @standard.list.filter(
+    (record) -> { !equal(record.type, \"MX\") },
+    context.list_zone_records(\"analytical.engineering\")
+  ),
+  (record) -> { record.content }
+)"
     _ -> ""
   }
 }

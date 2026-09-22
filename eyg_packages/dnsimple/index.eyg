@@ -4,6 +4,7 @@ One function for each endpoint of the DNSimple API, named as DNSimple names the 
 Each calls the API, the platform adds the token and the account id.
 A function that takes no input is called with an empty record, `context.list_domains({})`.
 Work on lists with `@standard`, `@standard.list.length`, `map`, `filter`, `fold` and the rest.
+Answer with only what is asked, select the field of a record, `context.whoami({}).account.email` is the email address.
 
 ## Identity
 
@@ -58,6 +59,18 @@ and \"www\" for www.example.com.
 
 ```eyg
 context.create_zone_record(\"example.com\", {name: \"www\", type: \"A\", content: \"192.0.2.1\", ttl: 3600})
+```
+
+Changing or removing a record needs its id, so find it in the records of the zone first.
+
+```eyg
+@standard.list.map(
+  @standard.list.filter(
+    (record) -> { !equal(record.name, \"www\") },
+    context.list_zone_records(\"example.com\")
+  ),
+  (record) -> { context.delete_zone_record(\"example.com\", record.id) }
+)
 ```
 "
 let abort = (reason) -> { !never(perform Abort(reason)) }
