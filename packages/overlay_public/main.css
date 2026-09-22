@@ -61,7 +61,8 @@ pre {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 40rem) 1fr;
+  /* A program Jev writes wraps in the chat column, which is where the width goes. */
+  grid-template-columns: minmax(0, 52rem) 1fr;
   min-height: 100%;
   background: var(--color-base-100);
   color: var(--color-base-content);

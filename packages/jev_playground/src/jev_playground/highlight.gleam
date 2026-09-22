@@ -39,13 +39,14 @@ const keywords = ["let", "match", "perform", "handle", "import"]
 pub fn highlight(code) -> List(Element(a)) {
   let assert Ok(re) =
     regexp.from_string(
-      "\"(?:[^\"\\\\]|\\\\.)*\"|![a-z_][a-z0-9_]*|[a-z_][a-z0-9_]*|[A-Z][A-Za-z0-9]*|-?[0-9]+|\\?|\\s+|.",
+      "\"(?:[^\"\\\\]|\\\\.)*\"|@[a-z][a-z0-9_]*(?::[0-9]+:[a-z0-9]+)?|![a-z_][a-z0-9_]*|[a-z_][a-z0-9_]*|[A-Z][A-Za-z0-9]*|-?[0-9]+|\\?|\\s+|.",
     )
   regexp.scan(re, code)
   |> list.map(fn(match) {
     let token = match.content
     let class = case token {
       "\"" <> _ -> "string"
+      "@" <> _ -> "package"
       "!" <> _ -> "builtin"
       "?" -> "hole"
       _ ->

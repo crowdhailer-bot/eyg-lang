@@ -23,8 +23,9 @@ import ogre/origin
 import overlay/llm/tool
 import overlay/web/tools
 
-/// A question Jev cannot answer within this many requests is given up.
-pub const max_requests = 30
+/// A question Jev cannot answer within this many requests is given up. A
+/// question that maps over filtered records takes forty edits or so.
+pub const max_requests = 80
 
 /// Start from an empty program, filling one hole at a time.
 /// Effects are shown only on the calls of context functions that perform them,
