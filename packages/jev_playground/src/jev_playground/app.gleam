@@ -432,8 +432,9 @@ fn replayed(model: Model, step: agent.Step) {
   }
   let agent = case model.source {
     Recorded(run: Some(run), ..) -> {
-      let #(agent, solved) = eval.after_step(run.eval, agent, step)
-      agent.Agent(..agent, finished: agent.finished || solved)
+      let #(agent, verdict) =
+        eval.after_step(run.eval, run.variant, agent, step)
+      agent.Agent(..agent, finished: agent.finished || verdict != eval.Continue)
     }
     _ -> agent
   }

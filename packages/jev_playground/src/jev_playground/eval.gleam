@@ -59,6 +59,8 @@ pub type Variant {
     hole_jumps: Bool,
     context_compounds: options.ContextCompounds,
     effects: options.EffectsShown,
+    /// Jev is shown what a program returns but not whether it is right.
+    blind: Bool,
   )
 }
 
@@ -78,6 +80,7 @@ pub const improved = Variant(
   hole_jumps: False,
   context_compounds: options.ContextCalls,
   effects: options.EffectSignatures,
+  blind: False,
 )
 
 /// Build a variant from flags, `compounds` adds all the mined compounds and
@@ -88,7 +91,8 @@ pub const improved = Variant(
 /// `checked` only offers compound instances that apply without a new type error
 /// `holejumps` offers to move to any hole by its number
 /// `ctx=none` or `ctx=calls` sets how compounds are built from a context
-/// and `effects=hidden`, `signatures`, `calls` or `nodes` sets how effects are shown.
+/// `effects=hidden`, `signatures`, `calls`, `nodes` or `callsonly` sets how effects are shown
+/// and `blind` shows Jev what a program returns but not whether it is right.
 pub fn variant(flags: List(String)) -> Variant {
   let number = fn(prefix, default) {
     list.find_map(flags, fn(flag) {
@@ -134,6 +138,7 @@ pub fn variant(flags: List(String)) -> Variant {
       }
     })
       |> result.unwrap(improved.effects),
+    blind: list.contains(flags, "blind"),
   )
 }
 
@@ -153,6 +158,7 @@ pub fn variant_name(variant: Variant) {
     hole_jumps:,
     context_compounds:,
     effects:,
+    blind:,
   ) = variant
   let all = list.length(compound.mined())
   let flags =
@@ -184,6 +190,7 @@ pub fn variant_name(variant: Variant) {
         "ctx" <> options.context_compounds_name(context_compounds),
       ),
       #(effects != improved.effects, "effects" <> options.effects_name(effects)),
+      #(blind, "blind"),
     ]
     |> list.filter_map(fn(flag) {
       case flag.0 {
@@ -573,28 +580,93 @@ fn calls(
   })
 }
 
-/// The checker stands in for tests: it runs when Jev runs the tests, when Jev
-/// says it has finished and whenever the program is complete.
-/// Returns the agent, with any problem shown as test results, and whether it is solved.
-pub fn after_step(eval: Eval, agent: agent.Agent, step: agent.Step) {
+pub type Verdict {
+  Continue
+  Solved
+  /// Jev said it had finished, with a program the checker does not accept.
+  FinishedWrong(reason: String)
+}
+
+/// With an oracle the checker stands in for tests: it runs when Jev runs the
+/// tests, says it has finished or the program is complete, and says what is wrong.
+/// Blind, Jev is only shown what a complete program returns, as a person would
+/// see, and the eval is solved when Jev finishes with a program the checker accepts.
+pub fn after_step(
+  eval: Eval,
+  variant: Variant,
+  agent: agent.Agent,
+  step: agent.Step,
+) -> #(agent.Agent, Verdict) {
+  let source = buffer.source(agent.buffer)
   let asked = case step.action {
     action.RunTests | action.Finish -> True
     _ -> False
   }
-  case asked || agent.is_complete(agent) {
-    False -> #(agent, False)
-    True ->
-      case check(eval, buffer.source(agent.buffer), agent.environment) {
-        Ok(Nil) -> {
-          let results =
-            option.Some("1 of 1 tests passed, the checker accepted the program")
-          #(agent.Agent(..agent, test_results: results), True)
+  case variant.blind, step.action {
+    True, action.Finish ->
+      case agent.is_complete(agent) {
+        False -> {
+          let results = option.Some("the program still has holes")
+          #(
+            agent.Agent(..agent, test_results: results, finished: False),
+            Continue,
+          )
         }
-        Error(reason) -> {
-          let results = option.Some("The checker found a problem: " <> reason)
-          #(agent.Agent(..agent, test_results: results, finished: False), False)
+        True ->
+          case check(eval, source, agent.environment) {
+            Ok(Nil) -> #(agent, Solved)
+            Error(reason) -> #(agent, FinishedWrong(reason))
+          }
+      }
+    True, _ ->
+      case asked || agent.is_complete(agent) {
+        False -> #(agent, Continue)
+        True -> {
+          let results = option.Some(output(eval, source, agent.environment))
+          #(agent.Agent(..agent, test_results: results), Continue)
         }
       }
+    False, _ ->
+      case asked || agent.is_complete(agent) {
+        False -> #(agent, Continue)
+        True ->
+          case check(eval, source, agent.environment) {
+            Ok(Nil) -> {
+              let results =
+                option.Some(
+                  "1 of 1 tests passed, the checker accepted the program",
+                )
+              #(agent.Agent(..agent, test_results: results), Solved)
+            }
+            Error(reason) -> {
+              let results =
+                option.Some("The checker found a problem: " <> reason)
+              #(
+                agent.Agent(..agent, test_results: results, finished: False),
+                Continue,
+              )
+            }
+          }
+      }
+  }
+}
+
+/// What running a program shows a person, with no verdict on it.
+pub fn output(eval: Eval, source, environment: Environment) -> String {
+  let returned = case eval.context {
+    Some(_) ->
+      run.evaluate_handled(
+        source,
+        environment,
+        dnsimple.fixture(),
+        dnsimple.handle,
+      )
+      |> result.map(fn(pair) { pair.0 })
+    None -> run.evaluate(source, environment)
+  }
+  case returned {
+    Ok(value) -> "the program returned " <> simple_debug.inspect(value)
+    Error(reason) -> "the program failed: " <> reason
   }
 }
 
@@ -636,6 +708,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
     decode.bool,
   )
   use hole_jumps <- decode.optional_field("hole_jumps", False, decode.bool)
+  use blind <- decode.optional_field("blind", False, decode.bool)
   use effects <- decode.optional_field(
     "effects",
     options.EffectSignatures,
@@ -685,6 +758,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
       hole_jumps:,
       context_compounds:,
       effects:,
+      blind:,
     )
   case find(slug) {
     Ok(eval) -> decode.success(Run(eval:, variant:, steps:, outcome:))

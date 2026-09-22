@@ -35,6 +35,8 @@ pub type Outcome {
   OutOfSteps
   /// Three choices in a row below 0.2 confidence, 1 of 357 solved runs did this.
   Unsure
+  /// Jev said it had finished with a program the checker does not accept.
+  FinishedWrong(reason: String)
   Failed(reason: String)
 }
 
@@ -97,7 +99,7 @@ pub fn run(
   let config = eval.config(the_eval, variant)
   let agent = agent.new(the_eval.task, start, environment, config)
   let started = performance.now()
-  use #(agent, outcome) <- promise.map(loop(agent, the_eval, transport))
+  use #(agent, outcome) <- promise.map(loop(agent, the_eval, variant, transport))
   let seconds = { performance.now() -. started } /. 1000.0
   let steps = list.reverse(agent.history)
   let tokens = int.sum(list.map(steps, fn(step) { step.input_tokens }))
@@ -109,6 +111,7 @@ pub fn run(
     Solved -> "solved"
     OutOfSteps -> "out of steps"
     Unsure -> "stopped unsure"
+    FinishedWrong(reason) -> "finished wrong: " <> reason
     Failed(reason) -> "failed: " <> reason
   }
   let record =
@@ -194,7 +197,7 @@ fn requests(steps: List(agent.Step)) {
   list.count(steps, fn(step) { step.input_tokens > 0 })
 }
 
-fn loop(agent: agent.Agent, the_eval: eval.Eval, transport) {
+fn loop(agent: agent.Agent, the_eval: eval.Eval, variant, transport) {
   case requests(agent.history) >= the_eval.max_steps {
     True -> promise.resolve(#(agent, OutOfSteps))
     False -> {
@@ -208,7 +211,8 @@ fn loop(agent: agent.Agent, the_eval: eval.Eval, transport) {
             Error(reason) -> promise.resolve(#(agent, Failed(reason)))
             Ok(agent) -> {
               let assert [step, ..] = agent.history
-              let #(agent, solved) = eval.after_step(the_eval, agent, step)
+              let #(agent, verdict) =
+                eval.after_step(the_eval, variant, agent, step)
               list.take(agent.history, list.length(agent.history) - before)
               |> list.reverse
               |> list.index_map(fn(step, i) {
@@ -227,10 +231,13 @@ fn loop(agent: agent.Agent, the_eval: eval.Eval, transport) {
                   <> "ms",
                 )
               })
-              case solved, unsure(agent.history) {
-                True, _ -> promise.resolve(#(agent, Solved))
-                False, True -> promise.resolve(#(agent, Unsure))
-                False, False -> loop(agent, the_eval, transport)
+              case verdict, unsure(agent.history) {
+                eval.Solved, _ -> promise.resolve(#(agent, Solved))
+                eval.FinishedWrong(reason), _ ->
+                  promise.resolve(#(agent, FinishedWrong(reason)))
+                eval.Continue, True -> promise.resolve(#(agent, Unsure))
+                eval.Continue, False ->
+                  loop(agent, the_eval, variant, transport)
               }
             }
           }
