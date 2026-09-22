@@ -76,6 +76,24 @@ pub fn load(
   Ok(#(Bundle(..bundle, modules:), id))
 }
 
+/// Parse EYG source text into a module, without its positions.
+pub fn parse(text: String) -> Result(ir.Node(Nil), String) {
+  parser.all_from_string(text)
+  |> result.map(annotate(_, Nil))
+  |> result.replace_error("the source does not parse")
+}
+
+/// Decode a module shared as dag-json, as the hub serves it.
+pub fn decode(bits: BitArray) -> Result(ir.Node(Nil), String) {
+  json.parse_bits(bits, dag_json.decoder(Nil))
+  |> result.replace_error("the module is not dag-json")
+}
+
+/// The content id of a module, as the hub gives it.
+pub fn content_id(source: ir.Node(Nil), hash: fn(BitArray) -> BitArray) {
+  cid.from_tree(source, fn(bytes) { fn(k) { k(hash(bytes)) } })(fn(c) { c })
+}
+
 /// Load a module and release it under a name.
 pub fn release(bundle, name, version, path, read, hash) {
   use #(bundle, id) <- try(load(bundle, path, read, hash))
@@ -257,4 +275,35 @@ fn placeholder() {
       "baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja",
     )
   id
+}
+
+/// Put a module in scope as `context`, as the overlay agent does.
+/// The module's `readme` is shown to Jev with every request.
+pub fn context(
+  source: ir.Node(Nil),
+  environment: Environment,
+) -> Result(Environment, String) {
+  let analysis =
+    infer.check_with_references(
+      infer.pure(),
+      environment.references(environment),
+      source,
+    )
+  use Nil <- try(case infer.all_errors(analysis) {
+    [] -> Ok(Nil)
+    _ -> Error("the context does not type check")
+  })
+  use value <- try(
+    run.evaluate(annotate(source, []), environment)
+    |> result.map_error(fn(reason) {
+      "the context failed to evaluate: " <> reason
+    }),
+  )
+  Ok(
+    Environment(
+      ..environment,
+      scope: [#("context", infer.poly_type(analysis)), ..environment.scope],
+      values: [#("context", value), ..environment.values],
+    ),
+  )
 }

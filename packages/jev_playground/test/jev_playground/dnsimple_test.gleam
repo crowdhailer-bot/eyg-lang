@@ -1,0 +1,117 @@
+import eyg/interpreter/value as v
+import eyg/parser
+import gleam/list
+import jev_playground/dnsimple
+import jev_playground/environment
+import jev_playground/library
+import jev_playground/packages
+import jev_playground/run
+import morph/editable as e
+import multiformats/cid/v1
+import simplifile
+
+fn source() {
+  let assert Ok(text) = simplifile.read(dnsimple.context_path)
+  let assert Ok(source) = library.parse(text)
+  source
+}
+
+fn run(code) {
+  let assert Ok(environment) = library.context(source(), environment.browser())
+  let assert Ok(tree) = parser.all_from_string(code)
+  let program = e.to_annotated(e.from_annotated(tree), [])
+  run.evaluate_handled(
+    program,
+    environment,
+    dnsimple.fixture(),
+    dnsimple.handle,
+  )
+}
+
+fn value(code) {
+  let assert Ok(#(value, _)) = run(code)
+  value
+}
+
+pub fn the_context_is_the_one_shared_to_the_hub_test() {
+  assert v1.to_string(library.content_id(source(), packages.sha256))
+    == dnsimple.context_id
+}
+
+pub fn domains_are_listed_test() {
+  assert value("context.domain_names({})")
+    == dnsimple.strings([
+      "lovelace.dev", "analytical.engineering", "notes.garden", "babbage.org",
+    ])
+  assert value("context.count(context.domain_names({}))") == v.Integer(4)
+  assert value("context.account({}).email") == v.String("ada@lovelace.dev")
+}
+
+pub fn records_are_read_test() {
+  assert value("context.count(context.records(\"lovelace.dev\"))")
+    == v.Integer(7)
+  assert value("context.record_values(\"lovelace.dev\", \"A\")")
+    == dnsimple.strings(["93.184.215.14", "93.184.215.15", "198.51.100.1"])
+  assert value(
+      "context.count(context.records_of_type(\"analytical.engineering\", \"MX\"))",
+    )
+    == v.Integer(2)
+}
+
+pub fn the_registrar_is_asked_test() {
+  assert value("context.is_available(\"jev-rocks.com\")") == v.true()
+  assert value("context.is_available(\"lovelace.dev\")") == v.false()
+  assert value("context.count(context.name_servers(\"notes.garden\"))")
+    == v.Integer(4)
+  assert value("context.without_auto_renew({})")
+    == dnsimple.strings([
+      "analytical.engineering",
+      "notes.garden",
+      "babbage.org",
+    ])
+  assert value("context.expiring_before(\"2027-06-01\")")
+    == dnsimple.strings(["lovelace.dev", "analytical.engineering"])
+  assert value("context.domain(\"notes.garden\").expires_on")
+    == v.String("2028-01-02")
+}
+
+pub fn lists_compose_test() {
+  assert value(
+      "context.sum(context.map(context.domain_names({}), (name) -> { context.count(context.records(name)) }))",
+    )
+    == v.Integer(14)
+  assert value(
+      "context.count(context.flatten(context.map(context.domain_names({}), context.records)))",
+    )
+    == v.Integer(14)
+}
+
+pub fn records_are_changed_test() {
+  let assert Ok(#(_, account)) =
+    run("context.add_record(\"notes.garden\", \"www\", \"A\", \"203.0.113.7\")")
+  let assert Ok(domain) = dnsimple.find_domain(account, "notes.garden")
+  assert list.any(domain.records, fn(r) {
+    r.name == "www" && r.type_ == "A" && r.content == "203.0.113.7"
+  })
+  let assert Ok(#(removed, account)) =
+    run("context.remove_record(\"lovelace.dev\", \"old\", \"TXT\")")
+  assert removed == v.Integer(1)
+  let assert Ok(domain) = dnsimple.find_domain(account, "lovelace.dev")
+  assert !list.any(domain.records, fn(r) { r.name == "old" })
+  let assert Ok(#(changed, account)) =
+    run(
+      "context.change_record(\"lovelace.dev\", \"api\", \"A\", \"198.51.100.4\")",
+    )
+  assert changed == v.Integer(1)
+  let assert Ok(domain) = dnsimple.find_domain(account, "lovelace.dev")
+  assert list.any(domain.records, fn(r) {
+    r.name == "api" && r.content == "198.51.100.4"
+  })
+}
+
+pub fn auto_renew_is_changed_test() {
+  let assert Ok(#(_, account)) =
+    run("context.enable_auto_renew(\"notes.garden\")")
+  let assert Ok(domain) = dnsimple.find_domain(account, "notes.garden")
+  assert domain.auto_renew
+}
