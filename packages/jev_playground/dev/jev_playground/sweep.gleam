@@ -1,7 +1,7 @@
 //// Run evals with each variant against the real API and write a table of the results.
 //// Jev mostly picks the same edits for the same request, but close calls can flip,
 //// `repeat=3` runs each eval and variant three times.
-//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|ablations|holes|highlight|context|strategies|effects|experiments [repeat=3] [eval ...]`
+//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|ablations|holes|highlight|context|strategies|effects|final|experiments [repeat=3] [eval ...]`
 
 import argv
 import gleam/float
@@ -65,6 +65,15 @@ const effect_variants = [
   ["holes", "effects=signatures"],
   ["holes", "effects=calls"],
   ["holes", "effects=nodes"],
+  ["holes", "effects=callsonly"],
+]
+
+/// The best ways found of offering a context and showing effects, against each other.
+const final_variants = [
+  ["holes", "effects=hidden"],
+  ["holes", "effects=calls"],
+  ["holes", "effects=callsonly"],
+  ["holes", "effects=callsonly", "ctx=examples"],
 ]
 
 /// Each earlier improvement turned off in turn.
@@ -116,6 +125,7 @@ pub fn main() {
     "context" -> context_variants
     "strategies" -> strategy_variants
     "effects" -> effect_variants
+    "final" -> final_variants
     "highlight" -> highlight_variants
     "holes" -> hole_variants
     _ -> experiment_variants
