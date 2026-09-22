@@ -283,3 +283,21 @@ pub fn each_argument_of_a_complete_program_can_be_selected_test() {
     })
     == False
 }
+
+pub fn a_complete_program_can_be_wrapped_twice_test() {
+  let wrap = fn(agent, key) {
+    let assert Ok(option) =
+      list.find(agent.options(agent), fn(o) { options.key(o) == key })
+    let assert Ok(agent) = agent.take(agent, agent.scripted(option.action))
+    agent
+  }
+  let agent =
+    agent(
+      "context.map(context.domain_names({}), context.records)",
+      options.EffectSignatures,
+    )
+    |> wrap("wrap in context.flatten(..)")
+    |> wrap("wrap in context.count(..)")
+  assert agent.program_text(agent)
+    == "«context.count(\n  context.flatten(context.map(context.domain_names({}), context.records))\n)»"
+}

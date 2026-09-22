@@ -1449,7 +1449,13 @@ fn selected_type(type_) {
 fn context_wrap(label, type_) {
   let key = "wrap in context." <> label <> "(..)"
   named(
-    a.Compound(key, [a.CallWith, a.Variable("context"), a.Select(label)]),
+    // Ending on the call, as a function left selected is kept selected.
+    a.Compound(key, [
+      a.CallWith,
+      a.Variable("context"),
+      a.Select(label),
+      a.Parent,
+    ]),
     key,
     "Pass the selection to `context."
       <> label
