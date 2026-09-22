@@ -47,6 +47,16 @@ and \"www\" for www.example.com.
 ```
 
 ```eyg
+@standard.list.map(context.list_zone_records(\"example.com\"), (record) -> { record.content })
+```
+
+```eyg
+@standard.list.flat_map(context.list_domains({}), (domain) -> {
+  context.list_zone_records(domain.name)
+})
+```
+
+```eyg
 context.create_zone_record(\"example.com\", {name: \"www\", type: \"A\", content: \"192.0.2.1\", ttl: 3600})
 ```
 "

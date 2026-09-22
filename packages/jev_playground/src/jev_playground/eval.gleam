@@ -62,6 +62,7 @@ pub type Variant {
     effects: options.EffectsShown,
     /// Jev is shown what a program returns but not whether it is right.
     blind: Bool,
+    ask_answered: Bool,
     context_readme: Bool,
   )
 }
@@ -85,6 +86,7 @@ pub const improved = Variant(
   // Every effect of a context is reached through its functions.
   effects: options.EffectCallsOnly,
   blind: False,
+  ask_answered: True,
   context_readme: True,
 )
 
@@ -99,6 +101,7 @@ pub const improved = Variant(
 /// `ctx=none` or `ctx=calls` sets how compounds are built from a context
 /// `effects=hidden`, `signatures`, `calls`, `nodes` or `callsonly` sets how effects are shown
 /// `blind` shows Jev what a program returns but not whether it is right
+/// `noanswered` leaves `finish` among the edits rather than asking whether the program answers the task
 /// and `noreadme` leaves the readme of the context out of the state.
 pub fn variant(flags: List(String)) -> Variant {
   let number = fn(prefix, default) {
@@ -147,6 +150,7 @@ pub fn variant(flags: List(String)) -> Variant {
     })
       |> result.unwrap(improved.effects),
     blind: list.contains(flags, "blind"),
+    ask_answered: !list.contains(flags, "noanswered"),
     context_readme: !list.contains(flags, "noreadme"),
   )
 }
@@ -169,6 +173,7 @@ pub fn variant_name(variant: Variant) {
     context_compounds:,
     effects:,
     blind:,
+    ask_answered:,
     context_readme:,
   ) = variant
   let all = list.length(compound.mined())
@@ -203,6 +208,7 @@ pub fn variant_name(variant: Variant) {
       ),
       #(effects != improved.effects, "effects" <> options.effects_name(effects)),
       #(blind, "blind"),
+      #(!ask_answered, "noanswered"),
       #(!context_readme, "noreadme"),
     ]
     |> list.filter_map(fn(flag) {
@@ -239,6 +245,7 @@ pub fn config(eval: Eval, variant: Variant) -> options.Config {
     context_compounds: variant.context_compounds,
     effects: variant.effects,
     context_readme: variant.context_readme,
+    ask_answered: variant.ask_answered,
   )
 }
 
@@ -732,6 +739,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
     decode.bool,
   )
   use blind <- decode.optional_field("blind", False, decode.bool)
+  use ask_answered <- decode.optional_field("ask_answered", False, decode.bool)
   use context_readme <- decode.optional_field(
     "context_readme",
     True,
@@ -788,6 +796,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
       context_compounds:,
       effects:,
       blind:,
+      ask_answered:,
       context_readme:,
     )
   case find(slug) {

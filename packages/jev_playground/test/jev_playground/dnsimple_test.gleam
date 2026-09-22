@@ -185,10 +185,13 @@ pub fn the_effects_of_each_call_can_be_shown_test() {
 
 pub fn the_readme_examples_have_their_strings_as_holes_test() {
   let assert Some(readme) = environment.context_readme(environment())
-  let assert [first, second, third] = options.readme_examples(readme)
+  let assert [first, second, third, fourth, fifth] =
+    options.readme_examples(readme)
   assert first == "@standard.list.length(context.list_zone_records(todo))"
   assert string.starts_with(second, "@standard.list.filter(")
-  assert string.contains(third, "context.create_zone_record(todo, {")
+  assert string.starts_with(third, "@standard.list.map(")
+  assert string.starts_with(fourth, "@standard.list.flat_map(")
+  assert string.contains(fifth, "context.create_zone_record(todo, {")
 }
 
 pub fn compounds_are_built_from_the_context_test() {

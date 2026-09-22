@@ -60,11 +60,12 @@ const strategy_variants = [
   ["holes", "blind", "ctx=examples"],
 ]
 
-/// The context readme and argument jumps each left out in turn.
+/// The context readme, argument jumps and the answered question, each left out.
 const without_variants = [
   ["holes", "blind"],
   ["holes", "blind", "noreadme"],
   ["holes", "blind", "noargjumps"],
+  ["holes", "blind", "noanswered"],
 ]
 
 /// Each way of showing effects, in hole mode.

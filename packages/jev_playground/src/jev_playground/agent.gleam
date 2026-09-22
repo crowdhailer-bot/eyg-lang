@@ -700,9 +700,13 @@ pub fn request(
         _, _ -> Error(Nil)
       }
     })
-  let ran = case is_complete(agent), agent.test_results {
-    True, Some(_) -> [#(answered_id, answered_question())]
-    _, _ -> []
+  let ran = case
+    agent.config.ask_answered,
+    is_complete(agent),
+    agent.test_results
+  {
+    True, True, Some(_) -> [#(answered_id, answered_question())]
+    _, _, _ -> []
   }
   let request =
     jev.Request(model:, state: state(agent), questions: [

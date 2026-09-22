@@ -70,6 +70,9 @@ pub type Config {
     effects: EffectsShown,
     /// Show the readme of the context with every request.
     context_readme: Bool,
+    /// When the program is complete and has run, ask whether what it returned
+    /// answers the task, rather than leaving `finish` among the edits.
+    ask_answered: Bool,
   )
 }
 
@@ -170,6 +173,7 @@ pub fn default_config() {
     context_compounds: ContextExamples,
     effects: EffectSignatures,
     context_readme: True,
+    ask_answered: True,
   )
 }
 
