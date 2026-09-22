@@ -249,6 +249,8 @@ fn argument_jumps(
           _ -> []
         }
       })
+      // Selecting what is already selected is not an edit, and only a literal is
+      // worth going back to: an argument that is wrong is usually one of those.
       |> list.filter(fn(argument) {
         let #(exp, path) = argument
         path != p.path(buffer.projection)
