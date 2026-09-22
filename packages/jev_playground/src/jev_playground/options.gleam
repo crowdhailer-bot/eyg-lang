@@ -12,6 +12,7 @@ import gleam/dict
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/regexp
 import gleam/result
 import gleam/string
 import jev_playground/action.{type Action} as a
@@ -98,8 +99,16 @@ pub fn effects_from_name(name) {
 pub type ContextCompounds {
   /// The context is a variable like any other, selected from and called in separate steps.
   NoContextCompounds
-  /// A call of each function, `{}` given to a function that ignores its input.
+  /// A call of each function with a hole for each input.
+  ContextBareCalls
+  /// Calls, with `{}` given to a function that ignores its input.
+  ContextUnitCalls
+  /// Calls, and code already written passed to a function that takes one input.
   ContextCalls
+  /// As calls, and one function called with the result of another where it fits.
+  ContextChains
+  /// As calls, and the examples in the context readme with their strings as holes.
+  ContextExamples
 }
 
 pub type Highlight {
@@ -199,7 +208,7 @@ pub fn available(
       option(a.RunTests, "Run the `tests` of the program and see the results."),
       option(a.Finish, "The program is complete and satisfies the task."),
     ],
-    context_compounds(buffer, config, holes),
+    context_compounds(buffer, environment, config, holes),
     compounds(buffer, environment, vocabulary, config, singles),
     prioritise(singles, vocabulary.builtins),
   ])
@@ -1156,48 +1165,162 @@ pub fn context_functions(buffer: Buffer) -> List(#(String, t.Type(Int))) {
 
 // A call of each context function, offered wherever an expression can go.
 // In hole mode only the functions whose result fits the hole are offered.
-fn context_compounds(buffer: Buffer, config: Config, holes: Bool) {
+fn context_compounds(
+  buffer: Buffer,
+  environment: Environment,
+  config: Config,
+  holes: Bool,
+) {
   let expected = buffer.target_type(buffer)
-  case config.context_compounds, buffer.projection {
+  let strategy = config.context_compounds
+  case strategy, buffer.projection {
     NoContextCompounds, _ -> []
-    ContextCalls, #(p.Exp(exp), _) -> {
+    _, #(p.Exp(exp), _) -> {
       let functions = context_functions(buffer)
+      let fitting = fn(type_, arity) {
+        !holes || fits(expected, returned(type_, arity))
+      }
       let calls =
         list.filter_map(functions, fn(field) {
           let #(label, type_) = field
           let arity = int.min(arity(type_), a.max_arity)
-          case !holes || fits(expected, returned(type_, arity)) {
+          case fitting(type_, arity) {
             False -> Error(Nil)
-            True -> Ok(context_call(label, type_, arity, config.effects))
+            True ->
+              Ok(context_call(label, type_, arity, config.effects, strategy))
           }
         })
-      // Code already written can be passed to a function that takes one input,
-      // the records can be counted once written.
-      let wraps = case exp {
-        e.Vacant -> []
-        _ ->
-          list.filter_map(functions, fn(field) {
-            case field.1 {
-              t.Fun(input, _, return) ->
-                case arity(field.1), return {
-                  1, _ ->
-                    case fits(Ok(input), selected_type(expected)) {
-                      True -> Ok(context_wrap(field.0, field.1))
-                      False -> Error(Nil)
-                    }
-                  _, _ -> Error(Nil)
-                }
-              _ -> Error(Nil)
-            }
-          })
+      let wraps = case strategy, exp {
+        ContextBareCalls, _ | ContextUnitCalls, _ | _, e.Vacant -> []
+        _, _ -> context_wraps(functions, expected)
       }
-      list.append(calls, wraps)
+      let extra = case strategy {
+        ContextChains -> context_chains(functions, fitting, config.effects)
+        ContextExamples -> context_examples(environment)
+        _ -> []
+      }
+      list.flatten([calls, wraps, extra])
     }
-    ContextCalls, _ -> []
+    _, _ -> []
   }
 }
 
-fn context_call(label, type_, arity, shown) {
+// Code already written can be passed to a function that takes one input,
+// the records can be counted once written.
+fn context_wraps(functions: List(#(String, t.Type(Int))), expected) {
+  list.filter_map(functions, fn(field) {
+    case field.1 {
+      t.Fun(input, _, _) ->
+        case arity(field.1), fits(Ok(input), selected_type(expected)) {
+          1, True -> Ok(context_wrap(field.0, field.1))
+          _, _ -> Error(Nil)
+        }
+      _ -> Error(Nil)
+    }
+  })
+}
+
+// One function called with the result of another, where the result fits the
+// first input, `context.count(context.domains({}))`.
+fn context_chains(functions, fitting, shown) {
+  list.flat_map(functions, fn(outer) {
+    let #(outer_label, outer_type) = outer
+    let outer_arity = int.min(arity(outer_type), a.max_arity)
+    case outer_type, fitting(outer_type, outer_arity) {
+      t.Fun(input, _, _), True ->
+        list.filter_map(functions, fn(inner) {
+          let #(inner_label, inner_type) = inner
+          let inner_arity = int.min(arity(inner_type), a.max_arity)
+          case fits(Ok(input), returned(inner_type, inner_arity)) {
+            True ->
+              Ok(context_chain(
+                #(outer_label, outer_type, outer_arity),
+                #(inner_label, inner_type, inner_arity),
+                shown,
+              ))
+            False -> Error(Nil)
+          }
+        })
+      _, _ -> []
+    }
+  })
+}
+
+fn context_chain(outer, inner, shown) {
+  let #(outer_label, _outer_type, outer_arity) = outer
+  let #(inner_label, inner_type, inner_arity) = inner
+  let rest = list.repeat(", ?", outer_arity - 1) |> string.concat
+  let #(inner_steps, inner_code) = case inner_type {
+    t.Fun(t.Var(_), _, _) if inner_arity == 1 -> #(
+      [a.EmptyRecord],
+      "context." <> inner_label <> "({})",
+    )
+    _ -> #(
+      [],
+      "context."
+        <> inner_label
+        <> "("
+        <> list.repeat("?", inner_arity) |> string.join(", ")
+        <> ")",
+    )
+  }
+  let key = "context." <> outer_label <> "(" <> inner_code <> rest <> ")"
+  let steps =
+    list.flatten([
+      [a.Variable("context"), a.Select(outer_label), a.CallTaking(outer_arity)],
+      [a.Variable("context"), a.Select(inner_label), a.CallTaking(inner_arity)],
+      inner_steps,
+    ])
+  let performs = case shown, environment.performs(inner_type, inner_arity) {
+    EffectCalls, [_, ..] as labels | EffectNodes, [_, ..] as labels ->
+      ", it performs " <> string.join(labels, ", ")
+    _, _ -> ""
+  }
+  named(
+    a.Compound(key, steps),
+    key,
+    "Call `context."
+      <> outer_label
+      <> "` with the result of `context."
+      <> inner_label
+      <> "`"
+      <> performs
+      <> ".",
+  )
+}
+
+// The examples in the context readme, with their strings as holes.
+fn context_examples(environment: Environment) {
+  case environment.context_readme(environment) {
+    option.Some(readme) ->
+      readme_examples(readme)
+      |> list.map(fn(code) {
+        let key = "example " <> string.replace(code, "todo", "?")
+        named(
+          a.Compound(key, [a.Insert(code)]),
+          key,
+          "An example from the context readme, with its strings left as holes.",
+        )
+      })
+    option.None -> []
+  }
+}
+
+/// The code of each `eyg` block in a readme, its strings replaced by `todo`.
+pub fn readme_examples(readme: String) -> List(String) {
+  let assert Ok(blocks) = regexp.from_string("```eyg\\n([\\s\\S]*?)\\n```")
+  let assert Ok(strings) = regexp.from_string("\"(?:[^\"\\\\]|\\\\.)*\"")
+  regexp.scan(blocks, readme)
+  |> list.filter_map(fn(match) {
+    case match.submatches {
+      [option.Some(code), ..] ->
+        Ok(regexp.replace(strings, string.trim(code), "todo"))
+      _ -> Error(Nil)
+    }
+  })
+}
+
+fn context_call(label, type_, arity, shown, strategy) {
   let reach = [a.Variable("context"), a.Select(label), a.CallTaking(arity)]
   let performs = case shown, environment.performs(type_, arity) {
     EffectCalls, [_, ..] as labels | EffectNodes, [_, ..] as labels ->
@@ -1212,7 +1335,7 @@ fn context_call(label, type_, arity, shown) {
     <> performs
   case type_ {
     // A function that ignores its input is given `{}`.
-    t.Fun(t.Var(_), _, _) if arity == 1 -> {
+    t.Fun(t.Var(_), _, _) if arity == 1 && strategy != ContextBareCalls -> {
       // The call is left selected, to be selected from or passed on.
       let key = "context." <> label <> "({})"
       named(
@@ -1243,14 +1366,26 @@ fn returned(type_, arity) {
 pub fn context_compounds_name(strategy) {
   case strategy {
     NoContextCompounds -> "none"
+    ContextBareCalls -> "bare"
+    ContextUnitCalls -> "unit"
     ContextCalls -> "calls"
+    ContextChains -> "chains"
+    ContextExamples -> "examples"
   }
 }
 
 pub fn context_compounds_from_name(name) {
-  list.find([NoContextCompounds, ContextCalls], fn(strategy) {
-    context_compounds_name(strategy) == name
-  })
+  list.find(
+    [
+      NoContextCompounds,
+      ContextBareCalls,
+      ContextUnitCalls,
+      ContextCalls,
+      ContextChains,
+      ContextExamples,
+    ],
+    fn(strategy) { context_compounds_name(strategy) == name },
+  )
 }
 
 fn selected_type(type_) {

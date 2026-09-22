@@ -2,6 +2,7 @@ import eyg/interpreter/value as v
 import eyg/parser
 import gleam/json
 import gleam/list
+import gleam/option.{Some}
 import gleam/string
 import jev_playground/agent
 import jev_playground/dnsimple
@@ -151,4 +152,45 @@ pub fn the_effects_of_each_call_can_be_shown_test() {
     "context.records(\\\"lovelace.dev\\\") performs DNSimple",
   )
   assert !string.contains(state(options.EffectSignatures), "effects_performed")
+}
+
+pub fn the_readme_examples_have_their_strings_as_holes_test() {
+  let assert Ok(environment) = library.context(source(), environment.browser())
+  let assert Some(readme) = environment.context_readme(environment)
+  let assert [first, second] = options.readme_examples(readme)
+  assert first == "context.count(context.records(todo))"
+  assert string.starts_with(second, "context.sum(context.map(")
+}
+
+pub fn compounds_are_built_from_the_context_test() {
+  let keys = fn(strategy) {
+    let assert Ok(environment) =
+      library.context(source(), environment.browser())
+    let config =
+      options.Config(
+        ..options.default_config(),
+        focus_holes: True,
+        context_compounds: strategy,
+      )
+    agent.new("", e.Vacant, environment, config)
+    |> agent.options
+    |> list.map(options.key)
+  }
+  assert list.contains(keys(options.ContextCalls), "context.domain_names({})")
+  assert list.contains(
+    keys(options.ContextBareCalls),
+    "call context.domain_names(?)",
+  )
+  assert list.contains(
+    keys(options.ContextChains),
+    "context.count(context.domain_names({}))",
+  )
+  assert list.contains(
+    keys(options.ContextExamples),
+    "example context.count(context.records(?))",
+  )
+  assert !list.contains(
+    keys(options.NoContextCompounds),
+    "context.domain_names({})",
+  )
 }
