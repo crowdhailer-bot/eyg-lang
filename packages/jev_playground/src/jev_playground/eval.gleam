@@ -1105,11 +1105,54 @@ pub fn dnsimple_questions() -> List(Eval) {
       }),
     ),
     question(
+      "plan",
+      "What plan is my DNSimple account on?",
+      answers(v.String("teams-v1-monthly")),
+    ),
+    question(
+      "unregistered",
+      "Which of my domains are not registered with DNSimple?",
+      answers_any([
+        dnsimple.strings(["babbage.org"]),
+        v.LinkedList(
+          list.filter(dnsimple.fixture().domains, fn(d: dnsimple.Domain) {
+            !d.registered
+          })
+          |> list.map(dnsimple.domain_value),
+        ),
+      ]),
+    ),
+    question(
+      "api-ttl",
+      "What is the ttl of the api record on lovelace.dev?",
+      answers_any([v.Integer(3600), v.LinkedList([v.Integer(3600)])]),
+    ),
+    question(
+      "remove-blog",
+      "Delete the blog CNAME record from analytical.engineering.",
+      changes("the blog record is still there", fn(account) {
+        !has_record(account, "analytical.engineering", fn(r) {
+          r.name == "blog"
+        })
+      }),
+    ),
+    question(
+      "add-mx",
+      "Add an MX record to notes.garden pointing at mail.notes.garden.",
+      changes("notes.garden has no MX record", fn(account) {
+        has_record(account, "notes.garden", fn(r) {
+          r.type_ == "MX" && r.content == "mail.notes.garden"
+        })
+      }),
+    ),
+    question(
       "mail-hosts",
       "Which mail servers does analytical.engineering use, in order of priority?",
-      answers(
+      // The records or the hosts they name both answer it.
+      answers_any([
         dnsimple.strings(["aspmx.l.google.com", "alt1.aspmx.l.google.com"]),
-      ),
+        records_of("analytical.engineering", fn(r) { r.type_ == "MX" }),
+      ]),
     ),
   ]
 }
@@ -1218,6 +1261,33 @@ fn dnsimple_solution(question) {
     (record) -> { context.delete_zone_record(domain.name, record.id) }
   )
 })"
+    "plan" -> "context.whoami({}).account.plan"
+    "unregistered" ->
+      "@standard.list.map(
+  @standard.list.filter(
+    (domain) -> { !equal(domain.state, \"hosted\") },
+    context.list_domains({})
+  ),
+  (domain) -> { domain.name }
+)"
+    "api-ttl" ->
+      "@standard.list.map(
+  @standard.list.filter(
+    (record) -> { !equal(record.name, \"api\") },
+    context.list_zone_records(\"lovelace.dev\")
+  ),
+  (record) -> { record.ttl }
+)"
+    "remove-blog" ->
+      "@standard.list.map(
+  @standard.list.filter(
+    (record) -> { !equal(record.name, \"blog\") },
+    context.list_zone_records(\"analytical.engineering\")
+  ),
+  (record) -> { context.delete_zone_record(\"analytical.engineering\", record.id) }
+)"
+    "add-mx" ->
+      "context.create_zone_record(\"notes.garden\", {name: \"\", type: \"MX\", content: \"mail.notes.garden\", ttl: 3600})"
     "mail-hosts" ->
       "@standard.list.map(
   @standard.list.filter(
