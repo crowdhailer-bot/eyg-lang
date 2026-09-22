@@ -328,3 +328,13 @@ pub fn code_can_be_inserted_with_holes_test() {
   let agent = take_all(new(""), [a.Insert("!int_add(todo, 1)")])
   assert agent.program_text(agent) == "!int_add(«?», 1)"
 }
+
+pub fn many_strings_are_asked_for_in_their_own_question_test() {
+  let task =
+    "Choose one of \"a\" \"b\" \"c\" \"d\" \"e\" \"f\" \"g\" \"h\" \"i\" \"j\" \"k\" \"l\" \"m\""
+  let #(request, offered) = agent.request(new(task), jev.latest)
+  assert list.any(offered, fn(o) { o.action == a.ChooseString })
+  let assert Ok(jev.Choice(criteria:, ..)) =
+    list.key_find(request.questions, "string")
+  assert list.contains(criteria, #("\"m\"", None))
+}

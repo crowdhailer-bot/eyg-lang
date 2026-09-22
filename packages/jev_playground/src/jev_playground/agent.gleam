@@ -595,7 +595,12 @@ pub fn candidates(agent: Agent, slot) -> List(String) {
   |> list.take(jev.max_choice_options)
 }
 
-const slots = [options.NameSlot, options.LabelSlot]
+const slots = [
+  options.NameSlot,
+  options.LabelSlot,
+  options.StringSlot,
+  options.IntegerSlot,
+]
 
 /// The request for the next step and the options it offers.
 /// When an edit needs a name it is asked for in a second question, evaluated in
