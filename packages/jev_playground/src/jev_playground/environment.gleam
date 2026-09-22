@@ -5,10 +5,12 @@ import eyg/analysis/type_/binding
 import eyg/analysis/type_/binding/debug
 import eyg/analysis/type_/isomorphic as t
 import eyg/interpreter/state
+import eyg/interpreter/value as v
 import eyg/ir/tree as ir
 import gleam/dict.{type Dict}
 import gleam/int
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/regexp
 import gleam/string
 import multiformats/cid/v1
@@ -159,5 +161,17 @@ fn letter(i) {
     Ok(l), 0 -> l
     Ok(l), n -> l <> int.to_string(n)
     Error(Nil), _ -> "t"
+  }
+}
+
+/// The readme of the module in scope as `context`, if it has one.
+pub fn context_readme(environment: Environment) -> Option(String) {
+  case list.key_find(environment.values, "context") {
+    Ok(v.Record(fields)) ->
+      case dict.get(fields, "readme") {
+        Ok(v.String(readme)) -> Some(readme)
+        _ -> None
+      }
+    _ -> None
   }
 }
