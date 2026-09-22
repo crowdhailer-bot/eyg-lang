@@ -167,6 +167,10 @@ pub fn options(agent: Agent) -> List(options.Option) {
     True -> hole_jumps(agent.buffer, agent.environment)
     False -> []
   }
+  let jumps = case agent.config.focus_holes && agent.config.argument_jumps {
+    True -> list.append(jumps, argument_jumps(agent.buffer, agent.environment))
+    False -> jumps
+  }
   options.available(agent.buffer, agent.environment, vocabulary, agent.config)
   |> list.append(jumps, _)
   |> list.filter(fn(option) {
@@ -201,6 +205,55 @@ fn hole_jumps(
       description: "Select hole " <> int.to_string(number) <> place <> ".",
     )
   })
+}
+
+// When the program is complete each argument of a call can be selected by its
+// code, so one that is wrong can be changed after seeing what the program returns.
+fn argument_jumps(
+  buffer: Buffer,
+  environment: Environment,
+) -> List(options.Option) {
+  case a.holes(buffer) {
+    [] ->
+      calls(p.rebuild(buffer.projection), [], [])
+      |> list.reverse
+      |> list.flat_map(fn(call) {
+        case call {
+          #(e.Call(_, args), path) ->
+            list.index_map(args, fn(arg, i) {
+              #(arg, list.append(path, [i + 1]))
+            })
+          _ -> []
+        }
+      })
+      |> list.filter_map(fn(argument) {
+        let #(exp, path) = argument
+        use moved <- result.map(buffer.focus_at(buffer, path))
+        let place = case role(moved, environment) {
+          Ok(role) -> ", " <> role
+          Error(Nil) -> ""
+        }
+        let action = a.JumpTo(path, short(exp))
+        options.Option(
+          action:,
+          name: a.key(action),
+          description: "Select `"
+            <> short(exp)
+            <> "`"
+            <> place
+            <> ", to change it.",
+        )
+      })
+      |> list.fold([], fn(kept, option) {
+        case list.any(kept, fn(k: options.Option) { k.name == option.name }) {
+          True -> kept
+          False -> [option, ..kept]
+        }
+      })
+      |> list.reverse
+      |> list.take(8)
+    _ -> []
+  }
 }
 
 const remembered_states = 12

@@ -259,3 +259,27 @@ pub fn a_missing_domain_fails_with_the_message_of_the_api_test() {
   let assert Error(reason) = run("context.records(\"lovelace.com\")")
   assert string.contains(reason, "Zone `lovelace.com` not found")
 }
+
+pub fn each_argument_of_a_complete_program_can_be_selected_test() {
+  let program =
+    "context.change_record(\"api.lovelace.dev\", \"api\", \"A\", \"198.51.100.4\")"
+  let jumps =
+    agent.options(agent(program, options.EffectSignatures))
+    |> list.filter(fn(option) {
+      case option.action {
+        action.JumpTo(..) -> True
+        _ -> False
+      }
+    })
+  let assert [domain, ..] = jumps
+  assert domain.name == "select \"api.lovelace.dev\""
+  assert string.contains(domain.description, "`domain`")
+  assert list.length(jumps) == 4
+  assert list.any(agent.options(agent("?", options.EffectSignatures)), fn(o) {
+      case o.action {
+        action.JumpTo(..) -> True
+        _ -> False
+      }
+    })
+    == False
+}

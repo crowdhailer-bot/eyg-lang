@@ -61,6 +61,9 @@ pub type Config {
     check_compounds: Bool,
     /// Offer to move to any hole by its number.
     hole_jumps: Bool,
+    /// When the program is complete, offer to select each argument of a call
+    /// so one can be changed after seeing what the program returns.
+    argument_jumps: Bool,
     /// How compound moves are built from the module in scope as `context`.
     context_compounds: ContextCompounds,
     /// How effects are shown and offered.
@@ -160,6 +163,7 @@ pub fn default_config() {
     highlight: Excerpt,
     check_compounds: False,
     hole_jumps: False,
+    argument_jumps: True,
     context_compounds: ContextCalls,
     effects: EffectSignatures,
     context_readme: True,

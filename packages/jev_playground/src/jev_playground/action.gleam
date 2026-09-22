@@ -32,6 +32,8 @@ pub type Action {
   JumpToError(index: Int)
   /// Select a hole by its number in reading order, starting from 1.
   JumpToHole(number: Int)
+  /// Select the node at a path, shown to Jev by its code.
+  JumpTo(path: List(Int), code: String)
   // Values
   Variable(name: String)
   String(value: String)
@@ -91,6 +93,7 @@ pub fn key(action: Action) -> String {
     NextVacant -> "move to next ?"
     JumpToError(index) -> "jump to type error " <> int.to_string(index + 1)
     JumpToHole(number) -> "move to hole " <> int.to_string(number)
+    JumpTo(_, code) -> "select " <> code
     Variable(name) -> "variable " <> slot(name)
     String(value) -> "string " <> quote(value)
     Integer(value) -> "integer " <> int.to_string(value)
@@ -200,6 +203,7 @@ pub fn apply(
       use hole <- result.try(list.drop(holes(buffer), number - 1) |> list.first)
       moved(buffer, Ok(buffer.update_position(buffer, hole)))
     }
+    JumpTo(path, _) -> moved(buffer, buffer.focus_at(buffer, path))
     Variable(name) -> with(buffer.insert_variable(buffer), name)
     String(value) -> {
       use #(_, rebuild) <- result.map(buffer.insert_string(buffer))
@@ -414,7 +418,8 @@ pub fn is_navigation(action) {
     | Parent
     | NextVacant
     | JumpToError(_)
-    | JumpToHole(_) -> True
+    | JumpToHole(_)
+    | JumpTo(..) -> True
     _ -> False
   }
 }
@@ -436,6 +441,11 @@ pub fn to_json(action: Action) -> json.Json {
     NextVacant -> with("next_vacant", [])
     JumpToError(index) -> with("jump_to_error", [#("index", json.int(index))])
     JumpToHole(number) -> with("jump_to_hole", [#("number", json.int(number))])
+    JumpTo(path, code) ->
+      with("jump_to", [
+        #("path", json.array(path, json.int)),
+        #("code", json.string(code)),
+      ])
     Variable(name) -> text("variable", name)
     String(value) -> text("string", value)
     Integer(value) -> with("integer", [#("value", json.int(value))])
@@ -531,6 +541,11 @@ pub fn decoder() -> decode.Decoder(Action) {
       decode.field("index", decode.int, fn(i) { decode.success(JumpToError(i)) })
     "jump_to_hole" ->
       decode.field("number", decode.int, fn(i) { decode.success(JumpToHole(i)) })
+    "jump_to" -> {
+      use path <- decode.field("path", decode.list(decode.int))
+      use code <- decode.field("code", decode.string)
+      decode.success(JumpTo(path, code))
+    }
     "variable" -> decode.map(text, Variable)
     "string" -> decode.map(text, String)
     "integer" ->

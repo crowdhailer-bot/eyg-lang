@@ -57,6 +57,7 @@ pub type Variant {
     highlight: options.Highlight,
     check_compounds: Bool,
     hole_jumps: Bool,
+    argument_jumps: Bool,
     context_compounds: options.ContextCompounds,
     effects: options.EffectsShown,
     /// Jev is shown what a program returns but not whether it is right.
@@ -79,6 +80,7 @@ pub const improved = Variant(
   highlight: options.Excerpt,
   check_compounds: False,
   hole_jumps: False,
+  argument_jumps: True,
   context_compounds: options.ContextCalls,
   effects: options.EffectSignatures,
   blind: False,
@@ -92,6 +94,7 @@ pub const improved = Variant(
 /// `mark=guillemets`, `mark=comments` or `mark=unmarked` changes how the selection is shown, the default is `excerpt`
 /// `checked` only offers compound instances that apply without a new type error
 /// `holejumps` offers to move to any hole by its number
+/// `noargjumps` stops offering to select each argument of a complete program
 /// `ctx=none` or `ctx=calls` sets how compounds are built from a context
 /// `effects=hidden`, `signatures`, `calls`, `nodes` or `callsonly` sets how effects are shown
 /// `blind` shows Jev what a program returns but not whether it is right
@@ -127,6 +130,7 @@ pub fn variant(flags: List(String)) -> Variant {
       |> result.unwrap(improved.highlight),
     check_compounds: list.contains(flags, "checked"),
     hole_jumps: list.contains(flags, "holejumps"),
+    argument_jumps: !list.contains(flags, "noargjumps"),
     context_compounds: list.find_map(flags, fn(flag) {
       case flag {
         "ctx=" <> name -> options.context_compounds_from_name(name)
@@ -160,6 +164,7 @@ pub fn variant_name(variant: Variant) {
     highlight:,
     check_compounds:,
     hole_jumps:,
+    argument_jumps:,
     context_compounds:,
     effects:,
     blind:,
@@ -190,6 +195,7 @@ pub fn variant_name(variant: Variant) {
       ),
       #(check_compounds, "checked"),
       #(hole_jumps, "holejumps"),
+      #(!argument_jumps, "noargjumps"),
       #(
         context_compounds != improved.context_compounds,
         "ctx" <> options.context_compounds_name(context_compounds),
@@ -226,6 +232,7 @@ pub fn config(eval: Eval, variant: Variant) -> options.Config {
     highlight: variant.highlight,
     check_compounds: variant.check_compounds,
     hole_jumps: variant.hole_jumps,
+    argument_jumps: variant.argument_jumps,
     context_compounds: variant.context_compounds,
     effects: variant.effects,
     context_readme: variant.context_readme,
@@ -715,6 +722,12 @@ pub fn run_decoder() -> decode.Decoder(Run) {
     decode.bool,
   )
   use hole_jumps <- decode.optional_field("hole_jumps", False, decode.bool)
+  // Runs saved before argument jumps did not offer them.
+  use argument_jumps <- decode.optional_field(
+    "argument_jumps",
+    False,
+    decode.bool,
+  )
   use blind <- decode.optional_field("blind", False, decode.bool)
   use context_readme <- decode.optional_field(
     "context_readme",
@@ -768,6 +781,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
       highlight:,
       check_compounds:,
       hole_jumps:,
+      argument_jumps:,
       context_compounds:,
       effects:,
       blind:,

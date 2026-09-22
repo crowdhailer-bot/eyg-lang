@@ -130,6 +130,7 @@ pub fn run(
       #("highlight", json.string(options.highlight_name(variant.highlight))),
       #("check_compounds", json.bool(variant.check_compounds)),
       #("hole_jumps", json.bool(variant.hole_jumps)),
+      #("argument_jumps", json.bool(variant.argument_jumps)),
       #(
         "context_compounds",
         json.string(options.context_compounds_name(variant.context_compounds)),
