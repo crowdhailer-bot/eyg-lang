@@ -1,11 +1,15 @@
 import gleam/dict
+import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/set
+import gleam/string
+import jev_playground/highlight
 import lustre/attribute as a
 import lustre/element
 import lustre/element/html as h
 import lustre/event
+import midas/continuation
 import oas/generator/utils
 import overlay/llm/chat
 import overlay/llm/tool
@@ -116,7 +120,7 @@ fn render_chat(message: #(Int, chat.Message(tool.Call)), expanded) {
       let #(_front, doc) = pamphlet.parse(text)
       [
         h.div([a.class("message user")], [
-          lustre.to_lustre(doc, lustre.default())(fn(x) { x }),
+          lustre.to_lustre(doc, renderer())(fn(x) { x }),
         ]),
       ]
     }
@@ -146,7 +150,7 @@ fn render_chat(message: #(Int, chat.Message(tool.Call)), expanded) {
             }
         },
         h.div([a.class("message assistant")], [
-          lustre.to_lustre(doc, lustre.default())(fn(x) { x }),
+          lustre.to_lustre(doc, renderer())(fn(x) { x }),
         ]),
         ..list.map(tool_calls, fn(call) {
           let code = case dict.get(call.function.arguments, "code") {
@@ -161,7 +165,9 @@ fn render_chat(message: #(Int, chat.Message(tool.Call)), expanded) {
                   event.on_click(state.UserClickedShrink(index)),
                 ],
                 [
-                  h.pre([], [h.code([], [h.text(code)])]),
+                  h.pre([], [
+                    h.code([a.class("eyg")], highlight.highlight_program(code)),
+                  ]),
                 ],
               )
             False ->
@@ -172,7 +178,10 @@ fn render_chat(message: #(Int, chat.Message(tool.Call)), expanded) {
                 ],
                 [
                   h.pre([a.class("one-line")], [
-                    h.code([], [h.text(first_line(code))]),
+                    h.code(
+                      [a.class("eyg")],
+                      highlight.highlight_program(first_line(code)),
+                    ),
                   ]),
                 ],
               )
@@ -211,4 +220,36 @@ fn first_line(text) {
     splitter.new(["\r\n", "\n"])
     |> splitter.split(text)
   pre
+}
+
+// Code blocks are coloured, and the edits Jev made are a list the reader can
+// open and scroll through.
+fn renderer() {
+  lustre.Renderer(
+    ..lustre.default(),
+    render_code_block: fn(_attributes, language, content) {
+      let element = case language {
+        Some("eyg") ->
+          h.pre([a.class("code-block")], [
+            h.code([a.class("eyg")], highlight.highlight_program(content)),
+          ])
+        Some("edits") -> edits(content)
+        _ -> h.pre([a.class("code-block")], [h.code([], [h.text(content)])])
+      }
+      continuation.return(element)
+    },
+  )
+}
+
+fn edits(content: String) {
+  let lines = string.split(string.trim(content), "\n")
+  h.details([a.class("edits")], [
+    h.summary([], [
+      h.text(int.to_string(list.length(lines)) <> " edits"),
+    ]),
+    h.div(
+      [a.class("edit-list")],
+      list.map(lines, fn(line) { h.div([a.class("edit")], [h.text(line)]) }),
+    ),
+  ])
 }

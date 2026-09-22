@@ -60,6 +60,9 @@ const strategy_variants = [
   ["holes", "blind", "ctx=examples"],
 ]
 
+/// The defaults, as the overlay page asks a question.
+const default_variants = [["holes", "blind"]]
+
 /// The context readme, argument jumps and the answered question, each left out.
 const without_variants = [
   ["holes", "blind"],
@@ -136,6 +139,7 @@ pub fn main() {
     "context" -> context_variants
     "strategies" -> strategy_variants
     "without" -> without_variants
+    "default" -> default_variants
     "effects" -> effect_variants
     "final" -> final_variants
     "highlight" -> highlight_variants
