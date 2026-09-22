@@ -25,6 +25,8 @@ import overlay/web/tools
 pub const max_requests = 30
 
 /// Start from an empty program, filling one hole at a time.
+/// Effects are shown only on the calls of context functions that perform them,
+/// which solved as many questions as any way of showing them for the fewest tokens.
 pub fn new(question: String, context: cache.Module(tools.Meta)) -> agent.Agent {
   let environment =
     environment.Environment(
@@ -32,7 +34,12 @@ pub fn new(question: String, context: cache.Module(tools.Meta)) -> agent.Agent {
       scope: [#("context", context.type_)],
       values: [#("context", context.value)],
     )
-  let config = options.Config(..options.default_config(), focus_holes: True)
+  let config =
+    options.Config(
+      ..options.default_config(),
+      focus_holes: True,
+      effects: options.EffectCallsOnly,
+    )
   agent.new(question, e.Vacant, environment, config)
 }
 
