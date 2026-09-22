@@ -3,6 +3,7 @@ let readme = "# DNSimple
 Answer questions about the DNSimple account and change it.
 Every function calls the DNSimple API, the platform adds the token.
 Functions that take no input are called with an empty record, `context.domains({})`.
+Answer with only what is asked, select the field of a record, `context.account({}).email` is the email address of the account.
 
 ## Reading
 
@@ -42,6 +43,10 @@ A record name is relative to the domain or host given, \"\" is the domain or hos
 
 ```eyg
 context.count(context.records(\"example.com\"))
+```
+
+```eyg
+context.domain(\"example.com\").expires_on
 ```
 
 ```eyg

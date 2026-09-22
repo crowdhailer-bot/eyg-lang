@@ -188,10 +188,11 @@ pub fn the_effects_of_each_call_can_be_shown_test() {
 pub fn the_readme_examples_have_their_strings_as_holes_test() {
   let assert Ok(environment) = library.context(source(), environment.browser())
   let assert Some(readme) = environment.context_readme(environment)
-  let assert [first, second, third] = options.readme_examples(readme)
+  let assert [first, second, third, fourth] = options.readme_examples(readme)
   assert first == "context.count(context.records(todo))"
-  assert second == "context.change_record(todo, todo, todo, todo)"
-  assert string.starts_with(third, "context.sum(context.map(")
+  assert second == "context.domain(todo).expires_on"
+  assert third == "context.change_record(todo, todo, todo, todo)"
+  assert string.starts_with(fourth, "context.sum(context.map(")
 }
 
 pub fn compounds_are_built_from_the_context_test() {
