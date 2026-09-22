@@ -65,6 +65,8 @@ pub type Config {
     context_compounds: ContextCompounds,
     /// How effects are shown and offered.
     effects: EffectsShown,
+    /// Show the readme of the context with every request.
+    context_readme: Bool,
   )
 }
 
@@ -160,6 +162,7 @@ pub fn default_config() {
     hole_jumps: False,
     context_compounds: ContextCalls,
     effects: EffectSignatures,
+    context_readme: True,
   )
 }
 

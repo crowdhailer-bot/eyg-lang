@@ -61,6 +61,7 @@ pub type Variant {
     effects: options.EffectsShown,
     /// Jev is shown what a program returns but not whether it is right.
     blind: Bool,
+    context_readme: Bool,
   )
 }
 
@@ -81,6 +82,7 @@ pub const improved = Variant(
   context_compounds: options.ContextCalls,
   effects: options.EffectSignatures,
   blind: False,
+  context_readme: True,
 )
 
 /// Build a variant from flags, `compounds` adds all the mined compounds and
@@ -92,7 +94,8 @@ pub const improved = Variant(
 /// `holejumps` offers to move to any hole by its number
 /// `ctx=none` or `ctx=calls` sets how compounds are built from a context
 /// `effects=hidden`, `signatures`, `calls`, `nodes` or `callsonly` sets how effects are shown
-/// and `blind` shows Jev what a program returns but not whether it is right.
+/// `blind` shows Jev what a program returns but not whether it is right
+/// and `noreadme` leaves the readme of the context out of the state.
 pub fn variant(flags: List(String)) -> Variant {
   let number = fn(prefix, default) {
     list.find_map(flags, fn(flag) {
@@ -139,6 +142,7 @@ pub fn variant(flags: List(String)) -> Variant {
     })
       |> result.unwrap(improved.effects),
     blind: list.contains(flags, "blind"),
+    context_readme: !list.contains(flags, "noreadme"),
   )
 }
 
@@ -159,6 +163,7 @@ pub fn variant_name(variant: Variant) {
     context_compounds:,
     effects:,
     blind:,
+    context_readme:,
   ) = variant
   let all = list.length(compound.mined())
   let flags =
@@ -191,6 +196,7 @@ pub fn variant_name(variant: Variant) {
       ),
       #(effects != improved.effects, "effects" <> options.effects_name(effects)),
       #(blind, "blind"),
+      #(!context_readme, "noreadme"),
     ]
     |> list.filter_map(fn(flag) {
       case flag.0 {
@@ -222,6 +228,7 @@ pub fn config(eval: Eval, variant: Variant) -> options.Config {
     hole_jumps: variant.hole_jumps,
     context_compounds: variant.context_compounds,
     effects: variant.effects,
+    context_readme: variant.context_readme,
   )
 }
 
@@ -709,6 +716,11 @@ pub fn run_decoder() -> decode.Decoder(Run) {
   )
   use hole_jumps <- decode.optional_field("hole_jumps", False, decode.bool)
   use blind <- decode.optional_field("blind", False, decode.bool)
+  use context_readme <- decode.optional_field(
+    "context_readme",
+    True,
+    decode.bool,
+  )
   use effects <- decode.optional_field(
     "effects",
     options.EffectSignatures,
@@ -759,6 +771,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
       context_compounds:,
       effects:,
       blind:,
+      context_readme:,
     )
   case find(slug) {
     Ok(eval) -> decode.success(Run(eval:, variant:, steps:, outcome:))

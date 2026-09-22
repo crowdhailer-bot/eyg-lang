@@ -355,9 +355,9 @@ pub fn state(agent: Agent) -> Json {
         #("selection", selection_json(buffer, config, environment)),
         #("type_errors", json.array(errors, json.string)),
       ],
-      case environment.context_readme(environment) {
-        Some(readme) -> [#("context", json.string(readme))]
-        None -> []
+      case config.context_readme, environment.context_readme(environment) {
+        True, Some(readme) -> [#("context", json.string(readme))]
+        _, _ -> []
       },
       case config.hole_types {
         True -> [#("holes", json.array(hole_types(buffer), json.string))]
