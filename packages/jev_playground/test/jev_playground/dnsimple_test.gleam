@@ -215,3 +215,12 @@ pub fn arguments_of_context_functions_are_named_test() {
     "argument 1 of 4, `domain`, to context.change_record",
   )
 }
+
+pub fn context_functions_are_offered_where_a_function_is_expected_test() {
+  let keys =
+    agent("context.map(context.domain_names({}), todo)", options.NoEffects)
+    |> agent.options
+    |> list.map(options.key)
+  assert list.contains(keys, "context.records")
+  assert list.contains(keys, "context.name_servers")
+}

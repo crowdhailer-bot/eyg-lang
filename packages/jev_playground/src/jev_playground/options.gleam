@@ -1203,6 +1203,19 @@ fn context_compounds(
             }
           }
         })
+      // Where a function is expected the functions of the context are offered as values,
+      // `context.map(names, context.records)`.
+      let values = case expected {
+        Ok(t.Fun(..)) ->
+          list.filter_map(functions, fn(field) {
+            let #(label, type_) = field
+            case fits(expected, type_) {
+              True -> Ok(context_value(label, type_))
+              False -> Error(Nil)
+            }
+          })
+        _ -> []
+      }
       let wraps = case strategy, exp {
         ContextBareCalls, _ | ContextUnitCalls, _ | _, e.Vacant -> []
         _, _ -> context_wraps(functions, expected)
@@ -1212,7 +1225,7 @@ fn context_compounds(
         ContextExamples -> context_examples(environment)
         _ -> []
       }
-      list.flatten([calls, wraps, extra])
+      list.flatten([calls, values, wraps, extra])
     }
     _, _ -> []
   }
@@ -1436,3 +1449,15 @@ fn context_wrap(label, type_) {
   )
 }
 
+fn context_value(label, type_) {
+  let key = "context." <> label
+  named(
+    a.Compound(key, [a.Variable("context"), a.Select(label)]),
+    key,
+    "The function `context."
+      <> label
+      <> "` itself, of type "
+      <> environment.show_type(type_)
+      <> ", to be called by the function it is given to.",
+  )
+}
