@@ -658,6 +658,19 @@ pub fn take(agent: Agent, step: Step) -> Result(Agent, String) {
         _ -> buffer.next_vacant(buffer) |> result.unwrap(buffer)
       }
   }
+  // With no holes left the whole program is selected, so that a program giving
+  // the wrong answer can be passed on or replaced rather than edited in part.
+  // A function or record stays selected, it is about to be called or selected from.
+  let buffer = case config.focus_holes && !a.is_navigation(step.action) {
+    True ->
+      case a.holes(buffer), buffer.target_type(buffer) {
+        _, Ok(t.Fun(..)) | _, Ok(t.Record(_)) -> buffer
+        [], _ ->
+          buffer.update_position(buffer, p.all(p.rebuild(buffer.projection)))
+        _, _ -> buffer
+      }
+    False -> buffer
+  }
   let agent = Agent(..agent, buffer:, history: [step, ..history])
   case step.action {
     a.RunTests -> Ok(Agent(..agent, test_results: Some(test_results(agent))))

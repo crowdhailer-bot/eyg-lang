@@ -221,7 +221,8 @@ pub fn several_holes_are_filled_in_one_request_test() {
       jev.Usage(100, 1),
     )
   let assert Ok(agent) = agent.answer(agent, offered, evaluation, 50)
-  assert agent.program_text(agent) == "(n) -> { !int_add(n, «1») }"
+  // Finished, the whole program is selected.
+  assert agent.program_text(agent) == "«(n) -> { !int_add(n, 1) }»"
   let assert [extra, main, ..] = agent.history
   assert main.input_tokens == 100
   assert extra.label == "at hole 2: integer 1"
