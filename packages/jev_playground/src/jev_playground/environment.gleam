@@ -229,3 +229,41 @@ pub fn pin_packages(code: String, environment: Environment) -> String {
     string.replace(code, "@" <> library.name <> ".", pinned <> ".")
   })
 }
+
+/// The functions a library exports, `list.map` and the rest, with their types.
+pub fn library_functions(library: Library) -> List(#(String, t.Type(Int))) {
+  let #(type_, _) = binding.instantiate(library.type_, 0, dict.new())
+  functions_of(type_, "", 2)
+}
+
+fn functions_of(type_, prefix, depth) {
+  case type_ {
+    t.Fun(..) ->
+      case prefix {
+        "" -> []
+        _ -> [#(string.drop_end(prefix, 1), type_)]
+      }
+    t.Record(rows) if depth > 0 ->
+      rows_of(rows, [])
+      |> list.flat_map(fn(field) {
+        let #(label, value) = field
+        functions_of(value, prefix <> label <> ".", depth - 1)
+      })
+    _ -> []
+  }
+}
+
+/// The parameter names of a library function, `list.map` is `(items, function)`.
+pub fn library_parameters(library: Library, path: String) -> List(String) {
+  let value =
+    list.fold(string.split(path, "."), Ok(library.value), fn(value, label) {
+      case value {
+        Ok(v.Record(fields)) -> dict.get(fields, label)
+        _ -> Error(Nil)
+      }
+    })
+  case value {
+    Ok(v.Closure(param:, body:, ..)) -> [param, ..lambda_labels(body)]
+    _ -> []
+  }
+}

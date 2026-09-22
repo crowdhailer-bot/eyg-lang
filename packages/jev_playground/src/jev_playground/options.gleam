@@ -223,6 +223,7 @@ pub fn available(
       option(a.Finish, "The program is complete and satisfies the task."),
     ],
     context_compounds(buffer, environment, config, holes),
+    library_compounds(buffer, environment, config, holes),
     compounds(buffer, environment, vocabulary, config, singles),
     prioritise(singles, vocabulary.builtins),
   ])
@@ -1256,6 +1257,181 @@ fn context_compounds(
 
 // Code already written can be passed to a function that takes one input,
 // the records can be counted once written.
+// A call of each function of an open library, as the context functions are
+// offered, so `@standard.list.map` is one edit rather than four.
+fn library_compounds(
+  buffer: Buffer,
+  environment: Environment,
+  config: Config,
+  holes: Bool,
+) {
+  let expected = buffer.target_type(buffer)
+  // Only in hole mode, where the type filter keeps the list short: a library has
+  // more functions than one request has room for options.
+  case config.focus_holes, buffer.projection {
+    False, _ -> []
+    True, #(p.Exp(exp), _) ->
+      list.flat_map(config.open_libraries, fn(name) {
+        case environment.find_library(environment, name) {
+          Error(Nil) -> []
+          Ok(library) -> {
+            let functions = environment.library_functions(library)
+            // A call replaces the selection, so it is only for a hole to fill.
+            let calls =
+              list.filter_map(functions, fn(field) {
+                let #(label, type_) = field
+                let arity = int.min(arity(type_), a.max_arity)
+                case holes && fits(expected, returned(type_, arity)) {
+                  False -> Error(Nil)
+                  True ->
+                    Ok(library_call(
+                      library,
+                      label,
+                      type_,
+                      arity,
+                      environment.library_parameters(library, label),
+                    ))
+                }
+              })
+            // Where a function is expected a library function is offered as a value.
+            let values = case expected {
+              Ok(t.Fun(..)) ->
+                list.filter_map(functions, fn(field) {
+                  case fits(expected, field.1) {
+                    True -> Ok(library_value(library, field.0, field.1))
+                    False -> Error(Nil)
+                  }
+                })
+              _ -> []
+            }
+            let wraps = case exp {
+              e.Vacant -> []
+              _ ->
+                list.filter_map(functions, fn(field) {
+                  let #(label, type_) = field
+                  let arity = int.min(arity(type_), a.max_arity)
+                  case type_ {
+                    t.Fun(input, _, _) ->
+                      case fits(Ok(input), selected_type(expected)) {
+                        True ->
+                          Ok(library_wrap(
+                            library,
+                            label,
+                            type_,
+                            arity,
+                            environment.library_parameters(library, label),
+                          ))
+                        False -> Error(Nil)
+                      }
+                    _ -> Error(Nil)
+                  }
+                })
+            }
+            list.flatten([calls, values, wraps])
+            |> list.sort(fn(a, b) {
+              int.compare(shapes_data(a), shapes_data(b))
+            })
+            |> list.take(library_options)
+          }
+        }
+      })
+    _, _ -> []
+  }
+}
+
+/// The most options one open library adds to a request.
+const library_options = 40
+
+// The functions that shape data come first, the rest are dropped when a library
+// has more functions than there is room for.
+fn shapes_data(option: Option) {
+  let modules = ["list.", "string.", "integer.", "result.", "boolean."]
+  case list.any(modules, fn(module) { string.contains(option.name, module) }) {
+    True -> 0
+    False -> 1
+  }
+}
+
+// `@standard.list.map` is reached by referencing the library and selecting from it.
+fn library_reach(library: environment.Library, label) {
+  [
+    a.Reference(ir.Pinned(library.release)),
+    ..list.map(string.split(label, "."), a.Select)
+  ]
+}
+
+fn library_name(library: environment.Library, label) {
+  "@" <> library.name <> "." <> label
+}
+
+// A parameter named `_` is shown as a hole.
+fn hole_name(name) {
+  case name {
+    "_" -> "?"
+    name -> name
+  }
+}
+
+fn library_call(library, label, type_, arity, names: List(String)) {
+  let holes = case list.length(names) == arity {
+    True -> list.map(names, hole_name) |> string.join(", ")
+    False -> list.repeat("?", arity) |> string.join(", ")
+  }
+  let key = "call " <> library_name(library, label) <> "(" <> holes <> ")"
+  named(
+    a.Compound(
+      key,
+      list.append(library_reach(library, label), [
+        a.CallTaking(arity),
+      ]),
+    ),
+    key,
+    "Call `"
+      <> library_name(library, label)
+      <> "`, of type "
+      <> environment.show_type(type_)
+      <> ", the cursor moves to its first argument.",
+  )
+}
+
+fn library_value(library, label, type_) {
+  let key = library_name(library, label)
+  named(
+    a.Compound(key, library_reach(library, label)),
+    key,
+    "The function `"
+      <> key
+      <> "` itself, of type "
+      <> environment.show_type(type_)
+      <> ", to be called by the function it is given to.",
+  )
+}
+
+fn library_wrap(library, label, type_, arity, names: List(String)) {
+  // The arguments after the selection are named by the parameters, `.., function`.
+  let named_rest = case list.length(names) == arity {
+    True -> list.drop(names, 1) |> list.map(hole_name)
+    False -> list.repeat("?", arity - 1)
+  }
+  let rest = case named_rest {
+    [] -> ""
+    rest -> ", " <> string.join(rest, ", ")
+  }
+  let key = "wrap in " <> library_name(library, label) <> "(.." <> rest <> ")"
+  named(
+    a.Compound(key, [
+      a.CallWithTaking(arity),
+      ..list.append(library_reach(library, label), [a.Parent])
+    ]),
+    key,
+    "Pass the selection to `"
+      <> library_name(library, label)
+      <> "`, of type "
+      <> environment.show_type(type_)
+      <> ", as its first argument.",
+  )
+}
+
 fn context_wraps(functions: List(#(String, t.Type(Int))), expected) {
   list.filter_map(functions, fn(field) {
     case field.1 {

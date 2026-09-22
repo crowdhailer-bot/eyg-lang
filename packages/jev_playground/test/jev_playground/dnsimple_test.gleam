@@ -226,7 +226,13 @@ pub fn the_library_can_be_opened_test() {
       options.key(o) == "open library @standard"
     })
   let assert Ok(agent) = agent.take(agent, agent.scripted(option.action))
-  assert list.contains(keys(agent), "library @standard")
+  let offered = keys(agent)
+  assert list.contains(offered, "library @standard")
+  assert list.contains(offered, "call @standard.list.length(items)")
+  assert list.contains(
+    offered,
+    "call @standard.list.filter(predicate, haystack)",
+  )
 }
 
 pub fn arguments_of_context_functions_are_named_test() {
