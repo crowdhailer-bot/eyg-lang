@@ -364,7 +364,7 @@ pub fn state(agent: Agent) -> Json {
         False -> []
       },
       case environment.effects, config.effects {
-        [], _ | _, options.NoEffects -> []
+        [], _ | _, options.NoEffects | _, options.EffectCallsOnly -> []
         _, options.EffectNodes -> [
           #(
             "effects",

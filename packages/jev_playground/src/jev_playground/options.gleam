@@ -78,6 +78,8 @@ pub type EffectsShown {
   EffectCalls
   /// As calls, and the effects of the program and the selection are shown.
   EffectNodes
+  /// Only each call of a context function says what it performs, effects are not listed or offered.
+  EffectCallsOnly
 }
 
 pub fn effects_name(shown) {
@@ -86,13 +88,15 @@ pub fn effects_name(shown) {
     EffectSignatures -> "signatures"
     EffectCalls -> "calls"
     EffectNodes -> "nodes"
+    EffectCallsOnly -> "callsonly"
   }
 }
 
 pub fn effects_from_name(name) {
-  list.find([NoEffects, EffectSignatures, EffectCalls, EffectNodes], fn(shown) {
-    effects_name(shown) == name
-  })
+  list.find(
+    [NoEffects, EffectSignatures, EffectCalls, EffectNodes, EffectCallsOnly],
+    fn(shown) { effects_name(shown) == name },
+  )
 }
 
 /// How compound moves are built from the functions of the module in scope as `context`.
@@ -631,7 +635,7 @@ fn expression_values(
     |> list.append(vocabulary.tags)
     |> list.unique
   let effects = case config.effects {
-    NoEffects -> []
+    NoEffects | EffectCallsOnly -> []
     _ -> environment.effect_signatures(environment)
   }
   list.flatten([
@@ -1281,8 +1285,10 @@ fn context_chain(outer, inner, shown) {
       inner_steps,
     ])
   let performs = case shown, environment.performs(inner_type, inner_arity) {
-    EffectCalls, [_, ..] as labels | EffectNodes, [_, ..] as labels ->
-      ", it performs " <> string.join(labels, ", ")
+    EffectCalls, [_, ..] as labels
+    | EffectNodes, [_, ..] as labels
+    | EffectCallsOnly, [_, ..] as labels
+    -> ", it performs " <> string.join(labels, ", ")
     _, _ -> ""
   }
   named(
@@ -1332,8 +1338,10 @@ pub fn readme_examples(readme: String) -> List(String) {
 fn context_call(label, type_, arity, names: List(String), shown, strategy) {
   let reach = [a.Variable("context"), a.Select(label), a.CallTaking(arity)]
   let performs = case shown, environment.performs(type_, arity) {
-    EffectCalls, [_, ..] as labels | EffectNodes, [_, ..] as labels ->
-      ", it performs " <> string.join(labels, ", ")
+    EffectCalls, [_, ..] as labels
+    | EffectNodes, [_, ..] as labels
+    | EffectCallsOnly, [_, ..] as labels
+    -> ", it performs " <> string.join(labels, ", ")
     _, _ -> ""
   }
   let description =
@@ -1427,3 +1435,4 @@ fn context_wrap(label, type_) {
       <> ".",
   )
 }
+
