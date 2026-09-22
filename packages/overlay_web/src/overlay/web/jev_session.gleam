@@ -4,11 +4,13 @@
 
 import eyg/hub/cache
 import gleam/dict
+import gleam/float
 import gleam/http/request.{type Request}
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/string
 import jev
 import jev_playground/agent
 import jev_playground/environment
@@ -27,10 +29,15 @@ pub const max_requests = 30
 /// Start from an empty program, filling one hole at a time.
 /// Effects are shown only on the calls of context functions that perform them,
 /// which solved as many questions as any way of showing them for the fewest tokens.
-pub fn new(question: String, context: cache.Module(tools.Meta)) -> agent.Agent {
+pub fn new(
+  question: String,
+  context: cache.Module(tools.Meta),
+  libraries: List(environment.Library),
+) -> agent.Agent {
   let environment =
     environment.Environment(
       ..environment.browser(),
+      libraries:,
       scope: [#("context", context.type_)],
       values: [#("context", context.value)],
     )
@@ -128,9 +135,30 @@ fn limited(agent: agent.Agent) -> Next {
   }
 }
 
-/// The program as text, as the run tool is given it.
+/// The program as text, as the run tool is given it, with releases pinned.
 pub fn program(agent: agent.Agent) -> String {
   text.print(agent.source(agent))
+}
+
+/// The program as a person reads it, a release written as its package name.
+pub fn shown_program(agent: agent.Agent) -> String {
+  environment.shorten_packages(program(agent), agent.environment)
+}
+
+/// Every edit Jev made, oldest first, for the list of what it did.
+pub fn edits(agent: agent.Agent) -> String {
+  list.reverse(agent.history)
+  |> list.index_map(fn(step: agent.Step, i) {
+    int.to_string(i + 1)
+    <> ". "
+    <> string.replace(step.label, "\n", " ")
+    <> "  "
+    <> float.to_string(float.to_precision(step.confidence, 2))
+    <> "  "
+    <> int.to_string(step.thinking_ms)
+    <> "ms"
+  })
+  |> string.join("\n")
 }
 
 fn run_call(agent) {

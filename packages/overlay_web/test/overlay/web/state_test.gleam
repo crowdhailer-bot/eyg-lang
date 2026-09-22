@@ -29,7 +29,7 @@ pub fn init_loads_provider_settings_test() {
   let config =
     state.Config(origin: origin.https("eyg.test"), context: context.Default)
   let #(state, actions) = state.init(config)
-  let assert [system.GetSessionStorageItem("overlay.llm.provider", _), _] =
+  let assert [system.GetSessionStorageItem("overlay.llm.provider", _), _, _] =
     actions
   assert True == state.provider_setup.restoring
 }
@@ -660,7 +660,8 @@ pub fn reference_context_test() {
     )
   let #(state, actions) = state.init(config)
   assert context.Fetching([cid], ir.Content(cid)) == state.context
-  let assert [_settings, _pull, system.Fetch(request:, resume: _)] = actions
+  let assert [_settings, _pull, system.Fetch(request:, resume: _), _standard] =
+    actions
   assert "/modules/" <> v1.to_string(cid) == request.path
 
   let message = state.CacheMessage(cache.FetchModuleCompleted(cid, Ok(source)))

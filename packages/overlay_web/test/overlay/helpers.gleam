@@ -108,7 +108,8 @@ pub fn init_default() {
 pub fn init(context) {
   let config = state.Config(origin: origin.https("eyg.test"), context:)
   let #(state, actions) = state.init(config)
-  let assert [_settings, _pull] = actions
+  // The settings, the release log and the libraries fetched at the start.
+  let assert [_settings, _pull, _standard] = actions
 
   state.update(
     state,

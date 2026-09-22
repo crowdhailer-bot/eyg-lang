@@ -23,6 +23,7 @@ import overlay/llm/provider/ollama
 import overlay/llm/tool
 import overlay/web/context
 import overlay/web/jev_session
+import overlay/web/libraries
 import overlay/web/provider_setup
 import overlay/web/tools
 import pal/system
@@ -80,6 +81,8 @@ pub fn new(config: Config) -> State {
     )
   let cache = cache.ready()
   let #(status, cache) = context.load(context, cache)
+  // The libraries are fetched at the start so a program can reference one.
+  let cache = libraries.fetch(cache)
   State(
     llm:,
     provider_setup: provider_setup.new(),
@@ -517,7 +520,12 @@ pub fn spec() {
 // answer is the program Jev finishes with.
 fn start_jev(state: State, question: String) {
   let message = chat.UserMessage(text: question, images: [])
-  let agent = jev_session.new(question, context.module(state.context))
+  let agent =
+    jev_session.new(
+      question,
+      context.module(state.context),
+      libraries.available(state.cache),
+    )
   let state = State(..state, input: "", history: [message, ..state.history])
   ask_jev(state, agent, None)
 }
@@ -565,9 +573,11 @@ fn jev_answered(state: State, agent, offered, last, result) {
 
 fn answer(agent, output) {
   "Jev wrote\n\n```eyg\n"
-  <> jev_session.program(agent)
+  <> jev_session.shown_program(agent)
   <> "\n```\n\nwhich returned\n\n```\n"
   <> output
+  <> "\n```\n\n```edits\n"
+  <> jev_session.edits(agent)
   <> "\n```"
 }
 

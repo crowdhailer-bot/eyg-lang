@@ -11,6 +11,7 @@ import gleam/string
 import jev_playground/agent
 import overlay/llm/chat
 import overlay/web/context
+import overlay/web/jev_session
 import overlay/web/state.{type State, State}
 
 pub type Context {
@@ -127,5 +128,9 @@ fn jev_progress(agent: agent.Agent, doing: String) {
     <> agent.program_text(agent)
     <> "\n```"
     <> last
+    <> case edits {
+      0 -> ""
+      _ -> "\n\n```edits\n" <> jev_session.edits(agent) <> "\n```"
+    }
   chat.AssistantMessage(thinking: "", text:, tool_calls: [])
 }
