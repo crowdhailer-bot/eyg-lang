@@ -29,6 +29,9 @@ import jev_playground/options
 import lustre/effect.{type Effect}
 import morph/editable as e
 import ogre/origin
+import plinth/browser/document
+import plinth/browser/dom_rect
+import plinth/browser/element
 import plinth/browser/location
 import plinth/browser/window
 import plinth/javascript/global
@@ -490,8 +493,27 @@ fn scroll() {
   effect.after_paint(fn(_dispatch, _root) { scroll_to_selection() })
 }
 
-@external(javascript, "../jev_playground_ffi.mjs", "scroll_to_selection")
-fn scroll_to_selection() -> Nil
+// Keep the selection in view by scrolling the program panel vertically only.
+fn scroll_to_selection() -> Nil {
+  let _ = {
+    use selection <- result.try(document.query_selector(".code .selection"))
+    use panel <- result.map(element.closest(selection, ".panel"))
+    let scrolled = element.scroll_top(panel)
+    let top =
+      dom_rect.y(element.get_bounding_client_rect(selection))
+      -. dom_rect.y(element.get_bounding_client_rect(panel))
+      +. scrolled
+    let height = int.to_float(element.client_height(panel))
+    case top <. scrolled +. 40.0 || top >. scrolled +. height -. 60.0 {
+      True -> {
+        let target = float.max(0.0, top -. height /. 3.0)
+        element.scroll_to(panel, target, element.scroll_left(panel), "smooth")
+      }
+      False -> Nil
+    }
+  }
+  Nil
+}
 
 pub fn thinking_ms(model: Model) -> Option(Int) {
   case model.status {
