@@ -127,6 +127,10 @@ pub fn run(
       #("highlight", json.string(options.highlight_name(variant.highlight))),
       #("check_compounds", json.bool(variant.check_compounds)),
       #("hole_jumps", json.bool(variant.hole_jumps)),
+      #(
+        "context_compounds",
+        json.string(options.context_compounds_name(variant.context_compounds)),
+      ),
       #("outcome", json.string(outcome_text)),
       #("steps", json.array(steps, agent.step_to_json)),
       #("input_tokens", json.int(tokens)),

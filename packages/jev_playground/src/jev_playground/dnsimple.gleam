@@ -449,3 +449,20 @@ pub fn record_value(record: Record) -> run.Value {
 pub fn strings(items: List(String)) -> run.Value {
   v.LinkedList(list.map(items, v.String))
 }
+
+pub fn domain_value(domain: Domain) -> run.Value {
+  v.Record(
+    dict.from_list([
+      #("name", v.String(domain.name)),
+      #(
+        "state",
+        v.String(case domain.registered {
+          True -> "registered"
+          False -> "hosted"
+        }),
+      ),
+      #("auto_renew", v.bool(domain.auto_renew)),
+      #("expires_on", v.String(option.unwrap(domain.expires_on, ""))),
+    ]),
+  )
+}

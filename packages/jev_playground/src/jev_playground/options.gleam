@@ -60,7 +60,17 @@ pub type Config {
     check_compounds: Bool,
     /// Offer to move to any hole by its number.
     hole_jumps: Bool,
+    /// How compound moves are built from the module in scope as `context`.
+    context_compounds: ContextCompounds,
   )
+}
+
+/// How compound moves are built from the functions of the module in scope as `context`.
+pub type ContextCompounds {
+  /// The context is a variable like any other, selected from and called in separate steps.
+  NoContextCompounds
+  /// A call of each function, `{}` given to a function that ignores its input.
+  ContextCalls
 }
 
 pub type Highlight {
@@ -106,6 +116,7 @@ pub fn default_config() {
     highlight: Excerpt,
     check_compounds: False,
     hole_jumps: False,
+    context_compounds: ContextCalls,
   )
 }
 
@@ -158,6 +169,7 @@ pub fn available(
       option(a.RunTests, "Run the `tests` of the program and see the results."),
       option(a.Finish, "The program is complete and satisfies the task."),
     ],
+    context_compounds(buffer, config, holes),
     compounds(buffer, environment, vocabulary, config, singles),
     prioritise(singles, vocabulary.builtins),
   ])
@@ -1086,4 +1098,135 @@ fn arity(type_) {
     t.Fun(_, _, return) -> 1 + arity(return)
     _ -> 0
   }
+}
+
+/// The functions of the module in scope as `context`, with their types.
+pub fn context_functions(buffer: Buffer) -> List(#(String, t.Type(Int))) {
+  let scope = buffer.target_scope(buffer) |> result.unwrap([])
+  case list.key_find(scope, "context") {
+    Ok(poly) -> {
+      let #(type_, _) = binding.instantiate(poly, 0, dict.new())
+      case type_ {
+        t.Record(rows) ->
+          list.filter(analysis.rows(rows), fn(field) {
+            case field.1 {
+              t.Fun(..) -> True
+              _ -> False
+            }
+          })
+        _ -> []
+      }
+    }
+    Error(Nil) -> []
+  }
+}
+
+// A call of each context function, offered wherever an expression can go.
+// In hole mode only the functions whose result fits the hole are offered.
+fn context_compounds(buffer: Buffer, config: Config, holes: Bool) {
+  let expected = buffer.target_type(buffer)
+  case config.context_compounds, buffer.projection {
+    NoContextCompounds, _ -> []
+    ContextCalls, #(p.Exp(exp), _) -> {
+      let functions = context_functions(buffer)
+      let calls =
+        list.filter_map(functions, fn(field) {
+          let #(label, type_) = field
+          let arity = int.min(arity(type_), a.max_arity)
+          case !holes || fits(expected, returned(type_, arity)) {
+            False -> Error(Nil)
+            True -> Ok(context_call(label, type_, arity))
+          }
+        })
+      // Code already written can be passed to a function that takes one input,
+      // the records can be counted once written.
+      let wraps = case exp {
+        e.Vacant -> []
+        _ ->
+          list.filter_map(functions, fn(field) {
+            case field.1 {
+              t.Fun(input, _, return) ->
+                case arity(field.1), return {
+                  1, _ ->
+                    case fits(Ok(input), selected_type(expected)) {
+                      True -> Ok(context_wrap(field.0, field.1))
+                      False -> Error(Nil)
+                    }
+                  _, _ -> Error(Nil)
+                }
+              _ -> Error(Nil)
+            }
+          })
+      }
+      list.append(calls, wraps)
+    }
+    ContextCalls, _ -> []
+  }
+}
+
+fn context_call(label, type_, arity) {
+  let reach = [a.Variable("context"), a.Select(label), a.CallTaking(arity)]
+  let description =
+    "Call `context." <> label <> "`, of type " <> environment.show_type(type_)
+  case type_ {
+    // A function that ignores its input is given `{}`.
+    t.Fun(t.Var(_), _, _) if arity == 1 -> {
+      // The call is left selected, to be selected from or passed on.
+      let key = "context." <> label <> "({})"
+      named(
+        a.Compound(key, list.append(reach, [a.EmptyRecord, a.Parent])),
+        key,
+        description <> ".",
+      )
+    }
+    _ -> {
+      let holes = list.repeat("?", arity) |> string.join(", ")
+      let key = "call context." <> label <> "(" <> holes <> ")"
+      named(
+        a.Compound(key, reach),
+        key,
+        description <> ", the cursor moves to its first argument.",
+      )
+    }
+  }
+}
+
+fn returned(type_, arity) {
+  case type_, arity {
+    t.Fun(_, _, return), n if n > 0 -> returned(return, n - 1)
+    _, _ -> type_
+  }
+}
+
+pub fn context_compounds_name(strategy) {
+  case strategy {
+    NoContextCompounds -> "none"
+    ContextCalls -> "calls"
+  }
+}
+
+pub fn context_compounds_from_name(name) {
+  list.find([NoContextCompounds, ContextCalls], fn(strategy) {
+    context_compounds_name(strategy) == name
+  })
+}
+
+fn selected_type(type_) {
+  case type_ {
+    Ok(type_) -> type_
+    Error(Nil) -> t.Var(-1)
+  }
+}
+
+fn context_wrap(label, type_) {
+  let key = "wrap in context." <> label <> "(..)"
+  named(
+    a.Compound(key, [a.CallWith, a.Variable("context"), a.Select(label)]),
+    key,
+    "Pass the selection to `context."
+      <> label
+      <> "`, of type "
+      <> environment.show_type(type_)
+      <> ".",
+  )
 }

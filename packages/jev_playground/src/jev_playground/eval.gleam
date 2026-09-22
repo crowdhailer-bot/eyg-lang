@@ -57,6 +57,7 @@ pub type Variant {
     highlight: options.Highlight,
     check_compounds: Bool,
     hole_jumps: Bool,
+    context_compounds: options.ContextCompounds,
   )
 }
 
@@ -74,6 +75,7 @@ pub const improved = Variant(
   highlight: options.Excerpt,
   check_compounds: False,
   hole_jumps: False,
+  context_compounds: options.ContextCalls,
 )
 
 /// Build a variant from flags, `compounds` adds all the mined compounds and
@@ -82,7 +84,8 @@ pub const improved = Variant(
 /// `cursors=3` asks what fills three holes at once, `nojumps` stops offering jumps to type errors
 /// `mark=guillemets`, `mark=comments` or `mark=unmarked` changes how the selection is shown, the default is `excerpt`
 /// `checked` only offers compound instances that apply without a new type error
-/// and `holejumps` offers to move to any hole by its number.
+/// `holejumps` offers to move to any hole by its number
+/// and `ctx=none` or `ctx=calls` sets how compounds are built from a context.
 pub fn variant(flags: List(String)) -> Variant {
   let number = fn(prefix, default) {
     list.find_map(flags, fn(flag) {
@@ -114,6 +117,13 @@ pub fn variant(flags: List(String)) -> Variant {
       |> result.unwrap(improved.highlight),
     check_compounds: list.contains(flags, "checked"),
     hole_jumps: list.contains(flags, "holejumps"),
+    context_compounds: list.find_map(flags, fn(flag) {
+      case flag {
+        "ctx=" <> name -> options.context_compounds_from_name(name)
+        _ -> Error(Nil)
+      }
+    })
+      |> result.unwrap(improved.context_compounds),
   )
 }
 
@@ -131,6 +141,7 @@ pub fn variant_name(variant: Variant) {
     highlight:,
     check_compounds:,
     hole_jumps:,
+    context_compounds:,
   ) = variant
   let all = list.length(compound.mined())
   let flags =
@@ -157,6 +168,10 @@ pub fn variant_name(variant: Variant) {
       ),
       #(check_compounds, "checked"),
       #(hole_jumps, "holejumps"),
+      #(
+        context_compounds != improved.context_compounds,
+        "ctx" <> options.context_compounds_name(context_compounds),
+      ),
     ]
     |> list.filter_map(fn(flag) {
       case flag.0 {
@@ -186,6 +201,7 @@ pub fn config(eval: Eval, variant: Variant) -> options.Config {
     highlight: variant.highlight,
     check_compounds: variant.check_compounds,
     hole_jumps: variant.hole_jumps,
+    context_compounds: variant.context_compounds,
   )
 }
 
@@ -637,6 +653,16 @@ pub fn run_decoder() -> decode.Decoder(Run) {
     decode.bool,
   )
   use hole_jumps <- decode.optional_field("hole_jumps", False, decode.bool)
+  use context_compounds <- decode.optional_field(
+    "context_compounds",
+    options.ContextCalls,
+    decode.then(decode.string, fn(name) {
+      case options.context_compounds_from_name(name) {
+        Ok(strategy) -> decode.success(strategy)
+        Error(Nil) -> decode.failure(options.ContextCalls, "ContextCompounds")
+      }
+    }),
+  )
   // Runs saved before the highlight was recorded marked the selection with « and ».
   use highlight <- decode.optional_field(
     "highlight",
@@ -664,6 +690,7 @@ pub fn run_decoder() -> decode.Decoder(Run) {
       highlight:,
       check_compounds:,
       hole_jumps:,
+      context_compounds:,
     )
   case find(slug) {
     Ok(eval) -> decode.success(Run(eval:, variant:, steps:, outcome:))
@@ -706,6 +733,32 @@ fn answers(expected: run.Value) {
           <> simple_debug.inspect(value)
           <> ", which does not answer the question",
         )
+      Error(reason) -> Error("the program failed: " <> reason)
+    }
+  }
+}
+
+/// Accepts a program that returns any of the answers.
+fn answers_any(expected: List(run.Value)) {
+  fn(source, environment) {
+    case
+      run.evaluate_handled(
+        source,
+        environment,
+        dnsimple.fixture(),
+        dnsimple.handle,
+      )
+    {
+      Ok(#(value, _)) ->
+        case list.contains(expected, value) {
+          True -> Ok(Nil)
+          False ->
+            Error(
+              "the program returned "
+              <> simple_debug.inspect(value)
+              <> ", which does not answer the question",
+            )
+        }
       Error(reason) -> Error("the program failed: " <> reason)
     }
   }
@@ -756,7 +809,10 @@ pub fn dnsimple_questions() -> List(Eval) {
     question(
       "domains",
       "What domains are in my DNSimple account?",
-      answers(dnsimple.strings(all_names)),
+      answers_any([
+        dnsimple.strings(all_names),
+        v.LinkedList(list.map(dnsimple.fixture().domains, dnsimple.domain_value)),
+      ]),
     ),
     question(
       "domain-count",
