@@ -5,17 +5,19 @@
 
 import eyg/interpreter/simple_debug
 import eyg/interpreter/value as v
+import eyg/ir/tree as ir
 import eyg/parser
 import gleam/dict
 import gleam/dynamic/decode
 import gleam/int
 import gleam/list
-import gleam/option
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import jev_playground/action
 import jev_playground/agent
 import jev_playground/compound
+import jev_playground/dnsimple
 import jev_playground/environment.{type Environment}
 import jev_playground/options
 import jev_playground/run
@@ -30,7 +32,10 @@ pub type Eval {
     start: String,
     open_libraries: List(String),
     max_steps: Int,
-    check: fn(run.Value, Environment) -> Result(Nil, String),
+    /// Accepts the program, or says what is wrong with it.
+    check: fn(ir.Node(List(Int)), Environment) -> Result(Nil, String),
+    /// The content id of a module the program has in scope as `context`, fetched from a hub.
+    context: Option(String),
   )
 }
 
@@ -195,6 +200,7 @@ pub fn all() -> List(Eval) {
     user_record_scaffold(),
     total_scaffold(),
     describe_scaffold(),
+    ..dnsimple_questions()
   ]
 }
 
@@ -218,11 +224,18 @@ pub fn check(
   source,
   environment: Environment,
 ) -> Result(Nil, String) {
-  use value <- result.try(
-    run.evaluate(source, environment)
-    |> result.map_error(fn(reason) { "the program does not run: " <> reason }),
-  )
-  eval.check(value, environment)
+  eval.check(source, environment)
+}
+
+/// A checker of the value a program without effects returns.
+fn returns(check) {
+  fn(source, environment) {
+    use value <- result.try(
+      run.evaluate(source, environment)
+      |> result.map_error(fn(reason) { "the program does not run: " <> reason }),
+    )
+    check(value, environment)
+  }
 }
 
 const standard = "@standard:1:baguqeerahlbgfg7wjjdjguypivmsdcvh3e2vs4lhiafdbbtl3duxfuzv2eja"
@@ -238,13 +251,14 @@ The function returns `go(n, 0, 1, [])`.",
     start: "",
     open_libraries: ["standard"],
     max_steps: 160,
-    check: fn(value, environment) {
+    context: None,
+    check: returns(fn(value, environment) {
       [#(0, []), #(1, [0]), #(2, [0, 1]), #(6, [0, 1, 1, 2, 3, 5])]
       |> list.map(fn(case_) {
         #([v.Integer(case_.0)], v.LinkedList(list.map(case_.1, v.Integer)))
       })
       |> calls(value, environment, _)
-    },
+    }),
   )
 }
 
@@ -261,7 +275,8 @@ let length = (items) -> { list.fold(items, 0, (item, count) -> { !int_add(count,
 {length}",
     open_libraries: ["standard"],
     max_steps: 120,
-    check: fn(value, environment) {
+    context: None,
+    check: returns(fn(value, environment) {
       let numbers = v.LinkedList([v.Integer(1), v.Integer(2), v.Integer(3)])
       let empty = v.LinkedList([])
       use fields <- result.try(case value {
@@ -298,7 +313,7 @@ let length = (items) -> { list.fold(items, 0, (item, count) -> { !int_add(count,
           }
         },
       )
-    },
+    }),
   )
 }
 
@@ -343,6 +358,7 @@ total"
   }
 }
 describe"
+    "dnsimple-" <> question -> dnsimple_solution(question)
     _ -> ""
   }
 }
@@ -431,12 +447,13 @@ The function returns `string.append` of \"Hello, \" and `name`.",
     start: "",
     open_libraries: ["standard"],
     max_steps: 60,
-    check: fn(value, environment) {
+    context: None,
+    check: returns(fn(value, environment) {
       calls(value, environment, [
         #([v.String("Ada")], v.String("Hello, Ada")),
         #([v.String("")], v.String("Hello, ")),
       ])
-    },
+    }),
   )
 }
 
@@ -464,7 +481,8 @@ pub fn user_record_scaffold() {
 user",
     open_libraries: [],
     max_steps: 40,
-    check: fn(value, environment) {
+    context: None,
+    check: returns(fn(value, environment) {
       let record =
         v.Record(
           dict.from_list([#("name", v.String("Ada")), #("age", v.Integer(36))]),
@@ -472,7 +490,7 @@ user",
       calls(value, environment, [
         #([v.String("Ada"), v.Integer(36)], record),
       ])
-    },
+    }),
   )
 }
 
@@ -488,7 +506,8 @@ let total = (items) -> { list.fold(items, 0, (item, sum) -> { todo }) }
 total",
     open_libraries: ["standard"],
     max_steps: 60,
-    check: fn(value, environment) {
+    context: None,
+    check: returns(fn(value, environment) {
       let item = fn(price, quantity) {
         v.Record(
           dict.from_list([
@@ -501,7 +520,7 @@ total",
         #([v.LinkedList([])], v.Integer(0)),
         #([v.LinkedList([item(2, 3), item(5, 1)])], v.Integer(11)),
       ])
-    },
+    }),
   )
 }
 
@@ -520,12 +539,13 @@ pub fn describe_scaffold() {
 describe",
     open_libraries: [],
     max_steps: 40,
-    check: fn(value, environment) {
+    context: None,
+    check: returns(fn(value, environment) {
       calls(value, environment, [
         #([v.ok(v.String("found"))], v.String("found")),
         #([v.error(v.unit())], v.String("unknown")),
       ])
-    },
+    }),
   )
 }
 
@@ -648,5 +668,259 @@ pub fn run_decoder() -> decode.Decoder(Run) {
   case find(slug) {
     Ok(eval) -> decode.success(Run(eval:, variant:, steps:, outcome:))
     Error(Nil) -> decode.failure(Run(fibonacci(), improved, [], ""), "eval")
+  }
+}
+
+// Questions about a DNSimple account, answered from an empty program with the
+// DNSimple context in scope. The context is fetched from a hub by content id.
+
+fn question(slug, task, check) -> Eval {
+  Eval(
+    slug: "dnsimple-" <> slug,
+    title: task,
+    task:,
+    start: "",
+    open_libraries: [],
+    max_steps: 30,
+    check:,
+    context: Some(dnsimple.context_id),
+  )
+}
+
+/// Accepts a program that returns the answer. Jev is told what its program
+/// returned but not the answer, as it would be when run for a person.
+fn answers(expected: run.Value) {
+  fn(source, environment) {
+    case
+      run.evaluate_handled(
+        source,
+        environment,
+        dnsimple.fixture(),
+        dnsimple.handle,
+      )
+    {
+      Ok(#(value, _)) if value == expected -> Ok(Nil)
+      Ok(#(value, _)) ->
+        Error(
+          "the program returned "
+          <> simple_debug.inspect(value)
+          <> ", which does not answer the question",
+        )
+      Error(reason) -> Error("the program failed: " <> reason)
+    }
+  }
+}
+
+/// Accepts a program that makes a change to the account.
+fn changes(missing: String, changed: fn(dnsimple.Account) -> Bool) {
+  fn(source, environment) {
+    case
+      run.evaluate_handled(
+        source,
+        environment,
+        dnsimple.fixture(),
+        dnsimple.handle,
+      )
+    {
+      Ok(#(_, account)) ->
+        case changed(account) {
+          True -> Ok(Nil)
+          False -> Error("the program ran but " <> missing)
+        }
+      Error(reason) -> Error("the program failed: " <> reason)
+    }
+  }
+}
+
+fn records_of(domain: String, keep: fn(dnsimple.Record) -> Bool) {
+  let assert Ok(domain) = dnsimple.find_domain(dnsimple.fixture(), domain)
+  domain.records
+  |> list.filter(keep)
+  |> list.map(dnsimple.record_value)
+  |> v.LinkedList
+}
+
+fn has_record(account, domain, keep: fn(dnsimple.Record) -> Bool) {
+  case dnsimple.find_domain(account, domain) {
+    Ok(domain) -> list.any(domain.records, keep)
+    Error(Nil) -> False
+  }
+}
+
+/// Twenty questions a person might ask of their account, easiest first.
+pub fn dnsimple_questions() -> List(Eval) {
+  let all_names = [
+    "lovelace.dev", "analytical.engineering", "notes.garden", "babbage.org",
+  ]
+  [
+    question(
+      "domains",
+      "What domains are in my DNSimple account?",
+      answers(dnsimple.strings(all_names)),
+    ),
+    question(
+      "domain-count",
+      "How many domains do I have?",
+      answers(v.Integer(4)),
+    ),
+    question(
+      "email",
+      "What email address is my account registered to?",
+      answers(v.String("ada@lovelace.dev")),
+    ),
+    question(
+      "available",
+      "Is jev-rocks.com available to register?",
+      answers(v.true()),
+    ),
+    question(
+      "name-servers",
+      "Which name servers is notes.garden delegated to?",
+      answers(dnsimple.strings(dnsimple.fixture().name_servers)),
+    ),
+    question(
+      "records",
+      "List the DNS records of analytical.engineering.",
+      answers(records_of("analytical.engineering", fn(_) { True })),
+    ),
+    question(
+      "record-count",
+      "How many DNS records does lovelace.dev have?",
+      answers(v.Integer(7)),
+    ),
+    question(
+      "a-records",
+      "What IP addresses do the A records of lovelace.dev point to?",
+      answers(
+        dnsimple.strings(["93.184.215.14", "93.184.215.15", "198.51.100.1"]),
+      ),
+    ),
+    question(
+      "mx",
+      "What are the MX records of analytical.engineering?",
+      answers(records_of("analytical.engineering", fn(r) { r.type_ == "MX" })),
+    ),
+    question(
+      "no-renew",
+      "Which of my domains will not renew automatically?",
+      answers(
+        dnsimple.strings([
+          "analytical.engineering",
+          "notes.garden",
+          "babbage.org",
+        ]),
+      ),
+    ),
+    question(
+      "expiry",
+      "When does notes.garden expire?",
+      answers(v.String("2028-01-02")),
+    ),
+    question(
+      "expiring",
+      "Which of my domains expire before 2027-06-01?",
+      answers(dnsimple.strings(["lovelace.dev", "analytical.engineering"])),
+    ),
+    question(
+      "a-count",
+      "How many A records does lovelace.dev have?",
+      answers(v.Integer(3)),
+    ),
+    question(
+      "add-txt",
+      "Add a TXT record to lovelace.dev with the content \"google-site-verification=abc123\".",
+      changes("lovelace.dev has no such TXT record", fn(account) {
+        has_record(account, "lovelace.dev", fn(r) {
+          r.type_ == "TXT"
+          && r.name == ""
+          && r.content == "google-site-verification=abc123"
+        })
+      }),
+    ),
+    question(
+      "point-www",
+      "Point www.notes.garden at 203.0.113.7 with an A record.",
+      changes("notes.garden has no such A record for www", fn(account) {
+        has_record(account, "notes.garden", fn(r) {
+          r.type_ == "A" && r.name == "www" && r.content == "203.0.113.7"
+        })
+      }),
+    ),
+    question(
+      "remove-old",
+      "Delete the TXT record named \"old\" from lovelace.dev.",
+      changes("the TXT record named old is still there", fn(account) {
+        !has_record(account, "lovelace.dev", fn(r) {
+          r.type_ == "TXT" && r.name == "old"
+        })
+      }),
+    ),
+    question(
+      "auto-renew",
+      "Turn on auto-renew for notes.garden.",
+      changes("notes.garden still does not renew", fn(account) {
+        case dnsimple.find_domain(account, "notes.garden") {
+          Ok(domain) -> domain.auto_renew
+          Error(Nil) -> False
+        }
+      }),
+    ),
+    question(
+      "change-api",
+      "Change the A record of api.lovelace.dev to 198.51.100.4.",
+      changes("api.lovelace.dev does not point at 198.51.100.4", fn(account) {
+        has_record(account, "lovelace.dev", fn(r) {
+          r.type_ == "A" && r.name == "api" && r.content == "198.51.100.4"
+        })
+      }),
+    ),
+    question(
+      "total-records",
+      "How many DNS records do I have across all of my domains?",
+      answers(v.Integer(14)),
+    ),
+    question(
+      "every-record",
+      "List every DNS record in my account.",
+      answers(
+        list.flat_map(all_names, fn(name) {
+          let assert v.LinkedList(records) = records_of(name, fn(_) { True })
+          records
+        })
+        |> v.LinkedList,
+      ),
+    ),
+  ]
+}
+
+fn dnsimple_solution(question) {
+  case question {
+    "domains" -> "context.domain_names({})"
+    "domain-count" -> "context.count(context.domain_names({}))"
+    "email" -> "context.account({}).email"
+    "available" -> "context.is_available(\"jev-rocks.com\")"
+    "name-servers" -> "context.name_servers(\"notes.garden\")"
+    "records" -> "context.records(\"analytical.engineering\")"
+    "record-count" -> "context.count(context.records(\"lovelace.dev\"))"
+    "a-records" -> "context.record_values(\"lovelace.dev\", \"A\")"
+    "mx" -> "context.records_of_type(\"analytical.engineering\", \"MX\")"
+    "no-renew" -> "context.without_auto_renew({})"
+    "expiry" -> "context.domain(\"notes.garden\").expires_on"
+    "expiring" -> "context.expiring_before(\"2027-06-01\")"
+    "a-count" ->
+      "context.count(context.records_of_type(\"lovelace.dev\", \"A\"))"
+    "add-txt" ->
+      "context.add_record(\"lovelace.dev\", \"\", \"TXT\", \"google-site-verification=abc123\")"
+    "point-www" ->
+      "context.add_record(\"notes.garden\", \"www\", \"A\", \"203.0.113.7\")"
+    "remove-old" -> "context.remove_record(\"lovelace.dev\", \"old\", \"TXT\")"
+    "auto-renew" -> "context.enable_auto_renew(\"notes.garden\")"
+    "change-api" ->
+      "context.change_record(\"lovelace.dev\", \"api\", \"A\", \"198.51.100.4\")"
+    "total-records" ->
+      "context.count(context.flatten(context.map(context.domain_names({}), context.records)))"
+    "every-record" ->
+      "context.flatten(context.map(context.domain_names({}), context.records))"
+    _ -> ""
   }
 }

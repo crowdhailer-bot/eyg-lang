@@ -1,18 +1,36 @@
 import eyg/parser
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/string
 import jev_playground/agent
+import jev_playground/dnsimple
 import jev_playground/environment
 import jev_playground/eval as evals
 import jev_playground/library
 import jev_playground/options
 import jev_playground/packages
 import morph/editable as e
+import simplifile
 
 fn environment() {
   let assert Ok(bundle) = packages.bundle()
   let assert Ok(environment) = library.environment(bundle, environment.pure())
   environment
+}
+
+// Evals with a context use the DNSimple context from `eyg_packages`, which a
+// test elsewhere checks is the module shared to the hub.
+fn environment_for(eval: evals.Eval, base) {
+  case eval.context {
+    Some(_) -> {
+      let assert Ok(text) = simplifile.read(dnsimple.context_path)
+      let assert Ok(source) = library.parse(text)
+      let assert Ok(environment) =
+        library.context(source, environment.browser())
+      environment
+    }
+    None -> base
+  }
 }
 
 fn annotated(source) {
@@ -24,7 +42,8 @@ pub fn every_solution_passes_its_check_test() {
   let environment = environment()
   list.each(evals.all(), fn(eval) {
     let source = annotated(evals.solution(eval))
-    assert evals.check(eval, source, environment) == Ok(Nil)
+    assert evals.check(eval, source, environment_for(eval, environment))
+      == Ok(Nil)
   })
 }
 
@@ -40,7 +59,11 @@ pub fn every_start_fails_its_check_test() {
   list.each(evals.all(), fn(eval) {
     let assert Ok(start) = evals.start(eval)
     let assert Error(_) =
-      evals.check(eval, e.to_annotated(start, []), environment)
+      evals.check(
+        eval,
+        e.to_annotated(start, []),
+        environment_for(eval, environment),
+      )
   })
 }
 
