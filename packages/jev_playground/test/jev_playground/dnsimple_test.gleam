@@ -309,3 +309,18 @@ pub fn the_fields_of_a_complete_program_can_be_selected_test() {
   assert list.contains(keys, "select .email")
   assert !list.contains(keys, "string \"\"")
 }
+
+pub fn a_function_given_where_one_is_expected_is_finished_test() {
+  let agent =
+    agent(
+      "context.map(context.domain_names({}), todo)",
+      options.EffectSignatures,
+    )
+  let assert Ok(option) =
+    list.find(agent.options(agent), fn(o) {
+      options.key(o) == "context.records"
+    })
+  let assert Ok(agent) = agent.take(agent, agent.scripted(option.action))
+  assert agent.program_text(agent)
+    == "«context.map(context.domain_names({}), context.records)»"
+}

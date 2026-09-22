@@ -745,6 +745,16 @@ pub fn take(agent: Agent, step: Step) -> Result(Agent, String) {
     |> list.take(remembered_states)
   let agent = Agent(..agent, visited:)
   let Agent(buffer:, environment:, config:, history:, ..) = agent
+  // A function written where a function is expected, as the function given to
+  // `map`, is finished rather than about to be called.
+  let fills_function = case buffer.projection {
+    #(p.Exp(e.Vacant), _) ->
+      case buffer.target_type(buffer) {
+        Ok(t.Fun(..)) -> True
+        _ -> False
+      }
+    _ -> False
+  }
   use buffer <- result.try(
     a.perform(step.action, buffer, environment, config.advance)
     |> result.replace_error("cannot " <> a.key(step.action) <> " here"),
@@ -754,9 +764,13 @@ pub fn take(agent: Agent, step: Step) -> Result(Agent, String) {
   let buffer = case config.focus_holes, buffer.projection {
     True, #(p.Exp(e.Vacant), _) | False, _ -> buffer
     True, _ ->
-      case buffer.target_type(buffer) {
-        Ok(t.Fun(..)) | Ok(t.Record(_)) | Ok(t.Var(_)) | Error(Nil) -> buffer
-        _ -> buffer.next_vacant(buffer) |> result.unwrap(buffer)
+      case buffer.target_type(buffer), fills_function {
+        Ok(t.Fun(..)), False
+        | Ok(t.Record(_)), _
+        | Ok(t.Var(_)), _
+        | Error(Nil), _
+        -> buffer
+        _, _ -> buffer.next_vacant(buffer) |> result.unwrap(buffer)
       }
   }
   // With no holes left the whole program is selected, so that a program giving
@@ -764,11 +778,11 @@ pub fn take(agent: Agent, step: Step) -> Result(Agent, String) {
   // A function or record stays selected, it is about to be called or selected from.
   let buffer = case config.focus_holes && !a.is_navigation(step.action) {
     True ->
-      case a.holes(buffer), buffer.target_type(buffer) {
-        _, Ok(t.Fun(..)) | _, Ok(t.Record(_)) -> buffer
-        [], _ ->
+      case a.holes(buffer), buffer.target_type(buffer), fills_function {
+        _, Ok(t.Fun(..)), False | _, Ok(t.Record(_)), _ -> buffer
+        [], _, _ ->
           buffer.update_position(buffer, p.all(p.rebuild(buffer.projection)))
-        _, _ -> buffer
+        _, _, _ -> buffer
       }
     False -> buffer
   }
