@@ -85,6 +85,10 @@ They fail in two ways. Either the program needs a shape no readme example has, a
 boolean field, and Jev wanders until the edits run out; or it writes a program that returns something
 plausible and finishes, `map` over every record without the `filter` that the question asked for.
 
+The readme examples are what make the short runs short. The same question without them takes the long way:
+`record-count` is three edits with the examples and thirty eight without, `sweep -- default` against
+`evaluate -- dnsimple-record-count holes blind ctx=calls`.
+
 ## What the reduction cost
 
 The context before this work had `records`, `record_values`, `expiring_before`, `without_auto_renew`,
@@ -203,3 +207,11 @@ A question is given up after eighty requests or three unsure choices in a row.
 What Jev writes is shown as it writes it: coloured by the same highlighter the playground uses, wrapped to the
 width of the chat, releases written as `@standard`, and under the answer a list of every edit with its
 confidence and the time Jev took, which opens and scrolls.
+
+## Videos
+
+`jev_playground/frames` replays saved runs into the frames of a video: for each edit the program as it stood,
+coloured by the shared highlighter, with the time Jev took. A page in `tmp` plays eighteen of them in a
+three by two grid, the fastest six first and the longest six last, and Playwright records it.
+The overlay video is recorded the same way, by typing questions into the page.
+Both are in `tmp`, which is not committed.
