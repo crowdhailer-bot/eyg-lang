@@ -171,7 +171,7 @@ pub fn options(agent: Agent) -> List(options.Option) {
     True -> list.append(jumps, argument_jumps(agent.buffer, agent.environment))
     False -> jumps
   }
-  options.available(agent.buffer, agent.environment, vocabulary, agent.config)
+  options.available(agent.buffer, agent.environment, vocabulary, opened(agent))
   |> list.append(jumps, _)
   |> list.filter(fn(option) {
     !list.contains(repeated, options.without_name(option.action))
@@ -184,6 +184,22 @@ pub fn options(agent: Agent) -> List(options.Option) {
     }
   })
   |> list.take(jev.max_choice_options)
+}
+
+// A library the program already references is open: its API is in the state and
+// its functions are offered as calls, whether Jev opened it or wrote it in.
+fn opened(agent: Agent) -> options.Config {
+  let code = text.print(source(agent))
+  let referenced =
+    list.filter_map(agent.environment.libraries, fn(library) {
+      case string.contains(code, "@" <> library.name <> ":") {
+        True -> Ok(library.name)
+        False -> Error(Nil)
+      }
+    })
+  let open_libraries =
+    list.append(agent.config.open_libraries, referenced) |> list.unique
+  options.Config(..agent.config, open_libraries:)
 }
 
 // Moving to any other hole, described by where it is, so Jev can fill the holes
@@ -231,6 +247,14 @@ fn argument_jumps(
               #(arg, list.append(path, [i + 1]))
             })
           _ -> []
+        }
+      })
+      |> list.filter(fn(argument) {
+        let #(exp, path) = argument
+        path != p.path(buffer.projection)
+        && case exp {
+          e.String(_) | e.Integer(_) -> True
+          _ -> False
         }
       })
       |> list.filter_map(fn(argument) {
