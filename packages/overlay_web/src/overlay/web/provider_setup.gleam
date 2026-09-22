@@ -1,6 +1,7 @@
 import gleam/option.{type Option, None, Some}
 import gleam/string
 import overlay/llm/provider
+import overlay/web/provider_setup/jev
 import overlay/web/provider_setup/mistral
 import overlay/web/provider_setup/ollama
 import pal/system
@@ -14,6 +15,8 @@ const api_key_key = "overlay.llm.api_key"
 pub type ProviderChoice {
   Ollama
   Mistral
+  /// Not an LLM, Jev writes programs one edit at a time.
+  Jev
 }
 
 pub type State {
@@ -126,7 +129,7 @@ fn restore(state, stored_provider, stored_model, stored_api_key, origin) {
           error: None,
           restoring: False,
         )
-      #(state, [], Some(llm))
+      #(state, [], llm)
     }
     _, _ -> {
       let state =
@@ -167,7 +170,7 @@ fn save(state: State, origin, can_save) {
       #(
         state,
         [store_settings(provider_id(selected_provider), model_name, api_key)],
-        Some(llm),
+        llm,
       )
     }
     True, _, _, _ -> #(
@@ -215,18 +218,28 @@ fn valid(selected_provider, model_name, api_key) {
   }
 }
 
+// Jev is not an LLM, the session asks it directly.
 fn make_llm(selected_provider, model_name, api_key, origin) {
-  let llm_provider = case selected_provider {
-    Ollama -> ollama.make_provider(api_key, origin)
-    Mistral -> mistral.make_provider(api_key)
+  case selected_provider {
+    Ollama ->
+      Some(provider.Llm(
+        provider: ollama.make_provider(api_key, origin),
+        model: model_name,
+      ))
+    Mistral ->
+      Some(provider.Llm(
+        provider: mistral.make_provider(api_key),
+        model: model_name,
+      ))
+    Jev -> None
   }
-  provider.Llm(provider: llm_provider, model: model_name)
 }
 
 pub fn provider_from_string(value) -> Option(ProviderChoice) {
   case value {
     "ollama" -> Some(Ollama)
     "mistral" -> Some(Mistral)
+    "jev" -> Some(Jev)
     _ -> None
   }
 }
@@ -235,6 +248,7 @@ pub fn provider_id(selected_provider) {
   case selected_provider {
     Ollama -> ollama.id
     Mistral -> mistral.id
+    Jev -> jev.id
   }
 }
 
@@ -242,6 +256,7 @@ pub fn provider_label(selected_provider) {
   case selected_provider {
     Ollama -> ollama.label
     Mistral -> mistral.label
+    Jev -> jev.label
   }
 }
 
@@ -249,6 +264,7 @@ pub fn default_model(selected_provider) {
   case selected_provider {
     Ollama -> ollama.default_model()
     Mistral -> mistral.default_model()
+    Jev -> jev.default_model()
   }
 }
 
@@ -256,6 +272,7 @@ pub fn model_options(selected_provider) {
   case selected_provider {
     Ollama -> ollama.models()
     Mistral -> mistral.models()
+    Jev -> jev.models()
   }
 }
 
@@ -263,6 +280,7 @@ pub fn token_url(selected_provider) {
   case selected_provider {
     Ollama -> ollama.token_url
     Mistral -> mistral.token_url
+    Jev -> jev.token_url
   }
 }
 

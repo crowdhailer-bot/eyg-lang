@@ -745,3 +745,40 @@ pub fn dnsimple_is_called_through_the_hub_with_the_session_token_test() {
   assert request.path == "/proxy/dnsimple/v2/whoami"
   assert list.key_find(request.headers, "authorization") == Ok("Bearer t0k3n")
 }
+
+fn init_jev() {
+  let config =
+    state.Config(origin: origin.https("eyg.test"), context: context.Default)
+  let #(state, _) = state.init(config)
+  let #(state, _) =
+    state.update(
+      state,
+      state.ProviderSetupMessage(provider_setup.SessionSettingsLoaded(
+        "jev",
+        "jev-latest",
+        "jev-key",
+      )),
+    )
+  state
+}
+
+pub fn jev_builds_a_program_then_runs_it_test() {
+  let state = State(..init_jev(), input: "What is 2 plus 3?")
+  let #(state, actions) = state.update(state, state.UserSubmittedPrompt)
+  let assert state.Building(..) = state.status
+  let assert [system.Fetch(request:, resume:)] = actions
+  assert request.host == "eyg.test"
+  assert request.path == "/v1/systemone"
+  assert list.key_find(request.headers, "authorization") == Ok("Bearer jev-key")
+  let body =
+    "{\"model\":\"jev-1.13.0\",\"answers\":{\"next_edit\":{\"type\":\"choice\",\"choice\":\"integer 3\",\"confidence\":0.9,\"probabilities\":{\"integer 3\":0.9}}},\"usage\":{\"input_tokens\":100,\"output_tokens\":1}}"
+  let assert system.Done(message) =
+    resume(Ok(response.Response(200, [], <<body:utf8>>)))
+  let #(state, actions) = state.update(state, message)
+  assert actions == []
+  assert state.status == state.Waiting
+  let assert [chat.AssistantMessage(text:, ..), chat.UserMessage(..), ..] =
+    state.history
+  assert string.contains(text, "```eyg\n3\n```")
+  assert string.contains(text, "which returned")
+}

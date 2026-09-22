@@ -3,9 +3,12 @@
 import eyg/hub/cache
 import eyg/ir/tree as ir
 import gleam/dict
+import gleam/float
+import gleam/int
 import gleam/list
 import gleam/option
 import gleam/string
+import jev_playground/agent
 import overlay/llm/chat
 import overlay/web/context
 import overlay/web/state.{type State, State}
@@ -40,6 +43,8 @@ pub fn messages(state: State) {
       [message, ..history]
     }
     state.Executing(_calls) -> history
+    state.Building(agent:, ..) -> [jev_progress(agent, "writing"), ..history]
+    state.Answering(agent:, ..) -> [jev_progress(agent, "running"), ..history]
   }
   let length = list.length(messages)
   list.index_map(messages, fn(message, i) { #(length - i, message) })
@@ -98,4 +103,29 @@ fn order_string(waiting: Waiting) -> String {
     Fetching(reference:) -> reference
     Blocked(reference:, on: _) -> reference
   }
+}
+
+// While Jev works the program so far is shown with the selection marked and
+// the last edit it chose.
+fn jev_progress(agent: agent.Agent, doing: String) {
+  let edits = list.length(agent.history)
+  let last = case agent.history {
+    [step, ..] ->
+      "\n\nLast edit: "
+      <> step.label
+      <> " ("
+      <> float.to_string(float.to_precision(step.confidence, 2))
+      <> ")"
+    [] -> ""
+  }
+  let text =
+    "Jev is "
+    <> doing
+    <> " the program, "
+    <> int.to_string(edits)
+    <> " edits so far\n\n```eyg\n"
+    <> agent.program_text(agent)
+    <> "\n```"
+    <> last
+  chat.AssistantMessage(thinking: "", text:, tool_calls: [])
 }
