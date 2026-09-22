@@ -13,6 +13,7 @@ Functions that take no input are called with an empty record, `context.domains({
 - `domain(name)` is one domain.
 - `records(domain)` lists the DNS records of a domain, `{id, name, type, content, ttl, priority}`.
   `name` is \"\" for the domain itself and \"www\" for www.example.com.
+  A host can be given as the domain, `records(\"www.example.com\")` lists the records named \"www\" of example.com.
 - `records_of_type(domain, type)` keeps records of a type such as \"A\", \"MX\" or \"TXT\".
 - `record_values(domain, type)` is the content of each record of a type, the addresses of \"A\" records.
 - `name_servers(domain)` lists the name servers a registered domain is delegated to.
@@ -21,6 +22,9 @@ Functions that take no input are called with an empty record, `context.domains({
 - `expiring_before(date)` lists the names of domains that expire before a date such as \"2027-01-01\".
 
 ## Changing
+
+A record name is relative to the domain or host given, \"\" is the domain or host itself.
+`add_record(\"example.com\", \"www\", \"A\", address)` and `add_record(\"www.example.com\", \"\", \"A\", address)` add the same record.
 
 - `add_record(domain, name, type, content)` adds a record and returns it, use \"\" as the name for the domain itself.
 - `change_record(domain, name, type, content)` sets the content of matching records and returns how many changed.
@@ -38,6 +42,10 @@ Functions that take no input are called with an empty record, `context.domains({
 
 ```eyg
 context.count(context.records(\"example.com\"))
+```
+
+```eyg
+context.change_record(\"example.com\", \"www\", \"A\", \"192.0.2.1\")
 ```
 
 ```eyg
@@ -385,7 +393,67 @@ let records_path = (domain) -> {
   at(!string_append(!string_append("/zones/", domain), "/records"))
 }
 
-let records = (domain) -> { get(records_path(domain), data(list(record_decoder))) }
+let longer = (a, b) -> {
+  match !int_compare(!string_length(a), !string_length(b)) {
+    Gt(_) -> { a }
+    | (_) -> { b }
+  }
+}
+
+// A host such as api.example.com is placed in the domain of the account it
+// belongs to, example.com, where its records are named "api".
+let place = (host) -> {
+  let zone = !list_fold(domain_names({}), "", (name, found) -> {
+    match !equal(host, name) {
+      True(_) -> { longer(name, found) }
+      False(_) -> {
+        match !string_ends_with(host, !string_append(".", name)) {
+          True(_) -> { longer(name, found) }
+          False(_) -> { found }
+        }
+      }
+    }
+  })
+  match !equal(zone, "") {
+    True(_) -> { {zone: host, prefix: ""} }
+    False(_) -> {
+      match !string_split_once(host, !string_append(".", zone)) {
+        Ok({pre}) -> { {zone, prefix: pre} }
+        Error(_) -> { {zone, prefix: ""} }
+      }
+    }
+  }
+}
+
+// A record name given with a host is relative to it, the host's own label
+// given again as the name is taken to mean the host.
+let relative = (place, name) -> {
+  match !equal(place.prefix, "") {
+    True(_) -> { name }
+    False(_) -> {
+      match !equal(name, "") {
+        True(_) -> { place.prefix }
+        False(_) -> {
+          match !equal(name, place.prefix) {
+            True(_) -> { name }
+            False(_) -> { !string_append(!string_append(name, "."), place.prefix) }
+          }
+        }
+      }
+    }
+  }
+}
+
+let zone_records = (zone) -> { get(records_path(zone), data(list(record_decoder))) }
+
+let records = (domain) -> {
+  let place = place(domain)
+  let all = zone_records(place.zone)
+  match !equal(place.prefix, "") {
+    True(_) -> { all }
+    False(_) -> { filter(all, (record) -> { !equal(record.name, place.prefix) }) }
+  }
+}
 
 let records_of_type = (domain, type) -> {
   filter(records(domain), (record) -> { !equal(record.type, type) })
@@ -396,42 +464,44 @@ let record_values = (domain, type) -> {
 }
 
 let add_record = (domain, name, type, content) -> {
+  let place = place(domain)
   let body = json_object([
-    {key: "name", value: quote(name)},
+    {key: "name", value: quote(relative(place, name))},
     {key: "type", value: quote(type)},
     {key: "content", value: quote(content)},
     {key: "ttl", value: "3600"}
   ])
-  decoded(call(POST({}), records_path(domain), None({}), body), data(record_decoder))
+  decoded(call(POST({}), records_path(place.zone), None({}), body), data(record_decoder))
 }
 
-let matching = (domain, name, type) -> {
-  filter(records(domain), (record) -> {
-    both(!equal(record.name, name), !equal(record.type, type))
-  })
-}
-
-let record_path = (domain, record) -> {
-  !string_append(!string_append(records_path(domain), "/"), !int_to_string(record.id))
+let record_path = (zone, record) -> {
+  !string_append(!string_append(records_path(zone), "/"), !int_to_string(record.id))
 }
 
 let change_record = (domain, name, type, content) -> {
-  let found = matching(domain, name, type)
+  let place = place(domain)
+  let name = relative(place, name)
+  let found = filter(zone_records(place.zone), (record) -> {
+    both(!equal(record.name, name), !equal(record.type, type))
+  })
   let body = json_object([{key: "content", value: quote(content)}])
   let _ = map(found, (record) -> {
-    call(PATCH({}), record_path(domain, record), None({}), body)
+    call(PATCH({}), record_path(place.zone, record), None({}), body)
   })
   count(found)
 }
 
 let remove_record = (domain, name, type) -> {
-  let found = matching(domain, name, type)
+  let place = place(domain)
+  let name = relative(place, name)
+  let found = filter(zone_records(place.zone), (record) -> {
+    both(!equal(record.name, name), !equal(record.type, type))
+  })
   let _ = map(found, (record) -> {
-    call(DELETE({}), record_path(domain, record), None({}), "")
+    call(DELETE({}), record_path(place.zone, record), None({}), "")
   })
   count(found)
 }
-
 {
   readme,
   account,

@@ -116,6 +116,35 @@ pub fn records_are_changed_test() {
   })
 }
 
+pub fn a_host_is_placed_in_its_domain_test() {
+  assert value("context.record_values(\"api.lovelace.dev\", \"A\")")
+    == dnsimple.strings(["198.51.100.1"])
+  let api = fn(code) {
+    let assert Ok(#(changed, account)) = run(code)
+    let assert Ok(domain) = dnsimple.find_domain(account, "lovelace.dev")
+    #(
+      changed,
+      list.any(domain.records, fn(r) {
+        r.name == "api" && r.content == "198.51.100.4"
+      }),
+    )
+  }
+  assert api(
+      "context.change_record(\"api.lovelace.dev\", \"\", \"A\", \"198.51.100.4\")",
+    )
+    == #(v.Integer(1), True)
+  assert api(
+      "context.change_record(\"api.lovelace.dev\", \"api\", \"A\", \"198.51.100.4\")",
+    )
+    == #(v.Integer(1), True)
+  let assert Ok(#(_, account)) =
+    run(
+      "context.add_record(\"www.notes.garden\", \"\", \"A\", \"203.0.113.7\")",
+    )
+  let assert Ok(domain) = dnsimple.find_domain(account, "notes.garden")
+  assert list.any(domain.records, fn(r) { r.name == "www" })
+}
+
 pub fn auto_renew_is_changed_test() {
   let assert Ok(#(_, account)) =
     run("context.enable_auto_renew(\"notes.garden\")")
@@ -159,9 +188,10 @@ pub fn the_effects_of_each_call_can_be_shown_test() {
 pub fn the_readme_examples_have_their_strings_as_holes_test() {
   let assert Ok(environment) = library.context(source(), environment.browser())
   let assert Some(readme) = environment.context_readme(environment)
-  let assert [first, second] = options.readme_examples(readme)
+  let assert [first, second, third] = options.readme_examples(readme)
   assert first == "context.count(context.records(todo))"
-  assert string.starts_with(second, "context.sum(context.map(")
+  assert second == "context.change_record(todo, todo, todo, todo)"
+  assert string.starts_with(third, "context.sum(context.map(")
 }
 
 pub fn compounds_are_built_from_the_context_test() {
