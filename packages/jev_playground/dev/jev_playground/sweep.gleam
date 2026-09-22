@@ -68,7 +68,7 @@ const without_variants = [
   ["holes", "blind"],
   ["holes", "blind", "noreadme"],
   ["holes", "blind", "noargjumps"],
-  ["holes", "blind", "noanswered"],
+  ["holes", "blind", "answered"],
 ]
 
 /// Each way of showing effects, in hole mode.

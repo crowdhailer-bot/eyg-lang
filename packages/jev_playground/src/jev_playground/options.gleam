@@ -173,7 +173,8 @@ pub fn default_config() {
     context_compounds: ContextExamples,
     effects: EffectSignatures,
     context_readme: True,
-    ask_answered: True,
+    // Asking made Jev stop at a record that holds the answer, see contexts.md.
+    ask_answered: False,
   )
 }
 
