@@ -214,4 +214,6 @@ confidence and the time Jev took, which opens and scrolls.
 coloured by the shared highlighter, with the time Jev took. A page in `tmp` plays eighteen of them in a
 three by two grid, the fastest six first and the longest six last, and Playwright records it.
 The overlay video is recorded the same way, by typing questions into the page.
+The longest run recorded through the page is eighteen edits: this host has under 4GB of memory shared with
+Postgres, and the browser is killed part way through a run of forty or more.
 Both are in `tmp`, which is not committed.
