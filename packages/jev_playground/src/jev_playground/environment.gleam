@@ -21,6 +21,8 @@ pub type Environment {
     libraries: List(Library),
     /// Variables already defined around the program, with the bindings their types refer to.
     scope: List(#(String, binding.Poly)),
+    /// The values of the variables in `scope`, when the program is run.
+    values: List(#(String, state.Value(List(Int)))),
     bindings: Dict(Int, binding.Binding),
   )
 }
@@ -43,12 +45,19 @@ pub fn browser() -> Environment {
     effects: interface.types(harness.effects()),
     libraries: [],
     scope: [],
+    values: [],
     bindings: dict.new(),
   )
 }
 
 pub fn pure() -> Environment {
-  Environment(effects: [], libraries: [], scope: [], bindings: dict.new())
+  Environment(
+    effects: [],
+    libraries: [],
+    scope: [],
+    values: [],
+    bindings: dict.new(),
+  )
 }
 
 pub fn with_libraries(environment, libraries) {

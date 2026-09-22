@@ -28,8 +28,21 @@ pub fn evaluate(
   source: ir.Node(List(Int)),
   environment: Environment,
 ) -> Result(Value, String) {
-  state.step(state.E(source), builtin.default([]), state.Empty)
-  |> finish(budget, environment)
+  evaluate_handled(source, environment, Nil, unhandled)
+  |> result.map(fn(pair) { pair.0 })
+}
+
+/// Evaluate a program whose effects are handled by `handle`, which threads a
+/// state of its own, for example the data behind a mocked API.
+pub fn evaluate_handled(
+  source: ir.Node(List(Int)),
+  environment: Environment,
+  state: s,
+  handle: fn(s, String, Value) -> Result(#(Value, s), String),
+) -> Result(#(Value, s), String) {
+  let env = builtin.default(environment.values)
+  state.step(state.E(source), env, state.Empty)
+  |> finish(budget, environment, state, handle)
 }
 
 /// Call a function value with arguments, effects are not allowed.
@@ -38,25 +51,41 @@ pub fn call(
   args: List(Value),
   environment: Environment,
 ) -> Result(Value, String) {
-  let env = builtin.default([])
+  call_handled(func, args, environment, Nil, unhandled)
+  |> result.map(fn(pair) { pair.0 })
+}
+
+/// Call a function value with arguments, its effects handled by `handle`.
+pub fn call_handled(
+  func: Value,
+  args: List(Value),
+  environment: Environment,
+  state: s,
+  handle: fn(s, String, Value) -> Result(#(Value, s), String),
+) -> Result(#(Value, s), String) {
+  let env = builtin.default(environment.values)
   let k =
     list.fold_right(args, state.Empty, fn(k, arg) {
       state.Stack(state.CallWith(arg, env), [], k)
     })
   state.step(state.V(func), env, k)
-  |> finish(budget, environment)
+  |> finish(budget, environment, state, handle)
+}
+
+fn unhandled(_state, label, _lift) {
+  Error("the effect " <> label <> " was performed but is not handled")
 }
 
 /// Programs Jev writes may never finish, for example when a recursive call does
 /// not count down, so evaluation stops after this many steps.
 const budget = 1_000_000
 
-fn finish(next, remaining, environment) {
+fn finish(next, remaining, environment, state, handle) {
   case next {
     state.Loop(c, e, k) if remaining > 0 ->
-      finish(state.step(c, e, k), remaining - 1, environment)
+      finish(state.step(c, e, k), remaining - 1, environment, state, handle)
     state.Loop(..) -> Error("the program did not finish within a million steps")
-    state.Break(Ok(value)) -> Ok(value)
+    state.Break(Ok(value)) -> Ok(#(value, state))
     state.Break(Error(#(
       break.UndefinedReference(ir.Pinned(ir.Release(module:, ..)) as reference),
       _,
@@ -75,12 +104,24 @@ fn finish(next, remaining, environment) {
             state.step(state.V(library.value), env, k),
             remaining,
             environment,
+            state,
+            handle,
           )
         Error(Nil) ->
           Error("unknown reference " <> ir.reference_to_string(reference))
       }
-    state.Break(Error(#(break.UnhandledEffect(label, _lift), _, _, _))) ->
-      Error("the effect " <> label <> " was performed but is not handled")
+    state.Break(Error(#(break.UnhandledEffect(label, lift), _, env, k))) ->
+      case handle(state, label, lift) {
+        Ok(#(value, state)) ->
+          finish(
+            state.step(state.V(value), env, k),
+            remaining,
+            environment,
+            state,
+            handle,
+          )
+        Error(reason) -> Error(reason)
+      }
     state.Break(Error(#(reason, _, _, _))) ->
       Error(simple_debug.describe(reason))
   }
