@@ -152,3 +152,20 @@ Look at each file in the eyg_packages directory.
   - [x] Twenty questions a person might ask of their DNSimple account, each started from an empty program
   - [x] Offer to select each argument of a complete program, and fix the selection after a wrap and after a function argument
 - [x] Review the ways of building compounds from a context and of showing effects, `packages/jev_playground/research/contexts.md`
+
+### A context of endpoints
+
+- [x] Reduce the DNSimple context to one function per API endpoint, named as DNSimple names the operation
+  - [x] No list helpers of its own, a program opens `@standard` for those
+  - [x] Pass on what the API says when a call fails
+- [x] Let Jev pull a library
+  - [x] Its functions are offered as calls, wraps and values once it is open, as the context's are
+  - [x] A library the program already references counts as open
+  - [x] A release is written `@standard:1:baguq…` in the tree and read as `@standard`
+  - [x] Pass the selection as the first argument of a call taking several, in `morph`
+- [x] Thirty one questions a person would ask of their account, eighteen answered from an empty program
+- [x] Show what Jev writes properly on the overlay page
+  - [x] One syntax highlighter, shared by the playground and the overlay
+  - [x] Long lines wrap in the chat rather than scrolling sideways
+  - [x] Every edit listed under the answer with its confidence and time, opened and scrolled by the reader
+- [x] Record the videos, `jev_playground/frames` replays saved runs into the frames of one
