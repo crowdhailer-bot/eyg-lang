@@ -146,7 +146,8 @@ pub fn defaults() -> Vocabulary {
     names: common_names,
     labels: [],
     tags: common_tags,
-    strings: [],
+    // The empty string is often needed and cannot be seen in a task.
+    strings: [""],
     integers: common_integers,
     records: [],
     patterns: [],
