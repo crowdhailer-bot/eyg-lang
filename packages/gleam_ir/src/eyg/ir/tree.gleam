@@ -259,11 +259,12 @@ pub fn multiply(a, b) {
 }
 
 pub fn get_annotation(node: Node(a)) {
-  fold(node, [], fn(acc, node) { return([node.1, ..acc]) })(list.reverse)
+  fold_pure(node, [], fn(acc, node) { [node.1, ..acc] })
+  |> list.reverse
 }
 
 pub fn map_annotation(in: Node(a), f: fn(a) -> b) -> Node(b) {
-  rewrite_meta(in, fn(m) { return(f(m)) })(fn(x) { x })
+  map_meta(Down(in), [], f)
 }
 
 pub fn clear_annotation(source) {
@@ -272,24 +273,24 @@ pub fn clear_annotation(source) {
 
 pub fn list_builtins(node: Node(a)) {
   {
-    use acc, #(exp, _meta) <- fold(node, [])
+    use acc, #(exp, _meta) <- fold_pure(node, [])
     case exp {
       Builtin(i) -> utils.push_new(acc, i)
       _ -> acc
     }
-    |> return
-  }(list.reverse)
+  }
+  |> list.reverse
 }
 
 pub fn list_references(node: Node(a)) -> List(Reference) {
   {
-    use acc, #(exp, _meta) <- fold(node, [])
+    use acc, #(exp, _meta) <- fold_pure(node, [])
     case exp {
       Reference(reference) -> utils.push_new(acc, reference)
       _ -> acc
     }
-    |> return
-  }(list.reverse)
+  }
+  |> list.reverse
 }
 
 /// The variables that are free in this expressions.
@@ -448,6 +449,113 @@ pub fn map_children(
     Handle(label:) -> return(Handle(label:))
     Builtin(identifier:) -> return(Builtin(identifier:))
     Reference(reference:) -> return(Reference(reference:))
+  }
+}
+
+/// Visit each node in a pre-order depth-first traversal and accumulate a value.
+///
+/// Unlike `fold` the step function performs no effects, which is what lets this
+/// run in constant stack space: the continuation monad nests a frame per bind
+/// for the whole traversal, so a module of any size overflows the stack of a
+/// browser, where the limit is far lower than the one node gives a CLI.
+pub fn fold_pure(node: Node(a), acc: b, f: fn(b, Node(a)) -> b) -> b {
+  do_fold_pure([node], acc, f)
+}
+
+fn do_fold_pure(nodes: List(Node(a)), acc: b, f: fn(b, Node(a)) -> b) -> b {
+  case nodes {
+    [] -> acc
+    [n, ..rest] -> do_fold_pure(list.append(children(n), rest), f(acc, n), f)
+  }
+}
+
+/// One half-rebuilt parent, held while its remaining children are visited.
+///
+/// Only Lambda, Apply and Let have children, so these are every point a
+/// traversal can be part way through a node.
+type Frame(a, b) {
+  InLambda(label: String, meta: b)
+  InApplyFunction(argument: Node(a), meta: b)
+  InApplyArgument(func: Node(b), meta: b)
+  InLetDefinition(label: String, body: Node(a), meta: b)
+  InLetBody(label: String, definition: Node(b), meta: b)
+}
+
+/// Whether the machine is descending into a node or returning a rebuilt one.
+type Direction(a, b) {
+  Down(Node(a))
+  Up(Node(b))
+}
+
+/// Rebuild a tree with the metadata of every node mapped.
+///
+/// Written as one self-recursive loop over an explicit stack of frames, rather
+/// than by recursing over the children, so that the depth of the tree and the
+/// number of nodes in it cost no stack. Gleam only turns direct self calls into
+/// a loop, so the two halves of the walk are one function rather than two.
+fn map_meta(
+  direction: Direction(a, b),
+  frames: List(Frame(a, b)),
+  f: fn(a) -> b,
+) -> Node(b) {
+  case direction {
+    Down(#(exp, meta)) -> {
+      let meta = f(meta)
+      case exp {
+        Lambda(label:, body:) ->
+          map_meta(Down(body), [InLambda(label:, meta:), ..frames], f)
+        Apply(func:, argument:) ->
+          map_meta(Down(func), [InApplyFunction(argument:, meta:), ..frames], f)
+        Let(label:, definition:, body:) ->
+          map_meta(
+            Down(definition),
+            [InLetDefinition(label:, body:, meta:), ..frames],
+            f,
+          )
+        Variable(label:) -> map_meta(Up(#(Variable(label:), meta)), frames, f)
+        Binary(value:) -> map_meta(Up(#(Binary(value:), meta)), frames, f)
+        Integer(value:) -> map_meta(Up(#(Integer(value:), meta)), frames, f)
+        String(value:) -> map_meta(Up(#(String(value:), meta)), frames, f)
+        Tail -> map_meta(Up(#(Tail, meta)), frames, f)
+        Cons -> map_meta(Up(#(Cons, meta)), frames, f)
+        Vacant -> map_meta(Up(#(Vacant, meta)), frames, f)
+        Empty -> map_meta(Up(#(Empty, meta)), frames, f)
+        Extend(label:) -> map_meta(Up(#(Extend(label:), meta)), frames, f)
+        Select(label:) -> map_meta(Up(#(Select(label:), meta)), frames, f)
+        Overwrite(label:) -> map_meta(Up(#(Overwrite(label:), meta)), frames, f)
+        Tag(label:) -> map_meta(Up(#(Tag(label:), meta)), frames, f)
+        Case(label:) -> map_meta(Up(#(Case(label:), meta)), frames, f)
+        NoCases -> map_meta(Up(#(NoCases, meta)), frames, f)
+        Perform(label:) -> map_meta(Up(#(Perform(label:), meta)), frames, f)
+        Handle(label:) -> map_meta(Up(#(Handle(label:), meta)), frames, f)
+        Builtin(identifier:) ->
+          map_meta(Up(#(Builtin(identifier:), meta)), frames, f)
+        Reference(reference:) ->
+          map_meta(Up(#(Reference(reference:), meta)), frames, f)
+      }
+    }
+    Up(node) ->
+      case frames {
+        [] -> node
+        [InLambda(label:, meta:), ..frames] ->
+          map_meta(Up(#(Lambda(label:, body: node), meta)), frames, f)
+        [InApplyFunction(argument:, meta:), ..frames] ->
+          map_meta(
+            Down(argument),
+            [InApplyArgument(func: node, meta:), ..frames],
+            f,
+          )
+        [InApplyArgument(func:, meta:), ..frames] ->
+          map_meta(Up(#(Apply(func:, argument: node), meta)), frames, f)
+        [InLetDefinition(label:, body:, meta:), ..frames] ->
+          map_meta(
+            Down(body),
+            [InLetBody(label:, definition: node, meta:), ..frames],
+            f,
+          )
+        [InLetBody(label:, definition:, meta:), ..frames] ->
+          map_meta(Up(#(Let(label:, definition:, body: node), meta)), frames, f)
+      }
   }
 }
 
