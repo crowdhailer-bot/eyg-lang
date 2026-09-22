@@ -562,6 +562,9 @@ fn values(
         }
       })
     }
+    // In hole mode a complete program is selected whole, a value would throw it
+    // away, an argument is changed by selecting it first.
+    #(p.Exp(exp), []) if config.focus_holes && exp != e.Vacant -> []
     #(p.Exp(_), _) -> expression_values(buffer, environment, vocabulary, config)
     _ -> []
   }
