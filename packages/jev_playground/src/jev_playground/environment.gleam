@@ -214,3 +214,18 @@ fn lambda_labels(node: ir.Node(a)) -> List(String) {
     _ -> []
   }
 }
+
+/// Write the release a package name refers to, `@standard` becomes
+/// `@standard:1:baguq…`, so code can be written and read with the short name.
+pub fn pin_packages(code: String, environment: Environment) -> String {
+  list.fold(environment.libraries, code, fn(code, library) {
+    let pinned =
+      "@"
+      <> library.name
+      <> ":"
+      <> int.to_string(library.release.version)
+      <> ":"
+      <> v1.to_string(library.release.module)
+    string.replace(code, "@" <> library.name <> ".", pinned <> ".")
+  })
+}

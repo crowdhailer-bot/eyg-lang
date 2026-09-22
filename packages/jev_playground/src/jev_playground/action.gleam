@@ -263,6 +263,8 @@ pub fn apply(
         apply(step, buffer, environment)
       })
     Insert(code) -> {
+      // Code is written with the short package name, `@standard.list.map`.
+      let code = environment.pin_packages(code, environment)
       use tree <- result.try(
         parser.all_from_string(code) |> result.replace_error(Nil),
       )

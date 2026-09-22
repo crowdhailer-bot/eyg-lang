@@ -25,8 +25,9 @@ fn environment_for(eval: evals.Eval, base) {
     Some(_) -> {
       let assert Ok(text) = simplifile.read(dnsimple.context_path)
       let assert Ok(source) = library.parse(text)
-      let assert Ok(environment) =
-        library.context(source, environment.browser())
+      let assert Ok(bundle) = packages.bundle()
+      let assert Ok(base) = library.environment(bundle, environment.browser())
+      let assert Ok(environment) = library.context(source, base)
       environment
     }
     None -> base
@@ -38,23 +39,33 @@ fn annotated(source) {
   e.to_annotated(e.from_annotated(tree), [])
 }
 
+// Solutions are written with the short package name, as the readme is.
+fn annotated_in(source, environment) {
+  annotated(environment.pin_packages(source, environment))
+}
+
 pub fn every_solution_passes_its_check_test() {
   let environment = environment()
   list.each(evals.all(), fn(eval) {
-    let source = annotated(evals.solution(eval))
-    assert evals.check(eval, source, environment_for(eval, environment))
-      == Ok(Nil)
+    let environment = environment_for(eval, environment)
+    let source = annotated_in(evals.solution(eval), environment)
+    assert evals.check(eval, source, environment) == Ok(Nil)
   })
 }
 
 pub fn the_mail_servers_answer_the_mx_question_test() {
   let assert Ok(eval) = evals.find("dnsimple-mx")
   let environment = environment_for(eval, environment.pure())
-  let check = fn(code) { evals.check(eval, annotated(code), environment) }
-  assert check("context.record_values(\"analytical.engineering\", \"MX\")")
-    == Ok(Nil)
-  let assert Error(_) =
-    check("context.record_values(\"analytical.engineering\", \"A\")")
+  let check = fn(code) {
+    evals.check(eval, annotated_in(code, environment), environment)
+  }
+  let values = fn(type_) {
+    "@standard.list.map(@standard.list.filter((record) -> { !equal(record.type, \""
+    <> type_
+    <> "\") }, context.list_zone_records(\"analytical.engineering\")), (record) -> { record.content })"
+  }
+  assert check(values("MX")) == Ok(Nil)
+  let assert Error(_) = check(values("A"))
 }
 
 pub fn list_functions_start_fails_its_check_test() {

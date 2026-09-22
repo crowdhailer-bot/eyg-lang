@@ -3,7 +3,7 @@ import eyg/parser
 import gleam/bit_array
 import gleam/json
 import gleam/list
-import gleam/option.{Some}
+import gleam/option.{None, Some}
 import gleam/string
 import jev_playground/action
 import jev_playground/agent
@@ -23,9 +23,19 @@ fn source() {
   source
 }
 
+// The context in scope as `context`, with the libraries a program may open,
+// as an eval and the overlay page give them.
+fn environment() {
+  let assert Ok(bundle) = packages.bundle()
+  let assert Ok(base) = library.environment(bundle, environment.browser())
+  let assert Ok(environment) = library.context(source(), base)
+  environment
+}
+
 fn run(code) {
-  let assert Ok(environment) = library.context(source(), environment.browser())
-  let assert Ok(tree) = parser.all_from_string(code)
+  let environment = environment()
+  let assert Ok(tree) =
+    parser.all_from_string(environment.pin_packages(code, environment))
   let program = e.to_annotated(e.from_annotated(tree), [])
   run.evaluate_handled(
     program,
@@ -45,187 +55,83 @@ pub fn the_context_is_the_one_shared_to_the_hub_test() {
     == dnsimple.context_id
 }
 
-pub fn domains_are_listed_test() {
-  assert value("context.domain_names({})")
-    == dnsimple.strings([
-      "lovelace.dev", "analytical.engineering", "notes.garden", "babbage.org",
-    ])
-  assert value("context.count(context.domain_names({}))") == v.Integer(4)
-  assert value("context.account({}).email") == v.String("ada@lovelace.dev")
+pub fn the_account_is_read_test() {
+  assert value("context.whoami({}).account.email")
+    == v.String("ada@lovelace.dev")
+  assert value("@standard.list.length(context.list_domains({}))")
+    == v.Integer(4)
+  assert value("context.get_domain(\"notes.garden\").expires_at")
+    == v.String("2028-01-02T00:00:00Z")
 }
 
-pub fn records_are_read_test() {
-  assert value("context.count(context.records(\"lovelace.dev\"))")
-    == v.Integer(7)
-  assert value("context.record_values(\"lovelace.dev\", \"A\")")
-    == dnsimple.strings(["93.184.215.14", "93.184.215.15", "198.51.100.1"])
+pub fn zone_records_are_read_test() {
   assert value(
-      "context.count(context.records_of_type(\"analytical.engineering\", \"MX\"))",
+      "@standard.list.length(context.list_zone_records(\"lovelace.dev\"))",
     )
-    == v.Integer(2)
+    == v.Integer(7)
+  assert value("context.get_zone_record(\"lovelace.dev\", 104).content")
+    == v.String("198.51.100.1")
+  assert value(
+      "@standard.list.length(@standard.list.filter((record) -> { !equal(record.type, \"A\") }, context.list_zone_records(\"lovelace.dev\")))",
+    )
+    == v.Integer(3)
 }
 
 pub fn the_registrar_is_asked_test() {
-  assert value("context.is_available(\"jev-rocks.com\")") == v.true()
-  assert value("context.is_available(\"lovelace.dev\")") == v.false()
-  assert value("context.count(context.name_servers(\"notes.garden\"))")
-    == v.Integer(4)
-  assert value("context.without_auto_renew({})")
-    == dnsimple.strings([
-      "analytical.engineering",
-      "notes.garden",
-      "babbage.org",
-    ])
-  assert value("context.expiring_before(\"2027-06-01\")")
-    == dnsimple.strings(["lovelace.dev", "analytical.engineering"])
-  assert value("context.domain(\"notes.garden\").expires_on")
-    == v.String("2028-01-02")
+  assert value("context.check_domain(\"jev-rocks.com\").available") == v.true()
+  assert value("context.check_domain(\"lovelace.dev\").available") == v.false()
+  assert value("context.get_domain_delegation(\"notes.garden\")")
+    == dnsimple.strings(dnsimple.fixture().name_servers)
 }
 
-pub fn lists_compose_test() {
-  assert value(
-      "context.sum(context.map(context.domain_names({}), (name) -> { context.count(context.records(name)) }))",
+pub fn zone_records_are_changed_test() {
+  let assert Ok(#(created, account)) =
+    run(
+      "context.create_zone_record(\"notes.garden\", {name: \"www\", type: \"A\", content: \"203.0.113.7\", ttl: 3600})",
     )
-    == v.Integer(14)
-  assert value(
-      "context.count(context.flatten(context.map(context.domain_names({}), context.records)))",
-    )
-    == v.Integer(14)
-}
-
-pub fn records_are_changed_test() {
-  let assert Ok(#(_, account)) =
-    run("context.add_record(\"notes.garden\", \"www\", \"A\", \"203.0.113.7\")")
   let assert Ok(domain) = dnsimple.find_domain(account, "notes.garden")
   assert list.any(domain.records, fn(r) {
     r.name == "www" && r.type_ == "A" && r.content == "203.0.113.7"
   })
-  let assert Ok(#(removed, account)) =
-    run("context.remove_record(\"lovelace.dev\", \"old\", \"TXT\")")
-  assert removed == v.Integer(1)
-  let assert Ok(domain) = dnsimple.find_domain(account, "lovelace.dev")
-  assert !list.any(domain.records, fn(r) { r.name == "old" })
-  let assert Ok(#(changed, account)) =
+  assert created
+    == dnsimple.record_value(dnsimple.Record(
+      1000,
+      "www",
+      "A",
+      "203.0.113.7",
+      3600,
+      None,
+    ))
+
+  let assert Ok(#(_, account)) =
     run(
-      "context.change_record(\"lovelace.dev\", \"api\", \"A\", \"198.51.100.4\")",
+      "context.update_zone_record(\"lovelace.dev\", 104, {name: \"api\", type: \"A\", content: \"198.51.100.4\", ttl: 3600})",
     )
-  assert changed == v.Integer(1)
   let assert Ok(domain) = dnsimple.find_domain(account, "lovelace.dev")
   assert list.any(domain.records, fn(r) {
-    r.name == "api" && r.content == "198.51.100.4"
+    r.id == 104 && r.content == "198.51.100.4"
   })
+
+  let assert Ok(#(_, account)) =
+    run("context.delete_zone_record(\"lovelace.dev\", 106)")
+  let assert Ok(domain) = dnsimple.find_domain(account, "lovelace.dev")
+  assert !list.any(domain.records, fn(r) { r.id == 106 })
 }
 
-pub fn a_host_is_placed_in_its_domain_test() {
-  assert value("context.record_values(\"api.lovelace.dev\", \"A\")")
-    == dnsimple.strings(["198.51.100.1"])
-  let api = fn(code) {
-    let assert Ok(#(changed, account)) = run(code)
-    let assert Ok(domain) = dnsimple.find_domain(account, "lovelace.dev")
-    #(
-      changed,
-      list.any(domain.records, fn(r) {
-        r.name == "api" && r.content == "198.51.100.4"
-      }),
-    )
-  }
-  assert api(
-      "context.change_record(\"api.lovelace.dev\", \"\", \"A\", \"198.51.100.4\")",
-    )
-    == #(v.Integer(1), True)
-  assert api(
-      "context.change_record(\"api.lovelace.dev\", \"api\", \"A\", \"198.51.100.4\")",
-    )
-    == #(v.Integer(1), True)
+pub fn auto_renewal_is_changed_test() {
   let assert Ok(#(_, account)) =
-    run(
-      "context.add_record(\"www.notes.garden\", \"\", \"A\", \"203.0.113.7\")",
-    )
-  let assert Ok(domain) = dnsimple.find_domain(account, "notes.garden")
-  assert list.any(domain.records, fn(r) { r.name == "www" })
-}
-
-pub fn auto_renew_is_changed_test() {
-  let assert Ok(#(_, account)) =
-    run("context.enable_auto_renew(\"notes.garden\")")
+    run("context.enable_domain_auto_renewal(\"notes.garden\")")
   let assert Ok(domain) = dnsimple.find_domain(account, "notes.garden")
   assert domain.auto_renew
+  let assert Ok(#(_, account)) =
+    run("context.disable_domain_auto_renewal(\"lovelace.dev\")")
+  let assert Ok(domain) = dnsimple.find_domain(account, "lovelace.dev")
+  assert !domain.auto_renew
 }
 
-fn agent(code, effects) {
-  let assert Ok(environment) = library.context(source(), environment.browser())
-  let code = case code {
-    "?" -> "todo"
-    code -> code
-  }
-  let assert Ok(tree) = parser.all_from_string(code)
-  let config =
-    options.Config(..options.default_config(), focus_holes: True, effects:)
-  agent.new("", action.todo_holes(e.from_annotated(tree)), environment, config)
-}
-
-pub fn effects_can_be_hidden_test() {
-  let hidden =
-    agent.options(agent("?", options.NoEffects)) |> list.map(options.key)
-  assert !list.contains(hidden, "perform Print")
-  let shown =
-    agent.options(agent("?", options.EffectSignatures)) |> list.map(options.key)
-  assert list.contains(shown, "perform Print")
-}
-
-pub fn the_effects_of_each_call_can_be_shown_test() {
-  let program = "context.count(context.records(\"lovelace.dev\"))"
-  let state = fn(effects) {
-    json.to_string(agent.state(agent(program, effects)))
-  }
-  assert string.contains(
-    state(options.EffectNodes),
-    "context.records(\\\"lovelace.dev\\\") performs DNSimple",
-  )
-  assert !string.contains(state(options.EffectSignatures), "effects_performed")
-}
-
-pub fn the_readme_examples_have_their_strings_as_holes_test() {
-  let assert Ok(environment) = library.context(source(), environment.browser())
-  let assert Some(readme) = environment.context_readme(environment)
-  let assert [first, second, third, fourth] = options.readme_examples(readme)
-  assert first == "context.count(context.records(todo))"
-  assert second == "context.domain(todo).expires_on"
-  assert third == "context.change_record(todo, todo, todo, todo)"
-  assert string.starts_with(fourth, "context.sum(context.map(")
-}
-
-pub fn compounds_are_built_from_the_context_test() {
-  let keys = fn(strategy) {
-    let assert Ok(environment) =
-      library.context(source(), environment.browser())
-    let config =
-      options.Config(
-        ..options.default_config(),
-        focus_holes: True,
-        context_compounds: strategy,
-      )
-    agent.new("", e.Vacant, environment, config)
-    |> agent.options
-    |> list.map(options.key)
-  }
-  assert list.contains(keys(options.ContextCalls), "context.domain_names({})")
-  assert list.contains(
-    keys(options.ContextBareCalls),
-    "call context.domain_names(?)",
-  )
-  assert list.contains(
-    keys(options.ContextChains),
-    "context.count(context.domain_names({}))",
-  )
-  assert list.contains(
-    keys(options.ContextExamples),
-    "example context.count(context.records(?))",
-  )
-  assert !list.contains(
-    keys(options.NoContextCompounds),
-    "context.domain_names({})",
-  )
+pub fn a_missing_zone_fails_with_the_message_of_the_api_test() {
+  let assert Error(reason) = run("context.list_zone_records(\"lovelace.com\")")
+  assert string.contains(reason, "Zone `lovelace.com` not found")
 }
 
 pub fn requests_can_be_answered_over_http_test() {
@@ -236,34 +142,115 @@ pub fn requests_can_be_answered_over_http_test() {
   assert string.contains(text, "ada@lovelace.dev")
 }
 
+fn agent(code, effects) {
+  let environment = environment()
+  let code = case code {
+    "?" -> "todo"
+    code -> environment.pin_packages(code, environment)
+  }
+  let assert Ok(tree) = parser.all_from_string(code)
+  let config =
+    options.Config(
+      ..options.default_config(),
+      focus_holes: True,
+      effects:,
+      search_libraries: True,
+    )
+  agent.new("", action.todo_holes(e.from_annotated(tree)), environment, config)
+}
+
+fn keys(agent) {
+  agent.options(agent) |> list.map(options.key)
+}
+
+pub fn effects_can_be_hidden_test() {
+  assert !list.contains(keys(agent("?", options.NoEffects)), "perform Print")
+  assert list.contains(
+    keys(agent("?", options.EffectSignatures)),
+    "perform Print",
+  )
+}
+
+pub fn the_effects_of_each_call_can_be_shown_test() {
+  let program = "context.list_zone_records(\"lovelace.dev\")"
+  let state = fn(effects) {
+    json.to_string(agent.state(agent(program, effects)))
+  }
+  assert string.contains(
+    state(options.EffectNodes),
+    "context.list_zone_records(\\\"lovelace.dev\\\") performs DNSimple",
+  )
+  assert !string.contains(state(options.EffectSignatures), "effects_performed")
+}
+
+pub fn the_readme_examples_have_their_strings_as_holes_test() {
+  let assert Some(readme) = environment.context_readme(environment())
+  let assert [first, second, third] = options.readme_examples(readme)
+  assert first == "@standard.list.length(context.list_zone_records(todo))"
+  assert string.starts_with(second, "@standard.list.filter(")
+  assert string.contains(third, "context.create_zone_record(todo, {")
+}
+
+pub fn compounds_are_built_from_the_context_test() {
+  let keys = fn(strategy) {
+    let config =
+      options.Config(
+        ..options.default_config(),
+        focus_holes: True,
+        context_compounds: strategy,
+      )
+    agent.new("", e.Vacant, environment(), config)
+    |> agent.options
+    |> list.map(options.key)
+  }
+  assert list.contains(keys(options.ContextCalls), "context.list_domains({})")
+  assert list.contains(
+    keys(options.ContextBareCalls),
+    "call context.list_domains(?)",
+  )
+  assert list.contains(
+    keys(options.ContextExamples),
+    "example @standard.list.length(context.list_zone_records(?))",
+  )
+  assert !list.contains(
+    keys(options.NoContextCompounds),
+    "context.list_domains({})",
+  )
+}
+
+pub fn the_library_can_be_opened_test() {
+  let agent = agent("?", options.EffectCallsOnly)
+  assert list.contains(keys(agent), "open library @standard")
+  let assert Ok(option) =
+    list.find(agent.options(agent), fn(o) {
+      options.key(o) == "open library @standard"
+    })
+  let assert Ok(agent) = agent.take(agent, agent.scripted(option.action))
+  assert list.contains(keys(agent), "library @standard")
+}
+
 pub fn arguments_of_context_functions_are_named_test() {
   let state =
-    agent("context.change_record(todo, todo, todo, todo)", options.NoEffects)
+    agent("context.update_zone_record(todo, todo, todo)", options.NoEffects)
     |> agent.state
     |> json.to_string
   assert string.contains(
     state,
-    "argument 1 of 4, `domain`, to context.change_record",
+    "argument 1 of 3, `zone`, to context.update_zone_record",
   )
 }
 
 pub fn context_functions_are_offered_where_a_function_is_expected_test() {
-  let keys =
-    agent("context.map(context.domain_names({}), todo)", options.NoEffects)
-    |> agent.options
-    |> list.map(options.key)
-  assert list.contains(keys, "context.records")
-  assert list.contains(keys, "context.name_servers")
-}
-
-pub fn a_missing_domain_fails_with_the_message_of_the_api_test() {
-  let assert Error(reason) = run("context.records(\"lovelace.com\")")
-  assert string.contains(reason, "Zone `lovelace.com` not found")
+  let offered =
+    keys(agent(
+      "@standard.list.map(context.get_domain_delegation(\"notes.garden\"), todo)",
+      options.NoEffects,
+    ))
+  assert list.contains(offered, "context.get_domain")
 }
 
 pub fn each_argument_of_a_complete_program_can_be_selected_test() {
-  let program =
-    "context.change_record(\"api.lovelace.dev\", \"api\", \"A\", \"198.51.100.4\")"
+  let program = "context.get_zone_record(\"lovelace.dev\", 104)"
   let jumps =
     agent.options(agent(program, options.EffectSignatures))
     |> list.filter(fn(option) {
@@ -272,17 +259,10 @@ pub fn each_argument_of_a_complete_program_can_be_selected_test() {
         _ -> False
       }
     })
-  let assert [domain, ..] = jumps
-  assert domain.name == "select \"api.lovelace.dev\""
-  assert string.contains(domain.description, "`domain`")
-  assert list.length(jumps) == 4
-  assert list.any(agent.options(agent("?", options.EffectSignatures)), fn(o) {
-      case o.action {
-        action.JumpTo(..) -> True
-        _ -> False
-      }
-    })
-    == False
+  let assert [zone, ..] = jumps
+  assert zone.name == "select \"lovelace.dev\""
+  assert string.contains(zone.description, "`zone`")
+  assert list.length(jumps) == 2
 }
 
 pub fn a_complete_program_can_be_wrapped_twice_test() {
@@ -293,35 +273,29 @@ pub fn a_complete_program_can_be_wrapped_twice_test() {
     agent
   }
   let agent =
-    agent(
-      "context.map(context.domain_names({}), context.records)",
-      options.EffectSignatures,
-    )
-    |> wrap("wrap in context.flatten(..)")
-    |> wrap("wrap in context.count(..)")
+    agent("context.whoami({}).account.email", options.EffectSignatures)
+    |> wrap("wrap in context.get_domain(..)")
+    |> wrap("wrap in context.list_zone_records(..)")
   assert agent.program_text(agent)
-    == "«context.count(\n  context.flatten(context.map(context.domain_names({}), context.records))\n)»"
+    == "«context.list_zone_records(context.get_domain(context.whoami({}).account.email))»"
 }
 
 pub fn the_fields_of_a_complete_program_can_be_selected_test() {
-  let keys =
-    agent.options(agent("context.account({})", options.EffectSignatures))
-    |> list.map(options.key)
-  assert list.contains(keys, "select .email")
-  assert !list.contains(keys, "string \"\"")
+  let offered = keys(agent("context.whoami({})", options.EffectSignatures))
+  assert list.contains(offered, "select .account")
+  assert !list.contains(offered, "string \"\"")
 }
 
 pub fn a_function_given_where_one_is_expected_is_finished_test() {
   let agent =
     agent(
-      "context.map(context.domain_names({}), todo)",
+      "@standard.list.map(context.get_domain_delegation(\"notes.garden\"), todo)",
       options.EffectSignatures,
     )
   let assert Ok(option) =
     list.find(agent.options(agent), fn(o) {
-      options.key(o) == "context.records"
+      options.key(o) == "context.get_domain"
     })
   let assert Ok(agent) = agent.take(agent, agent.scripted(option.action))
-  assert agent.program_text(agent)
-    == "«context.map(context.domain_names({}), context.records)»"
+  assert string.contains(agent.program_text(agent), "context.get_domain\n)»")
 }

@@ -1,63 +1,55 @@
 let readme = "# DNSimple
 
-Answer questions about the DNSimple account and change it.
-Every function calls the DNSimple API, the platform adds the token.
-Functions that take no input are called with an empty record, `context.domains({})`.
-Answer with only what is asked, select the field of a record, `context.account({}).email` is the email address of the account.
+One function for each endpoint of the DNSimple API, named as DNSimple names the operation.
+Each calls the API, the platform adds the token and the account id.
+A function that takes no input is called with an empty record, `context.list_domains({})`.
+Work on lists with `@standard`, `@standard.list.length`, `map`, `filter`, `fold` and the rest.
 
-## Reading
+## Identity
 
-- `account({})` is the account, `{id, email, plan}`.
-- `domains({})` lists every domain, `{name, state, auto_renew, expires_on}`.
-  `state` is \"registered\" or \"hosted\", `expires_on` is \"2027-03-15\" or \"\" when not registered.
-- `domain_names({})` lists the name of every domain.
-- `domain(name)` is one domain.
-- `records(domain)` lists the DNS records of a domain, `{id, name, type, content, ttl, priority}`.
-  `name` is \"\" for the domain itself and \"www\" for www.example.com.
-  A host can be given as the domain, `records(\"www.example.com\")` lists the records named \"www\" of example.com.
-- `records_of_type(domain, type)` keeps records of a type such as \"A\", \"MX\" or \"TXT\".
-- `record_values(domain, type)` is the content of each record of a type, the addresses of \"A\" records.
-- `name_servers(domain)` lists the name servers a registered domain is delegated to.
-- `is_available(domain)` is `True({})` when a domain can be registered.
-- `without_auto_renew({})` lists the names of domains that do not renew.
-- `expiring_before(date)` lists the names of domains that expire before a date such as \"2027-01-01\".
+- `whoami({})` is `{account: {id, email, plan}}`.
 
-## Changing
+## Domains
 
-A record name is relative to the domain or host given, \"\" is the domain or host itself.
-`add_record(\"example.com\", \"www\", \"A\", address)` and `add_record(\"www.example.com\", \"\", \"A\", address)` add the same record.
+- `list_domains({})` lists every domain, `{id, name, state, auto_renew, expires_at}`.
+  `state` is \"registered\" or \"hosted\", `expires_at` is \"2027-03-15T00:00:00Z\" or \"\" when the domain is not registered.
+- `get_domain(domain)` is one domain, by name or id.
 
-- `add_record(domain, name, type, content)` adds a record and returns it, use \"\" as the name for the domain itself.
-- `change_record(domain, name, type, content)` sets the content of matching records and returns how many changed.
-- `remove_record(domain, name, type)` deletes matching records and returns how many were deleted.
-- `enable_auto_renew(domain)` and `disable_auto_renew(domain)` change whether a domain renews.
+## Zone records
 
-## Lists
+A zone is a domain name. A record `{id, name, type, content, ttl, priority}` has the name \"\" for the zone itself
+and \"www\" for www.example.com.
 
-- `count(items)` is the number of items, `sum(numbers)` adds numbers up.
-- `map(items, function)` applies a function to every item, `context.map(context.domain_names({}), context.name_servers)`.
-- `filter(items, keep)` keeps the items for which `keep` returns `True({})`.
-- `flatten(lists)` joins a list of lists.
+- `list_zone_records(zone)` lists the records of a zone.
+- `get_zone_record(zone, record_id)` is one record.
+- `create_zone_record(zone, attributes)` adds a record and returns it.
+  `attributes` is `{name, type, content, ttl}`, a ttl of 3600 is one hour.
+- `update_zone_record(zone, record_id, attributes)` changes a record and returns it.
+- `delete_zone_record(zone, record_id)` removes a record.
+
+## Registrar
+
+- `check_domain(domain)` is `{domain, available, premium}` for a domain that might be registered.
+- `get_domain_delegation(domain)` lists the name servers a registered domain is delegated to.
+- `enable_domain_auto_renewal(domain)` and `disable_domain_auto_renewal(domain)` change whether a domain renews.
 
 ## Examples
 
 ```eyg
-context.count(context.records(\"example.com\"))
+@standard.list.length(context.list_zone_records(\"example.com\"))
 ```
 
 ```eyg
-context.domain(\"example.com\").expires_on
+@standard.list.filter(
+  (record) -> { !equal(record.type, \"MX\") },
+  context.list_zone_records(\"example.com\")
+)
 ```
 
 ```eyg
-context.change_record(\"example.com\", \"www\", \"A\", \"192.0.2.1\")
-```
-
-```eyg
-context.sum(context.map(context.domain_names({}), (name) -> { context.count(context.records(name)) }))
+context.create_zone_record(\"example.com\", {name: \"www\", type: \"A\", content: \"192.0.2.1\", ttl: 3600})
 ```
 "
-
 let abort = (reason) -> { !never(perform Abort(reason)) }
 
 // Decoding the JSON the API returns, the decoders are those of the `@json`
@@ -259,129 +251,42 @@ let get = (path, decoder) -> {
   decoded(call(GET({}), path, Some("per_page=100"), ""), decoder)
 }
 
-let account = (_) -> {
+
+let whoami = (_) -> {
   get("/v2/whoami", data(object((fields) -> {
-    field("account", object((account) -> {
-      {
-        id: field("id", integer)(account),
-        email: field("email", string)(account),
-        plan: field("plan_identifier", string)(account)
-      }
-    }))(fields)
+    {
+      account: field("account", object((account) -> {
+        {
+          id: field("id", integer)(account),
+          email: field("email", string)(account),
+          plan: field("plan_identifier", string)(account)
+        }
+      }))(fields)
+    }
   })))
 }
 
 let at = (suffix) -> {
-  !string_append(!string_append("/v2/", !int_to_string(account({}).id)), suffix)
+  !string_append(!string_append("/v2/", !int_to_string(whoami({}).account.id)), suffix)
 }
-
-let both = (a, b) -> {
-  match a {
-    True(_) -> { b }
-    False(_) -> { False({}) }
-  }
-}
-
-// Lists.
-
-let map = (items, function) -> {
-  move(!list_fold(items, [], (item, acc) -> { [function(item), ..acc] }), [])
-}
-
-let filter = (items, keep) -> {
-  move(!list_fold(items, [], (item, acc) -> {
-    match keep(item) {
-      True(_) -> { [item, ..acc] }
-      False(_) -> { acc }
-    }
-  }), [])
-}
-
-let count = (items) -> {
-  !list_fold(items, 0, (_, total) -> { !int_add(total, 1) })
-}
-
-let sum = (numbers) -> {
-  !list_fold(numbers, 0, (number, total) -> { !int_add(total, number) })
-}
-
-let flatten = (lists) -> {
-  move(!list_fold(lists, [], (items, acc) -> {
-    !list_fold(items, acc, (item, acc) -> { [item, ..acc] })
-  }), [])
-}
-
-// Domains.
 
 let domain_decoder = object((fields) -> {
   {
+    id: field("id", integer)(fields),
     name: field("name", string)(fields),
     state: field("state", string)(fields),
     auto_renew: field("auto_renew", boolean)(fields),
-    expires_on: field("expires_on", string)(fields)
+    expires_at: field("expires_at", string)(fields)
   }
 })
 
-let domains = (_) -> { get(at("/domains"), data(list(domain_decoder))) }
+let list_domains = (_) -> { get(at("/domains"), data(list(domain_decoder))) }
 
-let domain_names = (_) -> { map(domains({}), (domain) -> { domain.name }) }
-
-let domain = (name) -> { get(at(!string_append("/domains/", name)), data(domain_decoder)) }
-
-let registrar = (domain, suffix) -> {
-  at(!string_append(!string_append("/registrar/domains/", domain), suffix))
+let get_domain = (domain) -> {
+  get(at(!string_append("/domains/", domain)), data(domain_decoder))
 }
 
-let name_servers = (domain) -> { get(registrar(domain, "/delegation"), data(list(string))) }
-
-let is_available = (domain) -> {
-  get(registrar(domain, "/check"), data(object(field("available", boolean))))
-}
-
-let without_auto_renew = (_) -> {
-  let off = filter(domains({}), (domain) -> {
-    match domain.auto_renew {
-      True(_) -> { False({}) }
-      False(_) -> { True({}) }
-    }
-  })
-  map(off, (domain) -> { domain.name })
-}
-
-let date_number = (date) -> {
-  match !int_parse(!string_replace(date, "-", "")) {
-    Ok(number) -> { number }
-    Error(_) -> { 0 }
-  }
-}
-
-let expiring_before = (date) -> {
-  let limit = date_number(date)
-  let expiring = filter(domains({}), (domain) -> {
-    match !equal(domain.expires_on, "") {
-      True(_) -> { False({}) }
-      False(_) -> {
-        match !int_compare(date_number(domain.expires_on), limit) {
-          Lt(_) -> { True({}) }
-          | (_) -> { False({}) }
-        }
-      }
-    }
-  })
-  map(expiring, (domain) -> { domain.name })
-}
-
-let enable_auto_renew = (domain) -> {
-  let _ = call(PUT({}), registrar(domain, "/auto_renewal"), None({}), "")
-  {}
-}
-
-let disable_auto_renew = (domain) -> {
-  let _ = call(DELETE({}), registrar(domain, "/auto_renewal"), None({}), "")
-  {}
-}
-
-// Records.
+// Zone records.
 
 let record_decoder = object((fields) -> {
   {
@@ -394,140 +299,91 @@ let record_decoder = object((fields) -> {
   }
 })
 
-let records_path = (domain) -> {
-  at(!string_append(!string_append("/zones/", domain), "/records"))
+let records_path = (zone) -> {
+  at(!string_append(!string_append("/zones/", zone), "/records"))
 }
 
-let longer = (a, b) -> {
-  match !int_compare(!string_length(a), !string_length(b)) {
-    Gt(_) -> { a }
-    | (_) -> { b }
-  }
+let record_path = (zone, record_id) -> {
+  !string_append(!string_append(records_path(zone), "/"), !int_to_string(record_id))
 }
 
-// A host such as api.example.com is placed in the domain of the account it
-// belongs to, example.com, where its records are named "api".
-let place = (host) -> {
-  let zone = !list_fold(domain_names({}), "", (name, found) -> {
-    match !equal(host, name) {
-      True(_) -> { longer(name, found) }
-      False(_) -> {
-        match !string_ends_with(host, !string_append(".", name)) {
-          True(_) -> { longer(name, found) }
-          False(_) -> { found }
-        }
-      }
-    }
-  })
-  match !equal(zone, "") {
-    True(_) -> { {zone: host, prefix: ""} }
-    False(_) -> {
-      match !string_split_once(host, !string_append(".", zone)) {
-        Ok({pre}) -> { {zone, prefix: pre} }
-        Error(_) -> { {zone, prefix: ""} }
-      }
-    }
-  }
+let list_zone_records = (zone) -> {
+  get(records_path(zone), data(list(record_decoder)))
 }
 
-// A record name given with a host is relative to it, the host's own label
-// given again as the name is taken to mean the host.
-let relative = (place, name) -> {
-  match !equal(place.prefix, "") {
-    True(_) -> { name }
-    False(_) -> {
-      match !equal(name, "") {
-        True(_) -> { place.prefix }
-        False(_) -> {
-          match !equal(name, place.prefix) {
-            True(_) -> { name }
-            False(_) -> { !string_append(!string_append(name, "."), place.prefix) }
-          }
-        }
-      }
-    }
-  }
+let get_zone_record = (zone, record_id) -> {
+  get(record_path(zone, record_id), data(record_decoder))
 }
 
-let zone_records = (zone) -> { get(records_path(zone), data(list(record_decoder))) }
-
-let records = (domain) -> {
-  let place = place(domain)
-  let all = zone_records(place.zone)
-  match !equal(place.prefix, "") {
-    True(_) -> { all }
-    False(_) -> { filter(all, (record) -> { !equal(record.name, place.prefix) }) }
-  }
-}
-
-let records_of_type = (domain, type) -> {
-  filter(records(domain), (record) -> { !equal(record.type, type) })
-}
-
-let record_values = (domain, type) -> {
-  map(records_of_type(domain, type), (record) -> { record.content })
-}
-
-let add_record = (domain, name, type, content) -> {
-  let place = place(domain)
-  let body = json_object([
-    {key: "name", value: quote(relative(place, name))},
-    {key: "type", value: quote(type)},
-    {key: "content", value: quote(content)},
-    {key: "ttl", value: "3600"}
+let attributes_body = (attributes) -> {
+  json_object([
+    {key: "name", value: quote(attributes.name)},
+    {key: "type", value: quote(attributes.type)},
+    {key: "content", value: quote(attributes.content)},
+    {key: "ttl", value: !int_to_string(attributes.ttl)}
   ])
-  decoded(call(POST({}), records_path(place.zone), None({}), body), data(record_decoder))
 }
 
-let record_path = (zone, record) -> {
-  !string_append(!string_append(records_path(zone), "/"), !int_to_string(record.id))
+let create_zone_record = (zone, attributes) -> {
+  let body = attributes_body(attributes)
+  decoded(call(POST({}), records_path(zone), None({}), body), data(record_decoder))
 }
 
-let change_record = (domain, name, type, content) -> {
-  let place = place(domain)
-  let name = relative(place, name)
-  let found = filter(zone_records(place.zone), (record) -> {
-    both(!equal(record.name, name), !equal(record.type, type))
-  })
-  let body = json_object([{key: "content", value: quote(content)}])
-  let _ = map(found, (record) -> {
-    call(PATCH({}), record_path(place.zone, record), None({}), body)
-  })
-  count(found)
+let update_zone_record = (zone, record_id, attributes) -> {
+  let body = attributes_body(attributes)
+  decoded(
+    call(PATCH({}), record_path(zone, record_id), None({}), body),
+    data(record_decoder)
+  )
 }
 
-let remove_record = (domain, name, type) -> {
-  let place = place(domain)
-  let name = relative(place, name)
-  let found = filter(zone_records(place.zone), (record) -> {
-    both(!equal(record.name, name), !equal(record.type, type))
-  })
-  let _ = map(found, (record) -> {
-    call(DELETE({}), record_path(place.zone, record), None({}), "")
-  })
-  count(found)
+let delete_zone_record = (zone, record_id) -> {
+  let _ = call(DELETE({}), record_path(zone, record_id), None({}), "")
+  {}
 }
+
+// Registrar.
+
+let registrar = (domain, suffix) -> {
+  at(!string_append(!string_append("/registrar/domains/", domain), suffix))
+}
+
+let check_domain = (domain) -> {
+  get(registrar(domain, "/check"), data(object((fields) -> {
+    {
+      domain: field("domain", string)(fields),
+      available: field("available", boolean)(fields),
+      premium: field("premium", boolean)(fields)
+    }
+  })))
+}
+
+let get_domain_delegation = (domain) -> {
+  get(registrar(domain, "/delegation"), data(list(string)))
+}
+
+let enable_domain_auto_renewal = (domain) -> {
+  let _ = call(PUT({}), registrar(domain, "/auto_renewal"), None({}), "")
+  {}
+}
+
+let disable_domain_auto_renewal = (domain) -> {
+  let _ = call(DELETE({}), registrar(domain, "/auto_renewal"), None({}), "")
+  {}
+}
+
 {
   readme,
-  account,
-  domains,
-  domain_names,
-  domain,
-  records,
-  records_of_type,
-  record_values,
-  name_servers,
-  is_available,
-  without_auto_renew,
-  expiring_before,
-  add_record,
-  change_record,
-  remove_record,
-  enable_auto_renew,
-  disable_auto_renew,
-  count,
-  sum,
-  map,
-  filter,
-  flatten
+  whoami,
+  list_domains,
+  get_domain,
+  list_zone_records,
+  get_zone_record,
+  create_zone_record,
+  update_zone_record,
+  delete_zone_record,
+  check_domain,
+  get_domain_delegation,
+  enable_domain_auto_renewal,
+  disable_domain_auto_renewal
 }

@@ -21,7 +21,7 @@ import touch_grass/decode_json
 import touch_grass/http as tg_http
 
 /// The DNSimple context in `eyg_packages/dnsimple`, as shared to the hub.
-pub const context_id = "baguqeeravurubercfnyuz5qixlxmozbf5qbm77izd45d6hkheoul73j463xa"
+pub const context_id = "baguqeerakampwwyvxx6fshylrfgst5uppzhjwt5goaf6iel37v3luvjc2jmq"
 
 pub const context_path = "../../eyg_packages/dnsimple/index.eyg"
 
@@ -42,7 +42,7 @@ pub type Domain {
     name: String,
     registered: Bool,
     auto_renew: Bool,
-    expires_on: Option(String),
+    expires_at: Option(String),
     records: List(Record),
   )
 }
@@ -86,7 +86,7 @@ pub fn fixture() -> Account {
         name: "lovelace.dev",
         registered: True,
         auto_renew: True,
-        expires_on: Some("2027-03-15"),
+        expires_at: Some("2027-03-15T00:00:00Z"),
         records: [
           record(101, "", "A", "93.184.215.14"),
           record(102, "", "A", "93.184.215.15"),
@@ -102,7 +102,7 @@ pub fn fixture() -> Account {
         name: "analytical.engineering",
         registered: True,
         auto_renew: False,
-        expires_on: Some("2026-11-30"),
+        expires_at: Some("2026-11-30T00:00:00Z"),
         records: [
           record(201, "", "A", "203.0.113.10"),
           mx(202, "aspmx.l.google.com", 1),
@@ -115,7 +115,7 @@ pub fn fixture() -> Account {
         name: "notes.garden",
         registered: True,
         auto_renew: False,
-        expires_on: Some("2028-01-02"),
+        expires_at: Some("2028-01-02T00:00:00Z"),
         records: [record(301, "", "A", "192.0.2.44")],
       ),
       Domain(
@@ -123,7 +123,7 @@ pub fn fixture() -> Account {
         name: "babbage.org",
         registered: False,
         auto_renew: False,
-        expires_on: None,
+        expires_at: None,
         records: [
           record(401, "", "A", "192.0.2.80"),
           record(402, "docs", "CNAME", "babbage.org"),
@@ -221,6 +221,16 @@ fn serve(
         Ok(domain) -> ok(data(domain_json(domain)), account)
         Error(Nil) -> missing("Domain", name, account)
       }
+    http.Get, ["v2", _, "zones", zone, "records", id] ->
+      case find_domain(account, zone), int.parse(id) {
+        Ok(domain), Ok(id) ->
+          case list.find(domain.records, fn(r) { r.id == id }) {
+            Ok(found) -> ok(data(record_json(domain, found)), account)
+            Error(Nil) -> missing("Record", id |> int.to_string, account)
+          }
+        Error(Nil), _ -> missing("Zone", zone, account)
+        _, _ -> not_found(account)
+      }
     http.Get, ["v2", _, "zones", zone, "records"] ->
       case find_domain(account, zone) {
         Ok(domain) ->
@@ -255,11 +265,11 @@ fn serve(
         _, Error(reason) -> #(400, message(reason), account)
       }
     http.Patch, ["v2", _, "zones", zone, "records", id] ->
-      case find_domain(account, zone), int.parse(id), decode_content(body) {
-        Ok(domain), Ok(id), Ok(content) ->
+      case find_domain(account, zone), int.parse(id), decode_record(body) {
+        Ok(domain), Ok(id), Ok(#(name, type_, content, ttl)) ->
           case list.find(domain.records, fn(r) { r.id == id }) {
             Ok(found) -> {
-              let changed = Record(..found, content:)
+              let changed = Record(..found, name:, type_:, content:, ttl:)
               let records =
                 list.map(domain.records, fn(r) {
                   case r.id == id {
@@ -416,7 +426,7 @@ fn domain_json(domain: Domain) {
     ),
     #("auto_renew", json.bool(domain.auto_renew)),
     #("private_whois", json.bool(False)),
-    #("expires_on", json.nullable(domain.expires_on, json.string)),
+    #("expires_at", json.nullable(domain.expires_at, json.string)),
   ])
 }
 
@@ -445,11 +455,6 @@ fn decode_record(body) {
   |> result.replace_error("the record could not be read")
 }
 
-fn decode_content(body) {
-  json.parse_bits(body, decode.field("content", decode.string, decode.success))
-  |> result.replace_error("the change could not be read")
-}
-
 // Values as the context returns them, for checkers to compare with.
 
 pub fn record_value(record: Record) -> run.Value {
@@ -472,6 +477,7 @@ pub fn strings(items: List(String)) -> run.Value {
 pub fn domain_value(domain: Domain) -> run.Value {
   v.Record(
     dict.from_list([
+      #("id", v.Integer(domain.id)),
       #("name", v.String(domain.name)),
       #(
         "state",
@@ -481,7 +487,7 @@ pub fn domain_value(domain: Domain) -> run.Value {
         }),
       ),
       #("auto_renew", v.bool(domain.auto_renew)),
-      #("expires_on", v.String(option.unwrap(domain.expires_on, ""))),
+      #("expires_at", v.String(option.unwrap(domain.expires_at, ""))),
     ]),
   )
 }

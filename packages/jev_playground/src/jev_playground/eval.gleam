@@ -233,6 +233,8 @@ pub fn config(eval: Eval, variant: Variant) -> options.Config {
     highlight: variant.highlight,
     check_compounds: variant.check_compounds,
     hole_jumps: variant.hole_jumps,
+    // With a context in scope Jev opens the libraries it needs itself.
+      search_libraries: eval.context != None,
     argument_jumps: variant.argument_jumps,
     context_compounds: variant.context_compounds,
     effects: variant.effects,
@@ -804,7 +806,8 @@ fn question(slug, task, check) -> Eval {
     task:,
     start: "",
     open_libraries: [],
-    max_steps: 30,
+    // A question that has to filter records takes forty edits or so.
+    max_steps: 60,
     check:,
     context: Some(dnsimple.context_id),
   )
@@ -923,7 +926,16 @@ pub fn dnsimple_questions() -> List(Eval) {
     question(
       "available",
       "Is jev-rocks.com available to register?",
-      answers(v.true()),
+      answers_any([
+        v.true(),
+        v.Record(
+          dict.from_list([
+            #("domain", v.String("jev-rocks.com")),
+            #("available", v.true()),
+            #("premium", v.false()),
+          ]),
+        ),
+      ]),
     ),
     question(
       "name-servers",
@@ -970,12 +982,12 @@ pub fn dnsimple_questions() -> List(Eval) {
     question(
       "expiry",
       "When does notes.garden expire?",
-      answers(v.String("2028-01-02")),
+      answers(v.String("2028-01-02T00:00:00Z")),
     ),
     question(
       "expiring",
-      "Which of my domains expire before 2027-06-01?",
-      answers(dnsimple.strings(["lovelace.dev", "analytical.engineering"])),
+      "Which of my domains expire in 2027?",
+      answers(dnsimple.strings(["lovelace.dev"])),
     ),
     question(
       "a-count",
@@ -1050,33 +1062,72 @@ pub fn dnsimple_questions() -> List(Eval) {
 }
 
 fn dnsimple_solution(question) {
+  let filter = fn(field, value, zone) {
+    "@standard.list.filter(\n  (record) -> { !equal(record."
+    <> field
+    <> ", \""
+    <> value
+    <> "\") },\n  context.list_zone_records(\""
+    <> zone
+    <> "\")\n)"
+  }
   case question {
-    "domains" -> "context.domain_names({})"
-    "domain-count" -> "context.count(context.domain_names({}))"
-    "email" -> "context.account({}).email"
-    "available" -> "context.is_available(\"jev-rocks.com\")"
-    "name-servers" -> "context.name_servers(\"notes.garden\")"
-    "records" -> "context.records(\"analytical.engineering\")"
-    "record-count" -> "context.count(context.records(\"lovelace.dev\"))"
-    "a-records" -> "context.record_values(\"lovelace.dev\", \"A\")"
-    "mx" -> "context.records_of_type(\"analytical.engineering\", \"MX\")"
-    "no-renew" -> "context.without_auto_renew({})"
-    "expiry" -> "context.domain(\"notes.garden\").expires_on"
-    "expiring" -> "context.expiring_before(\"2027-06-01\")"
+    "domains" ->
+      "@standard.list.map(context.list_domains({}), (domain) -> { domain.name })"
+    "domain-count" -> "@standard.list.length(context.list_domains({}))"
+    "email" -> "context.whoami({}).account.email"
+    "available" -> "context.check_domain(\"jev-rocks.com\").available"
+    "name-servers" -> "context.get_domain_delegation(\"notes.garden\")"
+    "records" -> "context.list_zone_records(\"analytical.engineering\")"
+    "record-count" ->
+      "@standard.list.length(context.list_zone_records(\"lovelace.dev\"))"
+    "a-records" ->
+      "@standard.list.map("
+      <> filter("type", "A", "lovelace.dev")
+      <> ", (record) -> { record.content })"
+    "mx" -> filter("type", "MX", "analytical.engineering")
+    "no-renew" ->
+      "@standard.list.map(
+  @standard.list.filter(
+    (domain) -> { match domain.auto_renew { True(_) -> { False({}) } False(_) -> { True({}) } } },
+    context.list_domains({})
+  ),
+  (domain) -> { domain.name }
+)"
+    "expiry" -> "context.get_domain(\"notes.garden\").expires_at"
+    "expiring" ->
+      "@standard.list.map(
+  @standard.list.filter(
+    (domain) -> { !string_starts_with(domain.expires_at, \"2027\") },
+    context.list_domains({})
+  ),
+  (domain) -> { domain.name }
+)"
     "a-count" ->
-      "context.count(context.records_of_type(\"lovelace.dev\", \"A\"))"
+      "@standard.list.length(" <> filter("type", "A", "lovelace.dev") <> ")"
     "add-txt" ->
-      "context.add_record(\"lovelace.dev\", \"\", \"TXT\", \"google-site-verification=abc123\")"
+      "context.create_zone_record(\"lovelace.dev\", {name: \"\", type: \"TXT\", content: \"google-site-verification=abc123\", ttl: 3600})"
     "point-www" ->
-      "context.add_record(\"notes.garden\", \"www\", \"A\", \"203.0.113.7\")"
-    "remove-old" -> "context.remove_record(\"lovelace.dev\", \"old\", \"TXT\")"
-    "auto-renew" -> "context.enable_auto_renew(\"notes.garden\")"
+      "context.create_zone_record(\"notes.garden\", {name: \"www\", type: \"A\", content: \"203.0.113.7\", ttl: 3600})"
+    "remove-old" ->
+      "@standard.list.map("
+      <> filter("name", "old", "lovelace.dev")
+      <> ", (record) -> { context.delete_zone_record(\"lovelace.dev\", record.id) })"
+    "auto-renew" -> "context.enable_domain_auto_renewal(\"notes.garden\")"
     "change-api" ->
-      "context.change_record(\"lovelace.dev\", \"api\", \"A\", \"198.51.100.4\")"
+      "@standard.list.map("
+      <> filter("name", "api", "lovelace.dev")
+      <> ", (record) -> { context.update_zone_record(\"lovelace.dev\", record.id, {name: \"api\", type: \"A\", content: \"198.51.100.4\", ttl: 3600}) })"
     "total-records" ->
-      "context.count(context.flatten(context.map(context.domain_names({}), context.records)))"
+      "@standard.list.length(
+  @standard.list.flat_map(context.list_domains({}), (domain) -> {
+    context.list_zone_records(domain.name)
+  })
+)"
     "every-record" ->
-      "context.flatten(context.map(context.domain_names({}), context.records))"
+      "@standard.list.flat_map(context.list_domains({}), (domain) -> {
+  context.list_zone_records(domain.name)
+})"
     _ -> ""
   }
 }

@@ -77,7 +77,10 @@ pub fn environment_for(
     Some(cid) -> {
       use source <- promise.map(hub.module(cid))
       use source <- result.try(source)
-      library.context(source, environment.browser())
+      // The libraries are there to be opened, as they are on the overlay page.
+      use bundle <- result.try(packages.bundle())
+      use base <- result.try(library.environment(bundle, environment.browser()))
+      library.context(source, base)
     }
     None ->
       promise.resolve({
