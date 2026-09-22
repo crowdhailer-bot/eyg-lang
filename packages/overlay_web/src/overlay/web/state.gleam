@@ -62,9 +62,13 @@ pub type AgentStatus {
   )
   Executing(calls: tools.Calls)
   /// Jev is choosing the next edit of a program that answers the question.
-  Building(agent: agent.Agent, offered: List(options.Option))
-  /// The program Jev built is running.
-  Answering(agent: agent.Agent, calls: tools.Calls)
+  Building(
+    agent: agent.Agent,
+    offered: List(options.Option),
+    last: Option(jev_session.LastRun),
+  )
+  /// A complete program Jev built is running, `finished` when it is the answer.
+  Answering(agent: agent.Agent, calls: tools.Calls, finished: Bool)
 }
 
 pub fn new(config: Config) -> State {
@@ -280,17 +284,17 @@ pub fn update(
           |> tools.effect_handled(calls, task_id, value)
           |> run_effects_if_any_remain_to_do(state)
         }
-        Answering(agent:, calls:) ->
+        Answering(agent:, calls:, finished:) ->
           current_context(state)
           |> tools.effect_handled(calls, task_id, value)
-          |> run_jev_effects(state, agent)
+          |> run_jev_effects(state, agent, finished)
         _ -> #(state, [])
       }
     }
     JevAnswered(result) ->
       case state.status {
-        Building(agent:, offered:) ->
-          jev_answered(state, agent, offered, result)
+        Building(agent:, offered:, last:) ->
+          jev_answered(state, agent, offered, last, result)
         _ -> #(state, [])
       }
     CacheMessage(message) -> {
@@ -321,14 +325,14 @@ pub fn update(
           list.map_fold(calls, ctx, tools.check_fetching)
           |> run_effects_if_any_remain_to_do(state)
         }
-        Answering(agent:, calls:) -> {
+        Answering(agent:, calls:, finished:) -> {
           let ctx = current_context(state)
           let #(ctx, calls) = case stopped_pulling {
             True -> list.map_fold(calls, ctx, tools.pulled)
             False -> #(ctx, calls)
           }
           list.map_fold(calls, ctx, tools.check_fetching)
-          |> run_jev_effects(state, agent)
+          |> run_jev_effects(state, agent, finished)
         }
         _ -> flush(state)
       }
@@ -509,15 +513,16 @@ pub fn spec() {
 }
 
 // A question for Jev, which builds a program from nothing with the context in
-// scope. The program runs once it is complete.
+// scope. Each new complete program runs and Jev is shown what it returned, the
+// answer is the program Jev finishes with.
 fn start_jev(state: State, question: String) {
   let message = chat.UserMessage(text: question, images: [])
   let agent = jev_session.new(question, context.module(state.context))
   let state = State(..state, input: "", history: [message, ..state.history])
-  ask_jev(state, agent)
+  ask_jev(state, agent, None)
 }
 
-fn ask_jev(state: State, agent: agent.Agent) {
+fn ask_jev(state: State, agent: agent.Agent, last) {
   let setup = state.provider_setup
   let #(request, offered) =
     jev_session.request(agent, setup.active_model, setup.api_key, state.origin)
@@ -525,10 +530,10 @@ fn ask_jev(state: State, agent: agent.Agent) {
     system.Fetch(request, fn(result) {
       system.Done(JevAnswered(result.map_error(result, string.inspect)))
     })
-  #(State(..state, status: Building(agent:, offered:)), [effect])
+  #(State(..state, status: Building(agent:, offered:, last:)), [effect])
 }
 
-fn jev_answered(state: State, agent, offered, result) {
+fn jev_answered(state: State, agent, offered, last, result) {
   let evaluation = case result {
     Ok(response) ->
       jev.system_one_response(response) |> result.map_error(string.inspect)
@@ -537,9 +542,11 @@ fn jev_answered(state: State, agent, offered, result) {
   case evaluation {
     Error(reason) -> jev_finished(state, "Jev could not be asked: " <> reason)
     Ok(evaluation) ->
-      case jev_session.answered(agent, offered, evaluation) {
+      case jev_session.answered(agent, offered, evaluation, last) {
         Error(reason) -> jev_finished(state, reason)
-        Ok(jev_session.Ask(agent)) -> ask_jev(state, agent)
+        Ok(jev_session.Ask(agent)) -> ask_jev(state, agent, last)
+        Ok(jev_session.Done(agent, output)) ->
+          jev_finished(state, answer(agent, output))
         Ok(jev_session.GiveUp(agent, reason)) ->
           jev_finished(
             state,
@@ -548,12 +555,20 @@ fn jev_answered(state: State, agent, offered, result) {
               <> jev_session.program(agent)
               <> "\n```",
           )
-        Ok(jev_session.Run(agent, call)) ->
+        Ok(jev_session.Run(agent, call, finished)) ->
           current_context(state)
           |> tools.execute_all([call])
-          |> run_jev_effects(state, agent)
+          |> run_jev_effects(state, agent, finished)
       }
   }
+}
+
+fn answer(agent, output) {
+  "Jev wrote\n\n```eyg\n"
+  <> jev_session.program(agent)
+  <> "\n```\n\nwhich returned\n\n```\n"
+  <> output
+  <> "\n```"
 }
 
 fn jev_finished(state: State, text: String) {
@@ -561,8 +576,10 @@ fn jev_finished(state: State, text: String) {
   #(State(..state, status: Waiting, history: [message, ..state.history]), [])
 }
 
-// As for tool calls from an LLM, except that the result ends the session.
-fn run_jev_effects(return, state: State, agent: agent.Agent) {
+// As for tool calls from an LLM. Once the program has returned either Jev has
+// finished, and the result is the answer, or it is shown the result and asked
+// for its next edit.
+fn run_jev_effects(return, state: State, agent: agent.Agent, finished) {
   let #(ctx, calls) = return
   let tools.Context(cache:, counter:, effects: inner, ..) = ctx
   let effects =
@@ -577,9 +594,12 @@ fn run_jev_effects(return, state: State, agent: agent.Agent) {
   let #(state, cache_effects) = flush(state)
   let effects = list.append(cache_effects, effects)
   case tools.all_returns(calls) {
-    Error(Nil) -> #(State(..state, status: Answering(agent:, calls:)), effects)
+    Error(Nil) -> #(
+      State(..state, status: Answering(agent:, calls:, finished:)),
+      effects,
+    )
     Ok(messages) -> {
-      let returned =
+      let output =
         list.filter_map(messages, fn(message) {
           case message {
             chat.ToolResultMessage(text:, ..) -> Ok(text)
@@ -587,16 +607,19 @@ fn run_jev_effects(return, state: State, agent: agent.Agent) {
           }
         })
         |> string.join("\n")
-      let #(state, _) =
-        jev_finished(
-          state,
-          "Jev wrote\n\n```eyg\n"
-            <> jev_session.program(agent)
-            <> "\n```\n\nwhich returned\n\n```\n"
-            <> returned
-            <> "\n```",
-        )
-      #(state, effects)
+      case finished {
+        True -> {
+          let #(state, _) = jev_finished(state, answer(agent, output))
+          #(state, effects)
+        }
+        False -> {
+          let last = jev_session.LastRun(jev_session.program(agent), output)
+          let results = Some("the program returned " <> output)
+          let agent = agent.Agent(..agent, test_results: results)
+          let #(state, asked) = ask_jev(state, agent, Some(last))
+          #(state, list.append(effects, asked))
+        }
+      }
     }
   }
 }

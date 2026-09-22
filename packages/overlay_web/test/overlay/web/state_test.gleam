@@ -774,6 +774,16 @@ pub fn jev_builds_a_program_then_runs_it_test() {
     "{\"model\":\"jev-1.13.0\",\"answers\":{\"next_edit\":{\"type\":\"choice\",\"choice\":\"integer 3\",\"confidence\":0.9,\"probabilities\":{\"integer 3\":0.9}}},\"usage\":{\"input_tokens\":100,\"output_tokens\":1}}"
   let assert system.Done(message) =
     resume(Ok(response.Response(200, [], <<body:utf8>>)))
+  // The complete program runs and Jev is shown what it returned.
+  let #(state, actions) = state.update(state, message)
+  let assert state.Building(agent:, ..) = state.status
+  assert agent.test_results == Some("the program returned 3")
+  let assert [system.Fetch(request: _, resume:)] = actions
+  let finish =
+    "{\"model\":\"jev-1.13.0\",\"answers\":{\"next_edit\":{\"type\":\"choice\",\"choice\":\"finish\",\"confidence\":0.9,\"probabilities\":{\"finish\":0.9}}},\"usage\":{\"input_tokens\":100,\"output_tokens\":1}}"
+  let assert system.Done(message) =
+    resume(Ok(response.Response(200, [], <<finish:utf8>>)))
+  // Finishing with the program already run does not run it again.
   let #(state, actions) = state.update(state, message)
   assert actions == []
   assert state.status == state.Waiting

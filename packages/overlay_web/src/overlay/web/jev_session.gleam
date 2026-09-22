@@ -7,6 +7,7 @@ import gleam/dict
 import gleam/http/request.{type Request}
 import gleam/int
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import jev
 import jev_playground/agent
@@ -51,11 +52,18 @@ pub fn request(
   #(http, offered)
 }
 
+/// The program last run and what it returned.
+pub type LastRun {
+  LastRun(program: String, output: String)
+}
+
 pub type Next {
   /// Ask Jev for the next edit.
   Ask(agent: agent.Agent)
-  /// The program is complete, run it.
-  Run(agent: agent.Agent, call: tool.Call)
+  /// Run the complete program, `finished` when Jev has said it is the answer.
+  Run(agent: agent.Agent, call: tool.Call, finished: Bool)
+  /// Jev finished with the program last run, whose output is the answer.
+  Done(agent: agent.Agent, output: String)
   /// Jev did not finish, with the reason.
   GiveUp(agent: agent.Agent, reason: String)
 }
@@ -65,22 +73,43 @@ pub fn answered(
   agent: agent.Agent,
   offered: List(options.Option),
   evaluation: jev.Evaluation,
+  last: Option(LastRun),
 ) -> Result(Next, String) {
   use agent <- result.map(agent.answer(agent, offered, evaluation, 0))
-  next(agent)
+  next(agent, last)
 }
 
-pub fn next(agent: agent.Agent) -> Next {
-  case agent.is_complete(agent), requests(agent) >= max_requests {
-    True, _ -> Run(agent, run_call(agent))
-    False, True ->
+/// Jev is shown what each new complete program returns, and the answer is the
+/// program it finishes with. A program runs again only if it has changed, as a
+/// run may change the account.
+pub fn next(agent: agent.Agent, last: Option(LastRun)) -> Next {
+  let program = program(agent)
+  let ran = case last {
+    Some(LastRun(program: ran, output:)) if ran == program -> Some(output)
+    _ -> None
+  }
+  case agent.is_complete(agent), agent.finished, ran {
+    True, True, Some(output) -> Done(agent, output)
+    True, True, None -> Run(agent, run_call(agent), True)
+    False, True, _ -> {
+      let results = Some("the program still has holes")
+      limited(agent.Agent(..agent, finished: False, test_results: results))
+    }
+    True, False, None -> Run(agent, run_call(agent), False)
+    _, _, _ -> limited(agent)
+  }
+}
+
+fn limited(agent: agent.Agent) -> Next {
+  case requests(agent) >= max_requests {
+    True ->
       GiveUp(
         agent,
         "Jev did not finish a program in "
           <> int.to_string(max_requests)
           <> " edits.",
       )
-    False, False ->
+    False ->
       case unsure(agent) {
         True ->
           GiveUp(
