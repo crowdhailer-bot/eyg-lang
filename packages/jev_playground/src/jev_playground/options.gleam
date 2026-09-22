@@ -564,9 +564,19 @@ fn values(
     }
     // In hole mode a complete program is selected whole, a value would throw it
     // away, an argument is changed by selecting it first.
-    #(p.Exp(exp), []) if config.focus_holes && exp != e.Vacant -> []
+    #(p.Exp(exp), []) if config.focus_holes && exp != e.Vacant ->
+      expression_values(buffer, environment, vocabulary, config)
+      |> list.filter(fn(option) { builds_on_selection(option.action) })
     #(p.Exp(_), _) -> expression_values(buffer, environment, vocabulary, config)
     _ -> []
+  }
+}
+
+// Values that keep the selection as part of what they write.
+fn builds_on_selection(action) {
+  case action {
+    a.Select(_) | a.Overwrite(_) | a.Match(_) | a.List -> True
+    _ -> False
   }
 }
 

@@ -301,3 +301,11 @@ pub fn a_complete_program_can_be_wrapped_twice_test() {
   assert agent.program_text(agent)
     == "«context.count(\n  context.flatten(context.map(context.domain_names({}), context.records))\n)»"
 }
+
+pub fn the_fields_of_a_complete_program_can_be_selected_test() {
+  let keys =
+    agent.options(agent("context.account({})", options.EffectSignatures))
+    |> list.map(options.key)
+  assert list.contains(keys, "select .email")
+  assert !list.contains(keys, "string \"\"")
+}
