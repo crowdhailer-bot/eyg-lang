@@ -138,6 +138,12 @@ pub fn type_at(inference: Analysis(_), desired) {
   Ok(binding.resolve(type_, inference.bindings))
 }
 
+/// The effects a node may perform when it is evaluated, resolved with what inference learnt.
+pub fn effect_at(inference: Analysis(_), desired) {
+  use #(_result, _type, effect, _scope) <- try(info_at(inference, desired))
+  Ok(binding.resolve(effect, inference.bindings))
+}
+
 pub fn scope_at(inference: Analysis(_), desired) {
   use #(_result, _type, _effect, scope) <- try(info_at(inference, desired))
   Ok(

@@ -7,6 +7,7 @@ import eyg/ir/tree as ir
 import eyg/parser
 import gleam/dict
 import gleam/list
+import gleam/string
 import gleeunit/should
 
 fn parse(src) {
@@ -665,4 +666,15 @@ pub fn scope_is_resolved_with_what_is_learnt_later_test() {
   let assert Ok(scope) = j.scope_at(analysis, last)
   assert list.key_find(scope, "x") == Ok(t.Integer)
   assert list.key_find(scope, "y") == Ok(t.Integer)
+}
+
+pub fn effect_is_found_at_a_node_test() {
+  let source = "(x) -> { perform Log(x) }(\"hi\")"
+  let tree = parse(source)
+  let context = j.pure() |> j.with_effect("Log", t.String, t.unit)
+  let analysis = j.check_with_references(context, dict.new(), tree)
+  let spans = ir.get_annotation(tree)
+  let assert Ok(root) = list.first(spans)
+  let assert Ok(effect) = j.effect_at(analysis, root)
+  assert debug.effect(effect) |> string.contains("Log")
 }
