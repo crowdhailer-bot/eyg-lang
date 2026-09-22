@@ -1,7 +1,7 @@
 //// Run evals with each variant against the real API and write a table of the results.
 //// Jev mostly picks the same edits for the same request, but close calls can flip,
 //// `repeat=3` runs each eval and variant three times.
-//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|ablations|holes|highlight|experiments [repeat=3] [eval ...]`
+//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|ablations|holes|highlight|context|experiments [repeat=3] [eval ...]`
 
 import argv
 import gleam/float
@@ -40,6 +40,14 @@ const hole_variants = [
 
 /// The default highlight, repeating the selected code, against « and » alone.
 const highlight_variants = [["holes", "mark=guillemets"], ["holes"]]
+
+/// Compounds from a context, on and off, in hole mode and editing the whole program.
+const context_variants = [
+  ["holes"],
+  ["holes", "ctx=none"],
+  [],
+  ["ctx=none"],
+]
 
 /// Each earlier improvement turned off in turn.
 const ablation_variants = [
@@ -87,13 +95,21 @@ pub fn main() {
     "compounds" -> compound_variants
     "checked" -> checked_variants
     "ablations" -> ablation_variants
+    "context" -> context_variants
     "highlight" -> highlight_variants
     "holes" -> hole_variants
     _ -> experiment_variants
   }
+  // `dnsimple` stands for the twenty questions about a DNSimple account.
   let evals = case slugs {
     [] -> eval.all()
-    slugs -> list.filter_map(slugs, eval.find)
+    slugs ->
+      list.flat_map(slugs, fn(slug) {
+        case slug {
+          "dnsimple" -> eval.dnsimple_questions()
+          _ -> eval.find(slug) |> result.map(list.wrap) |> result.unwrap([])
+        }
+      })
   }
   let assert Ok(key) =
     list.key_find(array.to_list(process.env()), "TYPESAFE_API_KEY")
