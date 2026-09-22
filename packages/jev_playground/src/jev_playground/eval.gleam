@@ -949,7 +949,11 @@ pub fn dnsimple_questions() -> List(Eval) {
     question(
       "mx",
       "What are the MX records of analytical.engineering?",
-      answers(records_of("analytical.engineering", fn(r) { r.type_ == "MX" })),
+      // The records or the mail servers they name both answer it.
+      answers_any([
+        records_of("analytical.engineering", fn(r) { r.type_ == "MX" }),
+        dnsimple.strings(["aspmx.l.google.com", "alt1.aspmx.l.google.com"]),
+      ]),
     ),
     question(
       "no-renew",

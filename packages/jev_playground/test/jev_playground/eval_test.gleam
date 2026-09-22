@@ -47,6 +47,16 @@ pub fn every_solution_passes_its_check_test() {
   })
 }
 
+pub fn the_mail_servers_answer_the_mx_question_test() {
+  let assert Ok(eval) = evals.find("dnsimple-mx")
+  let environment = environment_for(eval, environment.pure())
+  let check = fn(code) { evals.check(eval, annotated(code), environment) }
+  assert check("context.record_values(\"analytical.engineering\", \"MX\")")
+    == Ok(Nil)
+  let assert Error(_) =
+    check("context.record_values(\"analytical.engineering\", \"A\")")
+}
+
 pub fn list_functions_start_fails_its_check_test() {
   let eval = evals.list_functions()
   let assert Error(reason) =
