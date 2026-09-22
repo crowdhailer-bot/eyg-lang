@@ -1,7 +1,7 @@
 //// Run evals with each variant against the real API and write a table of the results.
 //// Jev mostly picks the same edits for the same request, but close calls can flip,
 //// `repeat=3` runs each eval and variant three times.
-//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|ablations|holes|highlight|context|experiments [repeat=3] [eval ...]`
+//// `TYPESAFE_API_KEY=... gleam run -m jev_playground/sweep --runtime bun -- compounds|checked|ablations|holes|highlight|context|strategies|effects|experiments [repeat=3] [eval ...]`
 
 import argv
 import gleam/float
@@ -47,6 +47,24 @@ const context_variants = [
   ["holes", "ctx=none"],
   [],
   ["ctx=none"],
+]
+
+/// Each way of building compounds from a context, in hole mode.
+const strategy_variants = [
+  ["holes", "ctx=none"],
+  ["holes", "ctx=bare"],
+  ["holes", "ctx=unit"],
+  ["holes", "ctx=calls"],
+  ["holes", "ctx=chains"],
+  ["holes", "ctx=examples"],
+]
+
+/// Each way of showing effects, in hole mode.
+const effect_variants = [
+  ["holes", "effects=hidden"],
+  ["holes", "effects=signatures"],
+  ["holes", "effects=calls"],
+  ["holes", "effects=nodes"],
 ]
 
 /// Each earlier improvement turned off in turn.
@@ -96,6 +114,8 @@ pub fn main() {
     "checked" -> checked_variants
     "ablations" -> ablation_variants
     "context" -> context_variants
+    "strategies" -> strategy_variants
+    "effects" -> effect_variants
     "highlight" -> highlight_variants
     "holes" -> hole_variants
     _ -> experiment_variants
