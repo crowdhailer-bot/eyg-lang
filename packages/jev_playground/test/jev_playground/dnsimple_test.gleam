@@ -224,3 +224,8 @@ pub fn context_functions_are_offered_where_a_function_is_expected_test() {
   assert list.contains(keys, "context.records")
   assert list.contains(keys, "context.name_servers")
 }
+
+pub fn a_missing_domain_fails_with_the_message_of_the_api_test() {
+  let assert Error(reason) = run("context.records(\"lovelace.com\")")
+  assert string.contains(reason, "Zone `lovelace.com` not found")
+}

@@ -21,7 +21,7 @@ import touch_grass/decode_json
 import touch_grass/http as tg_http
 
 /// The DNSimple context in `eyg_packages/dnsimple`, as shared to the hub.
-pub const context_id = "baguqeeramlldflxouhspujabcscpcafg3tscfkgktobex2ztxfkledmtdo3q"
+pub const context_id = "baguqeeranpagbmwcjcdabihmcho3a4lvgjx7a5hnajhlbteimolrnbmsuuza"
 
 pub const context_path = "../../eyg_packages/dnsimple/index.eyg"
 
@@ -219,7 +219,7 @@ fn serve(
     http.Get, ["v2", _, "domains", name] ->
       case find_domain(account, name) {
         Ok(domain) -> ok(data(domain_json(domain)), account)
-        Error(Nil) -> not_found(account)
+        Error(Nil) -> missing("Domain", name, account)
       }
     http.Get, ["v2", _, "zones", zone, "records"] ->
       case find_domain(account, zone) {
@@ -231,7 +231,7 @@ fn serve(
             ),
             account,
           )
-        Error(Nil) -> not_found(account)
+        Error(Nil) -> missing("Zone", zone, account)
       }
     http.Post, ["v2", _, "zones", zone, "records"] ->
       case find_domain(account, zone), decode_record(body) {
@@ -251,7 +251,7 @@ fn serve(
             Account(..replace(account, domain), next_id: account.next_id + 1)
           #(201, encode(data(record_json(domain, created))), account)
         }
-        Error(Nil), _ -> not_found(account)
+        Error(Nil), _ -> missing("Zone", zone, account)
         _, Error(reason) -> #(400, message(reason), account)
       }
     http.Patch, ["v2", _, "zones", zone, "records", id] ->
@@ -310,7 +310,7 @@ fn serve(
           message("The domain is not registered with DNSimple"),
           account,
         )
-        Error(Nil) -> not_found(account)
+        Error(Nil) -> missing("Domain", name, account)
       }
     http.Put, ["v2", _, "registrar", "domains", name, "auto_renewal"] ->
       set_auto_renew(account, name, True)
@@ -332,7 +332,7 @@ fn set_auto_renew(account, name, auto_renew) {
       message("The domain is not registered with DNSimple"),
       account,
     )
-    Error(Nil) -> not_found(account)
+    Error(Nil) -> missing("Domain", name, account)
   }
 }
 
@@ -353,6 +353,11 @@ fn ok(body, account) {
 
 fn not_found(account) {
   #(404, message("Not found"), account)
+}
+
+// The messages the API gives for a zone or domain that is not in the account.
+fn missing(kind, name, account) {
+  #(404, message(kind <> " `" <> name <> "` not found"), account)
 }
 
 fn message(text) {

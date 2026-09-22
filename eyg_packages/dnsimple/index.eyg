@@ -222,7 +222,12 @@ let call = (method, path, query, body) -> {
       match !int_compare(response.status, 400) {
         Lt(_) -> { response.body }
         | (_) -> {
-          abort(!string_append("DNSimple answered with status ", !int_to_string(response.status)))
+          match parse(response.body, object(field("message", string))) {
+            Ok(message) -> { abort(message) }
+            Error(_) -> {
+              abort(!string_append("DNSimple answered with status ", !int_to_string(response.status)))
+            }
+          }
         }
       }
     }
