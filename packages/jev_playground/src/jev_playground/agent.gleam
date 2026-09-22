@@ -299,6 +299,7 @@ pub fn program_text(agent: Agent) {
     #(p.path(projection), selection),
     ..hole_marks(agent)
   ])
+  |> shown(agent)
 }
 
 // The program as Jev sees it, with the selection shown as configured.
@@ -313,6 +314,13 @@ fn shown_program(agent: Agent) {
     options.Unmarked -> []
   }
   text.marked(p.rebuild(projection), list.append(marks, hole_marks(agent)))
+  |> shown(agent)
+}
+
+// A release is read and written as its package name, the content id is noise
+// in a program Jev has to read.
+fn shown(code, agent: Agent) {
+  environment.shorten_packages(code, agent.environment)
 }
 
 fn hole_marks(agent) {
@@ -478,7 +486,7 @@ pub fn state(agent: Agent) -> Json {
         _ -> [#("libraries", json.object(libraries))]
       },
       case test_results {
-        Some(results) -> [#("test_results", json.string(results))]
+        Some(results) -> [#("last_run", json.string(results))]
         None -> []
       },
       [#("recent_edits", json.preprocessed_array(recent))],
@@ -510,7 +518,10 @@ fn selection_json(
 ) {
   let code = case config.highlight, buffer.projection {
     options.Excerpt, #(p.Exp(exp), _) | options.Unmarked, #(p.Exp(exp), _) -> [
-      #("code", json.string(text.print(exp))),
+      #(
+        "code",
+        json.string(environment.shorten_packages(text.print(exp), environment)),
+      ),
     ]
     _, _ -> []
   }
@@ -539,7 +550,10 @@ fn selection_json(
 // Where the selection sits in its parent, so the position of a hole is clear.
 fn role(buffer: Buffer, environment: Environment) -> Result(String, Nil) {
   let short = fn(exp) {
-    let code = text.print(exp) |> string.replace("\n", " ")
+    let code =
+      text.print(exp)
+      |> environment.shorten_packages(environment)
+      |> string.replace("\n", " ")
     case string.length(code) > 40 {
       True -> string.slice(code, 0, 37) <> "..."
       False -> code
@@ -611,6 +625,36 @@ fn pattern_text(pattern) {
   }
 }
 
+/// Asked alongside the edit when the program is complete and has run: Jev has
+/// what it returned in the state and says whether that answers the task.
+pub const answered_id = "answered"
+
+pub const answers_task = "yes"
+
+const keep_editing = "no"
+
+fn answered_question() {
+  jev.Choice(
+    json.string(
+      "`last_run` says what the finished program returned. Is that the answer to the task?",
+    ),
+    [
+      #(
+        answers_task,
+        Some(json.string(
+          "What the program returned is what the task asked for, stop here.",
+        )),
+      ),
+      #(
+        keep_editing,
+        Some(json.string(
+          "The task asks for something else, go on editing the program.",
+        )),
+      ),
+    ],
+  )
+}
+
 pub fn question(offered: List(options.Option), highlight) -> jev.Question {
   let criteria =
     list.map(offered, fn(option) {
@@ -656,10 +700,15 @@ pub fn request(
         _, _ -> Error(Nil)
       }
     })
+  let ran = case is_complete(agent), agent.test_results {
+    True, Some(_) -> [#(answered_id, answered_question())]
+    _, _ -> []
+  }
   let request =
     jev.Request(model:, state: state(agent), questions: [
       #(question_id, question(offered, agent.config.highlight)),
-      ..list.append(
+      ..list.flatten([
+        ran,
         slot_questions,
         list.map(cursor_options(agent), fn(cursor) {
           let #(number, projection, offered) = cursor
@@ -669,7 +718,7 @@ pub fn request(
             cursor_question(number, at, offered, agent.environment),
           )
         }),
-      )
+      ])
     ])
   #(request, offered)
 }
@@ -685,6 +734,36 @@ pub fn answer(
     dict.get(evaluation.answers, question_id)
     |> result.replace_error("no answer to " <> question_id),
   )
+  // Jev was asked whether what the program returned answers the task, which it
+  // judges without the edits competing for the same choice.
+  case dict.get(evaluation.answers, answered_id) {
+    Ok(jev.ChoiceAnswer(choice:, probabilities:, confidence:))
+      if choice == answers_task
+    -> {
+      let step =
+        Step(
+          action: a.Finish,
+          label: a.key(a.Finish),
+          confidence:,
+          ranked: jev.ranked(probabilities) |> list.take(8),
+          offered: list.length(offered),
+          input_tokens: evaluation.usage.input_tokens,
+          thinking_ms:,
+          failed: False,
+        )
+      take(agent, step)
+    }
+    _ -> apply_edit(agent, offered, evaluation, thinking_ms, answer)
+  }
+}
+
+fn apply_edit(
+  agent: Agent,
+  offered: List(options.Option),
+  evaluation: jev.Evaluation,
+  thinking_ms: Int,
+  answer,
+) -> Result(Agent, String) {
   case answer {
     jev.ChoiceAnswer(choice:, probabilities:, confidence:) -> {
       use option <- result.try(
