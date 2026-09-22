@@ -1186,8 +1186,17 @@ fn context_compounds(
           let arity = int.min(arity(type_), a.max_arity)
           case fitting(type_, arity) {
             False -> Error(Nil)
-            True ->
-              Ok(context_call(label, type_, arity, config.effects, strategy))
+            True -> {
+              let names = environment.parameters(environment, label)
+              Ok(context_call(
+                label,
+                type_,
+                arity,
+                names,
+                config.effects,
+                strategy,
+              ))
+            }
           }
         })
       let wraps = case strategy, exp {
@@ -1320,7 +1329,7 @@ pub fn readme_examples(readme: String) -> List(String) {
   })
 }
 
-fn context_call(label, type_, arity, shown, strategy) {
+fn context_call(label, type_, arity, names: List(String), shown, strategy) {
   let reach = [a.Variable("context"), a.Select(label), a.CallTaking(arity)]
   let performs = case shown, environment.performs(type_, arity) {
     EffectCalls, [_, ..] as labels | EffectNodes, [_, ..] as labels ->
@@ -1345,7 +1354,18 @@ fn context_call(label, type_, arity, shown, strategy) {
       )
     }
     _ -> {
-      let holes = list.repeat("?", arity) |> string.join(", ")
+      // The inputs are named by the parameters of the function.
+      let holes = case list.length(names) == arity {
+        True ->
+          list.map(names, fn(name) {
+            case name {
+              "_" -> "?"
+              name -> name
+            }
+          })
+          |> string.join(", ")
+        False -> list.repeat("?", arity) |> string.join(", ")
+      }
       let key = "call context." <> label <> "(" <> holes <> ")"
       named(
         a.Compound(key, reach),

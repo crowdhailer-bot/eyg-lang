@@ -5,6 +5,7 @@ import gleam/json
 import gleam/list
 import gleam/option.{Some}
 import gleam/string
+import jev_playground/action
 import jev_playground/agent
 import jev_playground/dnsimple
 import jev_playground/environment
@@ -131,7 +132,7 @@ fn agent(code, effects) {
   let assert Ok(tree) = parser.all_from_string(code)
   let config =
     options.Config(..options.default_config(), focus_holes: True, effects:)
-  agent.new("", e.from_annotated(tree), environment, config)
+  agent.new("", action.todo_holes(e.from_annotated(tree)), environment, config)
 }
 
 pub fn effects_can_be_hidden_test() {
@@ -202,4 +203,15 @@ pub fn requests_can_be_answered_over_http_test() {
   assert status == 200
   let assert Ok(text) = bit_array.to_string(body)
   assert string.contains(text, "ada@lovelace.dev")
+}
+
+pub fn arguments_of_context_functions_are_named_test() {
+  let state =
+    agent("context.change_record(todo, todo, todo, todo)", options.NoEffects)
+    |> agent.state
+    |> json.to_string
+  assert string.contains(
+    state,
+    "argument 1 of 4, `domain`, to context.change_record",
+  )
 }

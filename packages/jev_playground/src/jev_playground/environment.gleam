@@ -194,3 +194,23 @@ pub fn performs(type_, arity) -> List(String) {
   }
   |> list.unique
 }
+
+/// The names of the parameters of a function of the context, `["domain"]`.
+pub fn parameters(environment: Environment, label: String) -> List(String) {
+  case list.key_find(environment.values, "context") {
+    Ok(v.Record(fields)) ->
+      case dict.get(fields, label) {
+        Ok(v.Closure(param:, body:, ..)) -> [param, ..lambda_labels(body)]
+        _ -> []
+      }
+    _ -> []
+  }
+}
+
+// A function of several parameters is a lambda returning a lambda.
+fn lambda_labels(node: ir.Node(a)) -> List(String) {
+  case node {
+    #(ir.Lambda(label, body), _) -> [label, ..lambda_labels(body)]
+    _ -> []
+  }
+}

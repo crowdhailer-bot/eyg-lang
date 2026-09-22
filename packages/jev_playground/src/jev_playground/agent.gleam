@@ -164,7 +164,7 @@ pub fn options(agent: Agent) -> List(options.Option) {
     _, _ -> repeated
   }
   let jumps = case agent.config.hole_jumps {
-    True -> hole_jumps(agent.buffer)
+    True -> hole_jumps(agent.buffer, agent.environment)
     False -> []
   }
   options.available(agent.buffer, agent.environment, vocabulary, agent.config)
@@ -177,7 +177,10 @@ pub fn options(agent: Agent) -> List(options.Option) {
 
 // Moving to any other hole, described by where it is, so Jev can fill the holes
 // in the order the task describes them.
-fn hole_jumps(buffer: Buffer) -> List(options.Option) {
+fn hole_jumps(
+  buffer: Buffer,
+  environment: Environment,
+) -> List(options.Option) {
   let here = p.path(buffer.projection)
   a.holes(buffer)
   |> list.index_map(fn(hole, i) { #(i + 1, hole) })
@@ -185,7 +188,9 @@ fn hole_jumps(buffer: Buffer) -> List(options.Option) {
   |> list.take(8)
   |> list.map(fn(hole) {
     let #(number, projection) = hole
-    let place = case role(buffer.update_position(buffer, projection)) {
+    let place = case
+      role(buffer.update_position(buffer, projection), environment)
+    {
       Ok(role) -> ", " <> role
       Error(Nil) -> ""
     }
@@ -270,8 +275,13 @@ fn cursor_options(agent: Agent) {
 
 // The question for an extra hole says where the hole is and its type, as the
 // selection description only describes the selected hole.
-fn cursor_question(number, at: Buffer, offered: List(options.Option)) {
-  let role = case role(at) {
+fn cursor_question(
+  number,
+  at: Buffer,
+  offered: List(options.Option),
+  environment: Environment,
+) {
+  let role = case role(at, environment) {
     Ok(role) -> ", " <> role
     Error(Nil) -> ""
   }
@@ -342,7 +352,7 @@ pub fn state(agent: Agent) -> Json {
       [
         #("task", json.string(task)),
         #("program", json.string(shown_program(agent))),
-        #("selection", selection_json(buffer, config)),
+        #("selection", selection_json(buffer, config, environment)),
         #("type_errors", json.array(errors, json.string)),
       ],
       case environment.context_readme(environment) {
@@ -407,7 +417,11 @@ fn hole_types(buffer: Buffer) -> List(String) {
   })
 }
 
-fn selection_json(buffer: Buffer, config: options.Config) {
+fn selection_json(
+  buffer: Buffer,
+  config: options.Config,
+  environment: Environment,
+) {
   let code = case config.highlight, buffer.projection {
     options.Excerpt, #(p.Exp(exp), _) | options.Unmarked, #(p.Exp(exp), _) -> [
       #("code", json.string(text.print(exp))),
@@ -418,7 +432,7 @@ fn selection_json(buffer: Buffer, config: options.Config) {
     Ok(t.Var(_)) | Error(Nil) -> []
     Ok(type_) -> [#("type", json.string(environment.show_type(type_)))]
   }
-  let role = case role(buffer) {
+  let role = case role(buffer, environment) {
     Ok(role) -> [#("role", json.string(role))]
     Error(Nil) -> []
   }
@@ -437,7 +451,7 @@ fn selection_json(buffer: Buffer, config: options.Config) {
 }
 
 // Where the selection sits in its parent, so the position of a hole is clear.
-fn role(buffer: Buffer) -> Result(String, Nil) {
+fn role(buffer: Buffer, environment: Environment) -> Result(String, Nil) {
   let short = fn(exp) {
     let code = text.print(exp) |> string.replace("\n", " ")
     case string.length(code) > 40 {
@@ -456,11 +470,23 @@ fn role(buffer: Buffer) -> Result(String, Nil) {
         Ok(type_) -> ", which has type " <> environment.show_type(type_)
         Error(Nil) -> ""
       }
+      // The arguments of a context function are named by its parameters.
+      let name = case func {
+        e.Select(e.Variable("context"), label) ->
+          case
+            list.drop(environment.parameters(environment, label), position - 1)
+          {
+            [name, ..] -> ", `" <> name <> "`,"
+            [] -> ""
+          }
+        _ -> ""
+      }
       Ok(
         "argument "
         <> int.to_string(position)
         <> " of "
         <> int.to_string(count)
+        <> name
         <> " to "
         <> short(func)
         <> func_type,
@@ -547,7 +573,10 @@ pub fn request(
         list.map(cursor_options(agent), fn(cursor) {
           let #(number, projection, offered) = cursor
           let at = buffer.update_position(agent.buffer, projection)
-          #(cursor_id(number), cursor_question(number, at, offered))
+          #(
+            cursor_id(number),
+            cursor_question(number, at, offered, agent.environment),
+          )
         }),
       )
     ])
