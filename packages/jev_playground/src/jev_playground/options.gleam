@@ -164,7 +164,10 @@ pub fn default_config() {
     check_compounds: False,
     hole_jumps: False,
     argument_jumps: True,
-    context_compounds: ContextCalls,
+    // The strategy that solved the most questions for the fewest tokens,
+    // see research/contexts.md. Effects are listed for a task without a context,
+    // which may have to perform one.
+    context_compounds: ContextExamples,
     effects: EffectSignatures,
     context_readme: True,
   )

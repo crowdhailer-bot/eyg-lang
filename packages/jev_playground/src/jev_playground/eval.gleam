@@ -81,8 +81,9 @@ pub const improved = Variant(
   check_compounds: False,
   hole_jumps: False,
   argument_jumps: True,
-  context_compounds: options.ContextCalls,
-  effects: options.EffectSignatures,
+  context_compounds: options.ContextExamples,
+  // Every effect of a context is reached through its functions.
+  effects: options.EffectCallsOnly,
   blind: False,
   context_readme: True,
 )
