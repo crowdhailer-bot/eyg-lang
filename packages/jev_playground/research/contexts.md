@@ -210,10 +210,15 @@ confidence and the time Jev took, which opens and scrolls.
 
 ## Videos
 
-`jev_playground/frames` replays saved runs into the frames of a video: for each edit the program as it stood,
-coloured by the shared highlighter, with the time Jev took. A page in `tmp` plays eighteen of them in a
-three by two grid, the fastest six first and the longest six last, and Playwright records it.
-The overlay video is recorded the same way, by typing questions into the page.
-The longest run recorded through the page is eighteen edits: this host has under 4GB of memory shared with
-Postgres, and the browser is killed part way through a run of forty or more.
-Both are in `tmp`, which is not committed.
+In [videos](./videos), with the pages that play them:
+
+- `one-run.mp4`, the run that answers "What IP addresses do the A records of lovelace.dev point to?" in 47
+  edits, the program beside every edit Jev chose with its confidence and time.
+- `eighteen-runs.mp4`, the eighteen questions in a three by two grid, the fastest six, the next six, and the
+  six longest.
+- `overlay.mp4`, a question typed into the overlay page and the list of edits opened and scrolled.
+
+`jev_playground/frames` replays saved runs into the frames: for each edit the program as it stood, coloured by
+the shared highlighter, with the confidence and the time Jev took. Playwright records the page.
+The longest run recorded through the overlay page itself is eighteen edits: this host has under 4GB of memory
+shared with Postgres, and the browser is killed part way through a run of forty or more.
