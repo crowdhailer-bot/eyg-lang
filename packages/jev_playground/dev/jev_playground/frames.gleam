@@ -47,6 +47,8 @@ pub type Run {
     task: String,
     seconds: Float,
     steps: Int,
+    /// How the run ended: solved, or why not.
+    outcome: String,
     frames: List(Frame),
   )
 }
@@ -69,7 +71,7 @@ fn frames(name, environment) {
   use run <- result.try(
     json.parse(saved, eval.run_decoder()) |> result.replace_error(Nil),
   )
-  let eval.Run(eval: the_eval, variant:, steps:, ..) = run
+  let eval.Run(eval: the_eval, variant:, steps:, outcome:) = run
   let config = eval.config(the_eval, variant)
   let start = agent.new(the_eval.task, e.Vacant, environment, config)
   let #(_agent, frames) =
@@ -97,6 +99,7 @@ fn frames(name, environment) {
     task: the_eval.task,
     seconds: int.to_float(thinking) /. 1000.0,
     steps: list.length(steps),
+    outcome:,
     frames:,
   ))
 }
@@ -110,12 +113,13 @@ fn coloured(agent) {
 }
 
 fn run_to_json(run: Run) {
-  let Run(name:, task:, seconds:, steps:, frames:) = run
+  let Run(name:, task:, seconds:, steps:, outcome:, frames:) = run
   json.object([
     #("name", json.string(name)),
     #("task", json.string(task)),
     #("seconds", json.float(seconds)),
     #("steps", json.int(steps)),
+    #("outcome", json.string(outcome)),
     #(
       "frames",
       json.array(frames, fn(frame: Frame) {

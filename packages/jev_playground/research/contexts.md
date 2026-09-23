@@ -217,6 +217,9 @@ In [videos](./videos), with the pages that play them:
 - `eighteen-runs.mp4`, the eighteen questions in a three by two grid, the fastest six, the next six, and the
   six longest.
 - `overlay.mp4`, a question typed into the overlay page and the list of edits opened and scrolled.
+- `run-stopped-unsure.mp4` and `run-finished-wrong.mp4`, the same question without the readme examples:
+  70 edits and stopped after three choices below 0.2 confidence, and 95 edits ending in a `map` over every
+  record without the `filter` the question asked for. Both are the failure the reduction brought back.
 
 `jev_playground/frames` replays saved runs into the frames: for each edit the program as it stood, coloured by
 the shared highlighter, with the confidence and the time Jev took. Playwright records the page.

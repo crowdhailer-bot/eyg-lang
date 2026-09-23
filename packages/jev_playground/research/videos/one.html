@@ -93,6 +93,7 @@
         font-size: 16px;
       }
       footer .returned { color: #1f7a3d; font-family: 'JetBrains Mono', monospace; }
+      footer .wrong { color: #a8432a; font-family: 'JetBrains Mono', monospace; overflow: hidden; }
       footer .stats { margin-left: auto; color: var(--muted); font-size: 14px; }
       .string { color: #2f7a41; }
       .number { color: #2a5ea8; }
@@ -127,7 +128,8 @@
     </footer>
     <script type="module">
       const params = new URLSearchParams(location.search)
-      const runs = await (await fetch('./one.json')).json()
+      const file = params.get('file') ?? 'one.json'
+      const runs = await (await fetch('./' + file)).json()
       const run = runs[Number(params.get('run') ?? 0)]
       const SPEED = Number(params.get('speed') ?? 2)
       const HOLD = Number(params.get('hold') ?? 520)
@@ -140,6 +142,7 @@
       const returned = document.getElementById('returned')
       const stats = document.getElementById('stats')
       stats.textContent = `${run.steps} edits · ${run.seconds.toFixed(1)}s of thinking`
+      const solved = run.outcome === 'solved'
 
       // The list shows the last edits, the newest at the bottom, as a person
       // scrolling the run would see them.
@@ -163,7 +166,13 @@
         if (frame.output) returned.textContent = frame.output
         await sleep(Math.max(HOLD, frame.thinking_ms / SPEED))
       }
-      await sleep(2600)
+      // How the run ended, which for a run that went wrong is the point of it.
+      if (!solved) {
+        returned.className = 'wrong'
+        returned.textContent = run.outcome.replace(/\s+/g, ' ')
+      }
+      progress.textContent = solved ? `${run.steps} edits, solved` : `${run.steps} edits`
+      await sleep(3200)
       document.title = 'done'
     </script>
   </body>
