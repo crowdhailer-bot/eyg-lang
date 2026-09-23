@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>One run</title>
+    <style>
+      :root {
+        --ink: #1b1f24;
+        --paper: #f5f3ee;
+        --line: #ddd8cc;
+        --muted: #6d7480;
+        --accent: #b4520d;
+      }
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family: 'IBM Plex Sans', Arial, sans-serif;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        padding: 16px 28px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      h1 { font-size: 21px; font-weight: 600; }
+      header .question { font-size: 19px; color: var(--accent); }
+      header .context { margin-left: auto; font-size: 14px; color: var(--muted); }
+      .body {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 430px;
+        gap: 14px;
+        padding: 14px 20px 18px;
+        min-height: 0;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        background: #fffdf8;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .panel h2 {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding: 7px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .code {
+        flex: 1;
+        margin: 0;
+        padding: 14px 16px;
+        font-family: 'JetBrains Mono', 'Courier New', monospace;
+        font-size: 19px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        overflow: hidden;
+      }
+      .edits { flex: 1; overflow: hidden; padding: 6px 0; }
+      .edit {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        padding: 3px 12px;
+        font-size: 14px;
+        white-space: nowrap;
+      }
+      .edit .n { color: var(--muted); width: 26px; flex: none; text-align: right; }
+      .edit .what {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-family: 'JetBrains Mono', 'Courier New', monospace;
+      }
+      .edit .conf { color: var(--muted); flex: none; }
+      .edit .ms { color: var(--muted); flex: none; width: 58px; text-align: right; }
+      .edit.latest { background: #f6e8d8; }
+      footer {
+        display: flex;
+        gap: 18px;
+        align-items: baseline;
+        padding: 10px 28px 14px;
+        border-top: 1px solid var(--line);
+        font-size: 16px;
+      }
+      footer .returned { color: #1f7a3d; font-family: 'JetBrains Mono', monospace; }
+      footer .stats { margin-left: auto; color: var(--muted); font-size: 14px; }
+      .string { color: #2f7a41; }
+      .number { color: #2a5ea8; }
+      .tag { color: #7a3fa8; }
+      .builtin { color: #a8432a; }
+      .keyword { color: #8a4b12; font-weight: 600; }
+      .package { color: #7a3fa8; }
+      .hole { color: #c2410c; font-weight: 700; }
+      .selection { border-bottom: 1px dotted #d8c3a5; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Jev writes EYG</h1>
+      <span class="question" id="question"></span>
+      <span class="context">DNSimple context · one function per API endpoint · @standard for lists</span>
+    </header>
+    <div class="body">
+      <section class="panel">
+        <h2>The program, one structural edit at a time</h2>
+        <pre class="code" id="code"></pre>
+      </section>
+      <section class="panel">
+        <h2>Every edit Jev chose</h2>
+        <div class="edits" id="edits"></div>
+      </section>
+    </div>
+    <footer>
+      <span id="progress"></span>
+      <span class="returned" id="returned"></span>
+      <span class="stats" id="stats"></span>
+    </footer>
+    <script type="module">
+      const params = new URLSearchParams(location.search)
+      const runs = await (await fetch('./one.json')).json()
+      const run = runs[Number(params.get('run') ?? 0)]
+      const SPEED = Number(params.get('speed') ?? 2)
+      const HOLD = Number(params.get('hold') ?? 520)
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+      document.getElementById('question').textContent = run.task
+      const code = document.getElementById('code')
+      const edits = document.getElementById('edits')
+      const progress = document.getElementById('progress')
+      const returned = document.getElementById('returned')
+      const stats = document.getElementById('stats')
+      stats.textContent = `${run.steps} edits · ${run.seconds.toFixed(1)}s of thinking`
+
+      // The list shows the last edits, the newest at the bottom, as a person
+      // scrolling the run would see them.
+      const shown = 14
+      await sleep(900)
+      run.frames.forEach((frame, i) => (frame.n = i + 1))
+      for (const frame of run.frames) {
+        code.innerHTML = frame.code
+        progress.textContent = `edit ${frame.n} of ${run.steps}`
+        const rows = run.frames.slice(Math.max(0, frame.n - shown), frame.n)
+        edits.innerHTML = rows
+          .map(
+            (row) =>
+              `<div class="edit${row.n === frame.n ? ' latest' : ''}">` +
+              `<span class="n">${row.n}</span>` +
+              `<span class="what">${row.label.replace(/\n/g, ' ').replace(/</g, '&lt;')}</span>` +
+              `<span class="conf">${row.confidence.toFixed(2)}</span>` +
+              `<span class="ms">${row.thinking_ms}ms</span></div>`,
+          )
+          .join('')
+        if (frame.output) returned.textContent = frame.output
+        await sleep(Math.max(HOLD, frame.thinking_ms / SPEED))
+      }
+      await sleep(2600)
+      document.title = 'done'
+    </script>
+  </body>
+</html>

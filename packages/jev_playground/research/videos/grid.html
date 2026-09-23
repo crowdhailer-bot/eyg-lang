@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Jev writes DNSimple programs</title>
+    <style>
+      :root {
+        --ink: #1b1f24;
+        --paper: #f5f3ee;
+        --line: #ddd8cc;
+        --muted: #6d7480;
+        --accent: #b4520d;
+      }
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family: 'IBM Plex Sans', Arial, sans-serif;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        padding: 14px 24px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      h1 { font-size: 20px; font-weight: 600; }
+      header .group { font-size: 16px; color: var(--accent); }
+      header .context { margin-left: auto; font-size: 14px; color: var(--muted); }
+      .grid {
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 10px;
+        padding: 10px 14px 14px;
+        min-height: 0;
+      }
+      .cell {
+        border: 1px solid var(--line);
+        background: #fffdf8;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .task {
+        padding: 6px 10px;
+        font-size: 15px;
+        border-bottom: 1px solid var(--line);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .code {
+        flex: 1;
+        margin: 0;
+        padding: 8px 10px;
+        font-family: 'JetBrains Mono', 'Courier New', monospace;
+        font-size: 15px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        overflow: hidden;
+      }
+      .meta {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        padding: 5px 10px;
+        border-top: 1px solid var(--line);
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .meta .edit { color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+      .meta .ms { margin-left: auto; flex: none; }
+      .meta .done { color: #1f7a3d; flex: none; }
+      /* the classes the shared highlighter writes */
+      .string { color: #2f7a41; }
+      .number { color: #2a5ea8; }
+      .tag { color: #7a3fa8; }
+      .builtin { color: #a8432a; }
+      .keyword { color: #8a4b12; font-weight: 600; }
+      .hole { color: #c2410c; font-weight: 700; }
+      .selection { background: none; border-bottom: 1px dotted #d8c3a5; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Jev writes EYG</h1>
+      <span class="group" id="group">the six fastest</span>
+      <span class="context">DNSimple context · one function per API endpoint · @standard for lists</span>
+    </header>
+    <div class="grid" id="grid"></div>
+    <script type="module">
+      const runs = await (await fetch('./runs.json')).json()
+      const groups = [
+        { title: 'the six fastest', runs: runs.slice(0, 6) },
+        { title: 'the next six', runs: runs.slice(6, 12) },
+        { title: 'the six longest, the last without the readme examples', runs: runs.slice(12, 18) },
+      ]
+      const grid = document.getElementById('grid')
+      const groupLabel = document.getElementById('group')
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+      // Thinking time is real but a video would crawl at it, so it is sped up
+      // and every frame is held long enough to read.
+      const SPEED = Number(new URLSearchParams(location.search).get('speed') ?? 3)
+      const HOLD = Number(new URLSearchParams(location.search).get('hold') ?? 420)
+
+      function cell(run) {
+        const el = document.createElement('div')
+        el.className = 'cell'
+        el.innerHTML = `
+          <div class="task">${run.task}</div>
+          <pre class="code"></pre>
+          <div class="meta"><span class="edit"></span><span class="ms"></span></div>`
+        return el
+      }
+
+      async function play(run, el) {
+        const code = el.querySelector('.code')
+        const edit = el.querySelector('.edit')
+        const ms = el.querySelector('.ms')
+        for (const frame of run.frames) {
+          code.innerHTML = frame.code
+          edit.textContent = frame.label.replace(/\n/g, ' ')
+          ms.textContent = `${frame.thinking_ms}ms`
+          await sleep(Math.max(HOLD, frame.thinking_ms / SPEED))
+        }
+        const last = run.frames[run.frames.length - 1]
+        el.querySelector('.meta').innerHTML =
+          `<span class="edit">${run.steps} edits</span>` +
+          `<span class="done">${(last?.output ?? '').replace(/\n/g, ' ').slice(0, 60)}</span>` +
+          `<span class="ms">${run.seconds.toFixed(1)}s of thinking</span>`
+      }
+
+      for (const group of groups) {
+        groupLabel.textContent = group.title
+        grid.innerHTML = ''
+        const cells = group.runs.map((run) => {
+          const el = cell(run)
+          grid.append(el)
+          return el
+        })
+        await sleep(900)
+        await Promise.all(group.runs.map((run, i) => play(run, cells[i])))
+        await sleep(2200)
+      }
+      document.title = 'done'
+    </script>
+  </body>
+</html>
