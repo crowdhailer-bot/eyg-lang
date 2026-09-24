@@ -177,7 +177,8 @@ review it in, from the fixes that stand alone to the features that need everythi
 Each step says how it is tested and what would make it acceptable, so a step can be taken on its own,
 and a step can be rejected without blocking the ones below it.
 
-The whole branch is green: `gleam test` passes in every package it touches, and `CONTRIBUTING.md` lists
+The whole branch is green: `gleam format --check`, `gleam build --warnings-as-errors` and `gleam test` pass
+in every package it touches, and `CONTRIBUTING.md` lists
 the commands. Anything measured against Jev costs money, so a reviewer repeating a measurement should
 expect to pay: a sweep of the DNSimple questions is a few cents.
 
