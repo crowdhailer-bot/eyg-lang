@@ -2,6 +2,12 @@
 
 What helps Jev reach a correct program in fewer choices, tested against the real API where possible.
 The variants are listed at `eval.variant` and compared with `sweep`, see [evals](./evals.md) for the method.
+This is the index of every technique in the harness: each row is a thing that can be turned off, with what
+turning it off cost. Rows that say "not swept" were never measured on their own, which is the honest state
+of them, and the first candidates for a sweep.
+
+The scaffold numbers are 18 runs, six evals three times each. The DNSimple numbers are 60 runs, twenty
+questions three times each, from an empty program.
 
 ## Tested
 
@@ -31,6 +37,15 @@ The variants are listed at `eval.variant` and compared with `sweep`, see [evals]
 | Effects shown only on the context calls that perform them, `effects=callsonly` | As many questions solved as any other way of showing effects, for 40% fewer tokens than listing signatures. |
 | Selecting an argument of a complete program, and moving on from a wrap or a function argument | Four questions went from 0 of 15 blind runs each to 15 of 15, see [contexts](./contexts.md#what-blind-runs-found). |
 | Stop a run after three choices in a row below 0.2 confidence | Over 544 runs 1 of 357 solved runs and 65 of 187 unsolved runs did this, stopping there would have saved 18% of all input tokens. |
+| Compound moves built from the readme's examples, `ctx=examples` | The default: 60 of 60 DNSimple questions for $0.062, against 59 for $0.066 with calls alone. `total-records` went from nine edits to two, and from never solved to solved, when an example showed the shape. |
+| The functions of an open library offered as calls, wraps and values | Not swept. `a-records` went from out of steps to solved in 18 edits in the run that added it, because `wrap in @standard.list.map(.., f)` was offered at all. |
+| A library the program references counted as open | Not swept. Without it the examples brought `@standard` into the program but its functions were never offered, which is the same failure as above. |
+| Releases written `@standard` rather than `@standard:1:baguq…` where they are read | Not swept. The program Jev read was mostly content id before it, 60 characters at every use. |
+| Asking whether the finished program answers the task, `answered` | Measured and rejected: it finished at the whole account record for "what email address" and at every record for "which mail servers", and solved no more, 13 of 20 either way. Off by default. |
+| Selecting only the literal arguments of a complete program | Not swept on its own. Offering every argument sent runs into a loop selecting a lambda and undoing, which is what narrowed it to strings and integers. |
+| Blind runs, `blind`: Jev is shown what a program returned, never whether it is right | Not a comparison, it is the protocol the overlay uses. It is what the DNSimple numbers are measured under, and it is why a wrong answer is final. |
+| Offering to open a library, `search_libraries` | Not swept. Needed for a task whose library is not open at the start, and on by default only where a context is in scope. |
+| Moving to the next `?` after a hole is filled, `advance` | Not swept. Added because Jev kept replacing the hole it had just filled. |
 
 ## Ablations
 
