@@ -12,6 +12,8 @@ oas_generator_utils = ">= 1.1.0 and < 2.0.0"
 ogre = ">= 1.1.0 and < 2.0.0"
 overlay_llm = ">= 0.1.0 and < 1.0.0"
 overlay_web = { path = "../overlay_web" }
+jev_playground = { path = "../jev_playground" }
+midas = ">= 3.0.0 and < 4.0.0"
 pal = { path = "../pal" }
 # pamphlet = ">= 1.0.0 and < 2.0.0"
 pamphlet = { git = "https://github.com/crowdhailer/pamphlet", ref = "750623b" }
