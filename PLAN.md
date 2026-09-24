@@ -169,3 +169,113 @@ Look at each file in the eyg_packages directory.
   - [x] Long lines wrap in the chat rather than scrolling sideways
   - [x] Every edit listed under the answer with its confidence and time, opened and scrolled by the reader
 - [x] Record the videos, `jev_playground/frames` replays saved runs into the frames of one
+
+## Rollout
+
+This branch is 142 commits. Nothing here is meant to land as one change: the list below is the order to
+review it in, from the fixes that stand alone to the features that need everything under them.
+Each step says how it is tested and what would make it acceptable, so a step can be taken on its own,
+and a step can be rejected without blocking the ones below it.
+
+The whole branch is green: `gleam test` passes in every package it touches, and `CONTRIBUTING.md` lists
+the commands. Anything measured against Jev costs money, so a reviewer repeating a measurement should
+expect to pay: a sweep of the DNSimple questions is a few cents.
+
+### 1. Fixes to the structural editor
+
+Each is a bug found by driving `morph` harder than the editor does, and each stands alone.
+
+| Change | Testing | Acceptable when |
+| --- | --- | --- |
+| `1dbecda` scope and arity looked up with the path reversed at the focus | `buffer_test`, shipped with the fix | The scope at a node matches what inference says, `morph` passes on both targets |
+| `82e84be` searching for the next vacant looped forever when there was none | `navigation_test`, shipped with the fix | Navigation terminates on a program with no holes, and on every definition in `eyg_packages` when mined |
+| `b190d47` the path to the original record of an overwrite of several fields | `editable/path_test`, shipped with the fix | Synthesis reaches the same tree for 434 of the 436 definitions in `eyg_packages` |
+| `6f64af4` focusing a path that is not in the program crashed rather than failing | `buffer_test`, shipped with the fix | The call returns an error and no exception escapes |
+| `cbba0e5` separators were not counted towards the line width when printing | `text_test`, shipped with the fix | Every file in `eyg_packages` prints and parses back to the same tree |
+| `821f1df` a block ending in a function has no text syntax, now stated | **No test.** A reviewer decides whether the printer refuses it or the syntax is added | The limitation is asserted somewhere rather than only described |
+
+### 2. New capability in the core libraries
+
+Small additions the harness needs, each useful on its own and reviewable without the agent.
+
+| Change | Testing | Acceptable when |
+| --- | --- | --- |
+| `f1df82f` a text printer for editable code with marked nodes | `text_test`, and every file in `eyg_packages` printed and parsed back | Any program prints with any set of marks and parses back to the same tree without them |
+| `a813d1d` resolve the types in scope at a node with what inference learnt later | Tests shipped with it in `gleam_analysis`, 46 in the suite | A parameter reads as its inferred type rather than `a`, and the suite passes on both targets |
+| `bdc2282` `effect_at`, the effects a node may perform, beside `type_at` | A test shipped with it over a program performing effects at known paths | The effects at a node match the row inference gives |
+| `1a41bb9` walk a module without the stack | The `gleam_ir` suite, 29 tests, and loading `@standard` in a browser | A module the size of `@standard` is walked without overflowing the stack |
+| `812269b` pass the selection as the first argument of a call taking several | **No test in `morph`.** Exercised only through the harness, by `wrap in @standard.list.map(.., f)`. Add transformation tests for arities 1 to 8 before it lands | The selection ends as the first argument with the rest as holes, at every arity, asserted in `morph` |
+
+### 3. The Jev API client, `packages/jev`
+
+A sans-io client for TypeSafe's System One: requests, questions, evaluations, and the errors the API gives.
+It is a standalone piece of work and can be reviewed, and released, without anything else on this branch.
+
+- **Testing.** 19 tests on both targets against recorded responses in `test/fixtures`, including the refusals:
+  unauthorized, unknown model, no questions, no state, a choice of 256 options, a request over the token limit.
+  No network in the tests; `client` in the playground is what sends them.
+- **Acceptable when.** The fixtures are real responses from the API, a refusal decodes to a named error rather
+  than a crash, and the package builds with `--warnings-as-errors` on Erlang and JavaScript.
+- **Note for review.** `2f41b5d` reports a request over about 32,800 input tokens as `TooManyTokens`,
+  which is the limit the API enforces and the harness has to respect.
+
+### 4. The DNSimple context, `eyg_packages/dnsimple`
+
+An EYG module with one function per DNSimple endpoint, its own JSON decoders, and a readme that documents
+the API and the idioms for using it. Useful to anyone writing EYG against DNSimple, agent or not.
+
+- **Testing.** `jev_playground/dnsimple_test` runs each function against an account served from memory
+  and checks both what it returns and what it changed. A test checks the module in the repository has the
+  content id the evals fetch.
+- **Acceptable when.** Every function matches the endpoint it is named for, a failed call aborts with the
+  message DNSimple gives, and the module type checks as one block with no references, which the hub enforces
+  when it is shared.
+- **Open question for review.** This context answers eighteen of thirty one questions from an empty program.
+  The convenience context it replaced, with `records`, `without_auto_renew` and the rest, answered twenty of
+  twenty. `research/contexts.md` has both sets of numbers; where a context should sit between the API and the
+  question is the decision to review, and it is a product decision rather than a technical one.
+
+### 5. The agent harness, `packages/jev_playground`
+
+The largest part of the branch and the one to review last, because it rests on everything above.
+It is research code: an agent, evals, sweeps and a page for watching a run.
+
+- **Testing.** 74 tests covering the actions, the options offered at a focus, the state sent to Jev, the
+  vocabulary, compound moves, and every eval's solution against its checker. Demos replay with each scripted
+  choice asserted to have been offered, which is what catches an option disappearing.
+- **Acceptable when.** The suite passes, every eval's reference solution passes its own checker, and a sweep
+  reproduces the numbers in `research/`. The research documents are the argument for each default, and each
+  default is a flag that can be turned off and measured.
+- **Review in this order.** `action` and `options` (what Jev may choose), `agent` (what Jev is told),
+  `eval` and the sweeps (how a claim is measured), then the page.
+
+### 6. Effects, contexts and libraries in the harness
+
+The features that make an empty program tractable. Each was measured and each can be turned off.
+
+| Feature | Testing | Acceptable when |
+| --- | --- | --- |
+| Hole mode, the excerpt highlight, the type filter and the repeat filters | Sweeps with each turned off, three runs each | Every one is worth a solve or a large saving in tokens, as recorded in `research/improvements.md` |
+| Compound moves from the context's functions | `dnsimple_test` asserts the options offered for each strategy; sweeps compare the strategies | Offering calls beats no compounds by 16 of 60 to 59 of 60, see `research/contexts.md` |
+| Compound moves from the readme's examples | The same tests; a sweep with examples on and off | The default is the cheapest strategy that solves the most, and the caveat that examples shape the result is written down |
+| Effects shown on the calls that perform them | Sweeps over five presentations | No presentation solves more, so the cheapest that still says which calls change the account wins |
+| Pulling `@standard`: opening a library, its functions as compounds, references written short | Tests that a library is offered, that its calls appear once open, and that a referenced library counts as open | A question needing `map` or `filter` is answered from an empty program, which none were before |
+
+### 7. The overlay page
+
+Jev as a provider on a real page, answering questions about a real account.
+
+- **Testing.** 54 tests in `overlay_web` over the state machine: asking, running, finishing, giving up,
+  the Spotless token, and the libraries fetched at the start. The page itself is exercised by recording it.
+- **Acceptable when.** A question typed into the page is answered by a program the person can read, the key
+  never reaches the page's own code, and a question that cannot be answered gives up rather than looping.
+- **Review together.** `jev_session` (the protocol), `state` (the loop), `libraries` (what a program may
+  reference), and the view. `cb1f903` on `eyg.run` is the proxy that makes the key work in a browser.
+
+### 8. What is not ready
+
+- Thirteen of the thirty one questions are unanswered, and the two videos of failures show why:
+  a run that gives up, and a run that finishes with a plausible answer to a different question.
+- The blind protocol has no way to tell Jev it is wrong, which is honest but means a wrong answer is final.
+- The demo rigs are in `tmp` and not committed, so the videos in `research/videos` are reproducible only
+  with the pages beside them and a local hub.
