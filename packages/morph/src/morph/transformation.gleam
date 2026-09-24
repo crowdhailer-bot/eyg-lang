@@ -284,10 +284,12 @@ pub fn call_many(zip) {
 pub fn call_with_taking(zip, arity) {
   case zip {
     #(p.Exp(arg), rest) ->
-      Ok(#(
-        p.Exp(e.Vacant),
-        [p.CallFn([arg, ..list.repeat(e.Vacant, arity - 1)]), ..rest],
-      ))
+      Ok(
+        #(p.Exp(e.Vacant), [
+          p.CallFn([arg, ..list.repeat(e.Vacant, arity - 1)]),
+          ..rest
+        ]),
+      )
     _ -> Error(Nil)
   }
 }
