@@ -2,8 +2,8 @@
 
 A type-safe implementation of evaluating questions using the Jev mode from typesafe.ai.
 
-[![Package Version](https://img.shields.io/hexpm/v/eyg_ir)](https://hex.pm/packages/eyg_ir)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/eyg_ir/)
+[![Package Version](https://img.shields.io/hexpm/v/intelligence)](https://hex.pm/packages/intelligence)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/intelligence/)
 
 ```sh
 gleam add intelligence@1 midas@3
@@ -54,7 +54,7 @@ pub fn classify(
   client: jev.Client(t),
   message: String,
 ) -> K(t, Result(jev.Evaluation(Triage), jev.Failure)) {
-  jev.enquire(client, message, questions())
+  jev.evaluate(client, message, questions())
 }
 ```
 
