@@ -53,3 +53,23 @@ sum_fib(20, 1, 1)
 ```
 
 `PASS: Fibonacci sum = 17710` (exit 0).
+
+## Full session
+
+The same model also passed `suites/fibonacci.eyg` through the full Overlay
+session on 2026-09-26. It made six model calls, fetched the local syntax guide,
+received program errors through tool feedback, and computed `17710` in run 5.
+The trial had only the `Computes(17710)` check and used no model judge.
+
+```sh
+gleam run -m overlay/eval -- run suites/fibonacci.eyg \
+  --model ollama:gpt-oss:120b --record evals/fibonacci-cassettes
+```
+
+Output:
+
+```text
+Running fibonacci with context none
+pass fibonacci #1 (6 model calls)
+Pass rate 100% over 1 tasks
+```
