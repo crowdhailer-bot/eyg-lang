@@ -18,6 +18,7 @@ import gleam/string
 import midas/continuation
 import overlay/eval/evaluate
 import overlay/eval/fixture/hub.{type Hub}
+import overlay/eval/judge
 import overlay/eval/model.{type Model}
 import overlay/eval/module
 import overlay/eval/task.{type Check, type Task}
@@ -80,9 +81,22 @@ fn check_with(
   check: Check,
   transcript: Transcript,
   hub: Hub,
-  _judge: Option(Model),
+  judge: Option(Model),
 ) -> Promise(Verdict) {
-  promise.resolve(deterministic(task, check, transcript, hub))
+  case check, judge {
+    task.Judged(criterion:), Some(judge) -> {
+      use decision <- promise.map(judge.judge(judge, transcript, criterion))
+      case decision {
+        Ok(judge.Meets(reasoning)) -> Pass(reasoning)
+        Ok(judge.DoesNotMeet(reasoning)) -> Fail(reasoning)
+        Ok(judge.CannotTell(reasoning)) -> Unknown(reasoning)
+        Error(reason) -> Unknown("the judge failed: " <> reason)
+      }
+    }
+    task.Judged(..), None ->
+      promise.resolve(Unknown("no judge was given for judged checks"))
+    _, _ -> promise.resolve(deterministic(task, check, transcript, hub))
+  }
 }
 
 /// Grade a check without a model, judged checks are unknown.
