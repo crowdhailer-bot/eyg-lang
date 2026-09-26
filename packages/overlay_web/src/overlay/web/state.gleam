@@ -18,6 +18,7 @@ import overlay/llm/provider
 import overlay/llm/provider/ollama
 import overlay/llm/tool
 import overlay/web/context
+import overlay/web/prompt
 import overlay/web/provider_setup
 import overlay/web/tools
 import pal/system
@@ -392,15 +393,7 @@ fn system_prompt(state: State) -> String {
   let host = v.String(origin.host)
   let port = v.option(origin.port, v.Integer)
 
-  "You are an expery automation assistant.
-You help users by executing EYG scripts to interact with the users system.
-DO NOT guess any function of effects. Only use what you have seen explained and use guide to learn more about writing EYG code.
-
-ALWAYS use djot syntax for your responses.
-DO NOT write code blocks in your responses unless explicitly asked.
-All code execution uses the 'run' tool.
-Every program has the variable context in scope, it is the module described in the Context section at the end of this prompt.
-
+  prompt.introduction <> "
 To fetch a guide run the following script.
 ALWAYS fetch the EYG syntax guide before writing scripts
 
