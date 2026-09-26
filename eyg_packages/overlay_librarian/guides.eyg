@@ -1,0 +1,56 @@
+// The guides published on eyg.run.
+
+let index = [
+  {slug: "eyg-syntax-guide", title: "EYG syntax guide", summary: "Syntax of EYG: values, functions, records, unions, match, effects and imports.", keywords: "syntax let function record union match list effect perform handle import"},
+  {slug: "builtins-reference", title: "Builtins reference", summary: "Every builtin function, such as !int_add and !string_split, with its type.", keywords: "builtin builtins int string list binary equal fix compare"},
+  {slug: "http-fetch", title: "HTTP fetch", summary: "Create and send HTTP requests with the Fetch effect.", keywords: "http fetch request response api get post header"},
+  {slug: "json", title: "JSON", summary: "Parse and encode JSON with the json package.", keywords: "json parse decode encode"},
+  {slug: "cli-effects-reference", title: "CLI effects reference", summary: "Effects of the eyg CLI: files, directories, environment, standard out and more.", keywords: "effects cli file read write directory env standard out cwd sleep random"},
+  {slug: "modifying-text-files", title: "Modifying text files", summary: "Read, change and write text files.", keywords: "file text edit write append replace read"},
+  {slug: "explore-the-file-system", title: "Explore the file system", summary: "List directories and find files.", keywords: "file system directory list find walk"},
+  {slug: "file-resolution", title: "File resolution", summary: "How relative paths and imports resolve.", keywords: "path relative import resolve directory"},
+  {slug: "effect-access-policies", title: "Effect access policies", summary: "Allow, mock or deny effects for a function with access policies.", keywords: "access policy permission allow deny mock sandbox security"},
+  {slug: "writing-tests-with-aok", title: "Writing tests with aok", summary: "Write and run tests for EYG packages.", keywords: "test tests assert aok"},
+  {slug: "evaluating-overlay-agents", title: "Evaluating Overlay agents", summary: "Write and run evals for Overlay agents and the contexts they work in.", keywords: "eval evals evaluate benchmark grade judge task check context measure"},
+  {slug: "embedding-eyg-in-gleam-programs", title: "Embedding EYG in Gleam programs", summary: "Run EYG from Gleam and give programs effects.", keywords: "gleam embed interpreter host effects"},
+  {slug: "managing-signatories", title: "Managing signatories", summary: "Create and protect identities for publishing packages.", keywords: "publish signatory identity key package release"},
+  {slug: "install-a-prebuilt-binary", title: "Install a prebuilt binary", summary: "Install the eyg CLI.", keywords: "install cli binary download"},
+  {slug: "install-from-source", title: "Install from source", summary: "Build the eyg CLI from source.", keywords: "install build source cli"},
+  {slug: "github", title: "GitHub", summary: "Call the GitHub API with the GitHub service effect.", keywords: "github api repository issues pull request service"},
+  {slug: "dnsimple", title: "DNSimple", summary: "Manage domains with the DNSimple service effect.", keywords: "dnsimple dns domain service"},
+  {slug: "netlify", title: "Netlify", summary: "Deploy sites with the Netlify API.", keywords: "netlify deploy site hosting"},
+  {slug: "vimeo", title: "Vimeo", summary: "Work with videos through the Vimeo service effect.", keywords: "vimeo video service"},
+  {slug: "tavily", title: "Tavily", summary: "Search the web with Tavily.", keywords: "tavily search web"},
+  {slug: "ollama", title: "Ollama", summary: "Call models with the Ollama API.", keywords: "ollama model llm chat ai"},
+  {slug: "locate-me", title: "Locate me", summary: "Find the location of the computer running a program.", keywords: "location geolocation ip"}
+]
+
+// Fetch a guide as markdown text from eyg.run.
+let read = (slug) -> {
+  let request = {
+    method: GET({}),
+    scheme: HTTPS({}),
+    host: "eyg.run",
+    port: None({}),
+    path: !string_append("/guides/", !string_append(slug, ".md")),
+    query: None({}),
+    headers: [],
+    body: !string_to_binary("")
+  }
+  match perform Fetch(request) {
+    Ok({status, body}) -> {
+      match !int_compare(status, 200) {
+        Eq(_) -> {
+          match !string_from_binary(body) {
+            Ok(text) -> { Ok(text) }
+            Error(_) -> { Error("the guide is not text") }
+          }
+        }
+        | (_) -> { Error(!string_append("no guide with the slug ", slug)) }
+      }
+    }
+    Error(reason) -> { Error(reason) }
+  }
+}
+
+{index, read}
