@@ -11,6 +11,20 @@ effect the runtime hands back. That one property changes what an eval can be.
 
 This series is about evaluating such agents, and the contexts they work in.
 
+For a technical talk, open [Make agent changes measurable](./slides.html)
+or its [PDF copy](./slides.pdf). The deck has 32 main slides and six reference
+slides, with speaker notes for a roughly 40–45 minute presentation. It covers
+the pure live eval, architecture and component implementations, context tasks,
+grading, experimental design, and sandbox boundaries. Examples distinguish
+recorded results from proposed experiments and hardening.
+
+The HTML is the editable source and works offline without dependencies. Use
+the arrow keys or Space to navigate, **N** for notes, **F** for fullscreen,
+and the slide selector to jump. The reliability slide has interactive controls;
+its numbers are illustrative. Use **P** or **Print / PDF** to export all slides
+in landscape 16:9, with background graphics enabled and browser headers/footers
+disabled. Speaker notes remain in the HTML. Regenerate `slides.pdf` after edits.
+
 For a runnable starting point, begin with the [pure Fibonacci eval](../../packages/overlay_eval/README.md).
 It makes one real model request and checks the value of a program with no effects.
 The articles below describe the subsequent session, fixture and grading layers.

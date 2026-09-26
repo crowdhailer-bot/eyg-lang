@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A technical presentation on evaluating Overlay agents and contexts: implementation, grading, experiments, and sandbox boundaries.">
+<title>Make agent changes measurable — Overlay evals</title>
+<style>
+:root{color-scheme:light;--paper:#f4f1e9;--ink:#172c3a;--muted:#53656d;--line:#ced4cb;--green:#cdeb87;--teal:#155b56;--orange:#b14325;--white:#fffefa}
+*{box-sizing:border-box}body{margin:0;background:#13242e;color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif}button,select,input{font:inherit}a{color:inherit;text-underline-offset:3px}button,select{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #da713c;outline-offset:4px}
+#viewport{position:fixed;inset:0 0 52px;overflow:hidden}#stage{position:absolute;left:50%;top:50%;margin-left:-640px;margin-top:-360px;width:1280px;height:720px;transform-origin:center center}.slide{display:none;position:absolute;inset:0;width:1280px;height:720px;padding:48px 62px 58px;background:var(--paper);overflow:hidden}.slide.active{display:block}.slide::after{content:attr(data-page);position:absolute;bottom:22px;right:36px;font-size:14px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.eyebrow{font-size:15px;font-weight:750;letter-spacing:.15em;text-transform:uppercase;color:var(--teal);margin:0 0 16px}h1,h2,h3,p{margin:0}h1{font-size:74px;line-height:1.04;letter-spacing:-.045em;font-weight:760;max-width:1000px}h2{font-size:45px;line-height:1.1;letter-spacing:-.035em;margin-bottom:25px;font-weight:730}h3{font-size:26px;line-height:1.2;margin-bottom:13px}p,li{font-size:25px;line-height:1.4}p+p{margin-top:17px}ul,ol{padding-left:25px;margin:12px 0}li+li{margin-top:14px}strong{font-weight:750}code{font-family:"DejaVu Sans Mono",Consolas,monospace;font-size:.86em}pre{margin:0;padding:23px 25px;background:var(--ink);color:#f3f6ed;border-radius:10px;font-size:21px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2}pre code{font-size:inherit}pre.compact{font-size:18px;line-height:1.38}.small{font-size:20px;line-height:1.4}.tiny{font-size:17px;line-height:1.4}.muted{color:var(--muted)}.lead{font-size:31px;line-height:1.35;max-width:960px}.accent{color:var(--teal)}.bad{color:var(--orange)}.good{color:var(--teal)}.big-number{font-size:79px;line-height:1.1;letter-spacing:-.045em;font-variant-numeric:tabular-nums}.pill{display:inline-block;border-radius:100px;padding:6px 13px;background:var(--green);color:var(--ink);font-size:16px;line-height:1.1;font-weight:750}.pill.warn{background:#f4d2bf;color:#873119}.pill.neutral{background:#e1e5de}
+.grid{display:grid;gap:25px}.two{grid-template-columns:1fr 1fr}.three{grid-template-columns:repeat(3,1fr)}.four{grid-template-columns:repeat(4,1fr)}.wide-left{grid-template-columns:1.25fr 1fr}.wide-right{grid-template-columns:1fr 1.3fr}.card{padding:25px;background:var(--white);border:1px solid var(--line);border-radius:12px}.card.green{background:#e7f2d4;border-color:#bfd697}.card.dark{background:var(--ink);color:var(--paper);border-color:var(--ink)}.card p{font-size:23px}.card p.small{font-size:20px}.card h3 code{font-size:22px}.row{display:flex;align-items:center;gap:20px}.stack{display:grid;gap:18px}.mt{margin-top:25px}.mb{margin-bottom:25px}.callout{border-left:5px solid var(--teal);padding:13px 20px;background:#e5eadf;font-size:23px;line-height:1.35}.callout.warn{border-color:var(--orange);background:#f4e1d5}.source{position:absolute;left:62px;right:75px;bottom:22px;color:var(--muted);font-size:14px;line-height:1.25}.source a{margin-right:12px}.notes{display:none}
+table{border-collapse:collapse;width:100%;font-size:22px;line-height:1.35}th{text-align:left;font-size:15px;letter-spacing:.09em;text-transform:uppercase;color:var(--teal);padding:12px 16px;border-bottom:2px solid var(--ink)}td{padding:16px;border-bottom:1px solid var(--line);vertical-align:top}td:first-child{font-weight:650}table.compact{font-size:19px}table.compact td{padding:12px 14px}.flow{display:flex;align-items:stretch;gap:10px}.flow>.node{flex:1;min-width:0;padding:21px 16px;border:1px solid var(--line);border-radius:10px;background:var(--white);text-align:center;font-size:23px;line-height:1.3}.flow>.node strong{display:block;margin-bottom:8px}.flow>.node .small{font-size:18px}.arrow{align-self:center;color:var(--teal);font-size:31px}.flow>.node.selected{background:var(--green);border-color:#abc979}.code-label{font-size:15px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 9px}.rule{height:2px;background:var(--line);margin:24px 0}
+.dark-slide{background:var(--ink);color:var(--paper)}.dark-slide .eyebrow,.dark-slide .accent{color:var(--green)}.dark-slide .muted,.dark-slide .source,.dark-slide::after{color:#b3c4c6}.dark-slide .card{background:#233f4a;color:var(--paper);border-color:#47606a}.dark-slide .card.green{background:var(--green);color:var(--ink)}.dark-slide h1{margin-top:40px}.dark-slide .source a{color:#b3c4c6}.hero-rule{width:160px;height:9px;background:var(--green);margin:34px 0}.agenda{display:flex;gap:35px;margin-top:56px;font-size:21px}.agenda span{border-top:1px solid #587078;padding-top:13px;flex:1}.step{font-size:17px;color:var(--teal);font-weight:750;letter-spacing:.08em;margin-bottom:8px}.timeline .card{padding:20px}.timeline h3{font-size:24px}.timeline p{font-size:20px}.module-map td:first-child{width:35%;font-family:"DejaVu Sans Mono",Consolas,monospace;font-size:18px}
+.architecture{display:grid;grid-template-columns:220px 1fr 285px;gap:18px;align-items:center}.architecture .card{padding:20px}.architecture h3{font-size:23px}.architecture p{font-size:20px}.lane{border:2px solid var(--teal);padding:20px;border-radius:14px;background:#e9eee2}.lane-label{font-size:15px;text-transform:uppercase;font-weight:750;letter-spacing:.08em;margin-bottom:13px;color:var(--teal)}.divider{text-align:center;font-size:23px;color:var(--teal);padding:7px}.boundary{border:2px dashed #748b8b;padding:20px;border-radius:12px}.boundary .card{padding:19px}.boundary h3{font-size:22px}.boundary p{font-size:20px}.formula{font-family:"DejaVu Sans Mono",Consolas,monospace;font-size:27px;margin:14px 0}.bar-track{height:36px;background:#e2e6dc;border-radius:5px;overflow:hidden}.bar{height:100%;background:var(--teal);width:80%}.bar.orange{background:var(--orange)}.metric-row{display:grid;grid-template-columns:135px 1fr 85px;gap:15px;align-items:center;font-size:22px;margin-top:19px}.metric-row output{text-align:right;font-weight:750}.controls{display:flex;gap:32px;align-items:center;font-size:20px}.controls label{display:flex;gap:12px;align-items:center}.controls input{width:150px;accent-color:var(--teal)}
+#toolbar{position:fixed;bottom:0;left:0;right:0;height:52px;padding:8px 17px;display:flex;align-items:center;gap:12px;background:#10202a;color:#eaf0e9;font-size:14px}#toolbar button,#toolbar select{border:1px solid #556773;border-radius:5px;color:inherit;background:#223844;padding:6px 10px}#toolbar select{max-width:440px;min-width:180px}#counter{min-width:63px;text-align:center;font-variant-numeric:tabular-nums}.spacer{flex:1}.hint{color:#bac9ca;font-size:12px}#progress{position:fixed;left:0;bottom:52px;height:3px;background:var(--green);width:0}#notes-panel{display:none;position:fixed;left:0;right:0;bottom:52px;height:235px;overflow:auto;background:#fffefa;padding:22px max(25px,calc((100vw - 1100px)/2));border-top:2px solid #98b478;color:var(--ink)}#notes-panel p,#notes-panel li{font-size:18px;line-height:1.5}#notes-panel h3{font-size:19px;margin-bottom:10px}body.show-notes #notes-panel{display:block}body.show-notes #viewport{bottom:287px}body.show-notes #progress{bottom:287px}
+@media(max-width:800px){.hint{display:none}#toolbar{gap:5px;padding:8px}#toolbar select{min-width:0;width:155px}#toolbar button{padding:6px}#fullscreen-button{display:none}}
+@media print{@page{size:1280px 720px;margin:0}html,body{width:1280px;margin:0;background:var(--paper);print-color-adjust:exact;-webkit-print-color-adjust:exact}#viewport{position:static;display:block;overflow:visible}#stage{position:static;margin:0;width:1280px;height:auto;transform:none!important}.slide,.slide.active{display:block;position:relative;break-after:page;page-break-after:always;width:1280px;height:720px}.slide:last-child{break-after:auto;page-break-after:auto}#toolbar,#progress,#notes-panel{display:none!important}.controls input{display:none}}
+/* Denser reference material keeps the same type size as other supporting text. */
+table.module-map{font-size:18px;line-height:1.3}
+table.module-map td{padding:10px 14px}
+.card .big-number{font-size:79px}
+.tight .card{padding:20px}
+.compact-spacing .mt{margin-top:16px}
+#map-measurement td:first-child{width:30%}
+</style>
+</head>
+<body>
+<main id="viewport" aria-label="Presentation"><div id="stage">
+
+<section class="slide dark-slide active" id="intro" data-title="Make agent changes measurable">
+  <p class="eyebrow">EYG / Overlay / Technical talk</p>
+  <h1>Make agent changes<br>measurable.</h1>
+  <div class="hero-rule"></div>
+  <p class="lead">Evals for the programs an agent writes,<br>the work it completes, and the context it uses.</p>
+  <div class="agenda"><span>01 &nbsp; Why evaluate?</span><span>02 &nbsp; Build the harness</span><span>03 &nbsp; Trust the evidence</span></div>
+  <p class="source">Implementation snapshot: eval branch · 441d4e2 · 26 September 2026 · 32 slides + 6 reference slides</p>
+  <aside class="notes"><p>This is a roughly 40–45 minute talk for engineers who build agents, language runtimes, or developer tools. The examples come from the implemented Overlay eval branch. The first 32 slides form the talk; the remaining six are implementation and discussion references. Use arrows or Space to advance, N for these notes, F for fullscreen, and P to print. All visuals and controls work offline.</p><p>Overlay answers requests by generating and executing EYG programs. We will start with one real model request, then add only the machinery needed to evaluate a complete agent session. Live observations, implemented mechanisms, and proposed improvements are labelled separately.</p></aside>
+</section>
+
+<section class="slide" id="why" data-title="Why engineers need evals">
+  <p class="eyebrow">01 / Motivation</p><h2>A plausible answer is a weak release gate.</h2>
+  <div class="grid three">
+    <div class="card"><h3>Prompts change behavior</h3><p>A new context can help library discovery while making simple tasks slower.</p></div>
+    <div class="card"><h3>Valid code can be wrong</h3><p>The first live Fibonacci program parsed, type-checked, and returned the wrong sum.</p></div>
+    <div class="card"><h3>Success can vary</h3><p>One working attempt establishes possibility. Repeated trials help measure reliability.</p></div>
+  </div>
+  <div class="callout mt">An eval turns “this seems better” into a falsifiable claim about a task, under stated conditions.</div>
+  <p class="lead mt">Use the result to decide what to change next.</p>
+  <p class="source"><a data-code="packages/overlay_eval/evidence/fibonacci.md">Live Fibonacci evidence</a><a href="https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents">Anthropic: agent evals</a></p>
+  <aside class="notes"><p>Unit tests remain necessary for parsers, handlers, and graders. They do not establish that an LLM will select the right library, recover from an error, or make a good editing decision. A live eval measures that behavior. When a capability becomes reliable, its tasks also protect against regressions.</p><p>The practical payoff is a shorter feedback loop: reproduce a failure, define success, change one thing, and inspect whether the result improves. A score is useful only insofar as its task and grader represent work that matters to users.</p></aside>
+</section>
+
+<section class="slide" id="vocabulary" data-title="The units of an eval">
+  <p class="eyebrow">01 / Vocabulary</p><h2>One task. Several trials. Inspectable evidence.</h2>
+  <div class="flow mt">
+    <div class="node"><strong>Task</strong><span class="small">Prompts + starting state + success criteria</span></div><span class="arrow">→</span>
+    <div class="node"><strong>Trial</strong><span class="small">One fresh attempt with a model and context</span></div><span class="arrow">→</span>
+    <div class="node selected"><strong>Transcript</strong><span class="small">Programs, values, observed effects, final files</span></div><span class="arrow">→</span>
+    <div class="node"><strong>Checks</strong><span class="small">Pass / fail / unknown with evidence</span></div>
+  </div>
+  <div class="grid two mt">
+    <div class="card"><h3>Suite</h3><p>A set of tasks. Here, an EYG record keyed by task name.</p></div>
+    <div class="card"><h3>Run</h3><p>Trials across that suite, with model, context, configuration, and reports.</p></div>
+  </div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/task.gleam">task.gleam</a><a data-code="packages/overlay_eval/src/overlay/eval/trial.gleam">trial.gleam</a><a data-code="packages/overlay_eval/src/overlay/eval/transcript.gleam">transcript.gleam</a></p>
+  <aside class="notes"><p>Fresh means a new Overlay state and workspace for each trial. Prompts within one trial share the session: this supports multi-turn tasks. The transcript stores actual computed EYG values, not only their printed representation. It also records the stopping reason and model-call count.</p><p>“Observed effects” is deliberate. The transcript logs the effects exposed at the eval boundary; it is not a complete audit of every lower-level operation. In particular, current time and randomness can be computed inside the browser adapter.</p></aside>
+</section>
+
+<section class="slide" id="eval-kinds" data-title="Two independent choices: execution and grading">
+  <p class="eyebrow">01 / Eval types</p><h2>Separate how it runs from how it is graded.</h2>
+  <div class="grid two">
+    <div><h3>Execution</h3><table class="compact"><tbody>
+      <tr><td>One-shot live</td><td>Can the model produce one correct program?</td></tr>
+      <tr><td>Live session</td><td>Can it discover, run, observe, and recover?</td></tr>
+      <tr><td>Scripted agent</td><td>Does the task and harness accept known behavior?</td></tr>
+      <tr><td>Recorded replay</td><td>Does a known model exchange still work?</td></tr>
+    </tbody></table></div>
+    <div><h3>Evidence / grading</h3><table class="compact"><tbody>
+      <tr><td>Value / property</td><td>Computed result or predicate.</td></tr>
+      <tr><td>Process / interaction</td><td>References, context access, fetches.</td></tr>
+      <tr><td>Final state</td><td>Files, behavior of edited modules.</td></tr>
+      <tr><td>Language / judgment</td><td>Required wording or a semantic rubric.</td></tr>
+    </tbody></table></div>
+  </div>
+  <div class="callout mt">A live model eval can have a completely deterministic grader.</div>
+  <p class="source"><a data-code="packages/overlay_eval/README.md">Overlay eval reference</a></p>
+  <aside class="notes"><p>These are independent dimensions, not a ladder where a model judge is automatically more advanced. The Fibonacci eval makes a real model call but uses ordinary value equality. A scripted agent can run through the same full session harness as a real provider.</p><p>Capability evaluation and regression evaluation describe the purpose of a suite. Context comparison describes an experiment. Robustness evaluation changes the conditions. None of these requires its own special grading technology.</p></aside>
+</section>
+
+<section class="slide dark-slide" id="pure" data-title="Start with one real model call">
+  <p class="eyebrow">02 / The smallest useful eval</p><h2>One real LLM. One pure program. One check.</h2>
+  <p class="lead">“Calculate the sum of the first 20 Fibonacci numbers,<br>starting with 1, 1. Return it as an integer.”</p>
+  <div class="grid three mt">
+    <div class="card"><h3>Input</h3><p>Shared Overlay instructions, inline language guides, and the real <code>run</code> tool schema.</p></div>
+    <div class="card"><h3>Execution</h3><p>Exactly one submitted program. Parse → pure type-check → evaluate.</p></div>
+    <div class="card green"><h3>Grading</h3><p>Returned EYG value<br><strong>= integer 17,710</strong></p><p class="small">The expected answer stays out of the model prompt.</p></div>
+  </div>
+  <p class="small mt">No host effect handlers, imports, tool-repair loop, or model judge.</p>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/pure.gleam">eval/pure.gleam</a><a data-code="packages/overlay_web/src/overlay/web/prompt.gleam">Shared prompt</a></p>
+  <aside class="notes"><p>The pure prompt shares Overlay's introductory instructions and tool schema. It is adapted to this experiment: guides are supplied inline because fetching is unavailable, and context is an empty record. It is not byte-for-byte the full browser prompt.</p><p>Correctness is value equality for this input. The eval does not establish a generally correct Fibonacci implementation or require one particular algorithm. Syntax, tool-call shape, and purity are execution prerequisites. Prose does not contribute to the grade.</p></aside>
+</section>
+
+<section class="slide" id="pure-implementation" data-title="Implementing the pure boundary">
+  <p class="eyebrow">02 / Implementation · pure.gleam</p><h2>Reject effects before execution.</h2>
+  <div class="grid wide-left">
+    <div><p class="code-label">Gleam · excerpt after parsing</p><pre class="compact"><code>let context = infer.pure()
+let context = infer.Context(
+  ..context,
+  env: [#("context", t.record([]))],
+)
+let analysis = infer.check_with_references(
+  context, dict.new(), source,
+)
+
+case infer.all_errors(analysis) {
+  [] -> expression.execute(
+    source, [#("context", value.unit())],
+  )
+  errors -> // return a type error
+}</code></pre></div>
+    <div class="stack"><div class="card"><h3>No external capability</h3><p>Empty effect environment. Empty reference table. No handler is installed.</p></div><div class="card"><h3>Precise guarantee</h3><p>Unhandled external effects are type errors. A locally handled effect can still be pure.</p></div></div>
+  </div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/pure.gleam">pure.evaluate / pure.check</a></p>
+  <aside class="notes"><p>This is an abbreviated excerpt, with the error-rendering branch replaced by a comment. Parsing happens first and source annotations are normalized. Type inference uses infer.pure(), an empty reference dictionary, and a context binding with the empty-record type. Only the no-errors branch reaches execution.</p><p>Do not conflate purity with termination. Pure recursive code can still consume CPU, stack, or memory. This command also does not currently wrap the provider request in the full session's timeout mechanism.</p></aside>
+</section>
+
+<section class="slide" id="live-evidence" data-title="What actually happened in the live eval">
+  <p class="eyebrow">02 / Observed · 26 September 2026</p><h2>The grader caught an off-by-one error.</h2>
+  <div class="grid two">
+    <div class="card"><span class="pill warn">Attempt 1 · FAIL</span><p class="big-number bad mt">28,655</p><p>Parsed and type-checked.<br>Summed the wrong Fibonacci terms.</p></div>
+    <div class="card green"><span class="pill">Attempt 2 · PASS</span><p class="big-number good mt">17,710</p><p>A fresh one-shot request.<br>No correction or expected answer supplied.</p></div>
+  </div>
+  <p class="small mt"><strong>Model:</strong> Ollama Cloud <code>gpt-oss:120b</code>. Two attempts demonstrate a success, not a reliability estimate.</p>
+  <p class="small mt"><strong>Full-session follow-up:</strong> passed after 6 model calls, using guide access and program-error feedback; no judge.</p>
+  <p class="source"><a data-code="packages/overlay_eval/evidence/fibonacci.md">Recorded commands, generated programs, and results</a></p>
+  <aside class="notes"><p>Keep the failed attempt in the evidence. Hiding it would turn a useful example into a misleading demonstration of reliability. Both returned pure, well-typed programs; only execution against the expected value distinguished them.</p><p>The full-session attempt is a separate experiment with a different prompt delivery and interaction budget. It fetched the syntax guide from a local fixture and computed the correct result in its fifth program run. Six model calls and five program runs are different counts. We have not established which context is superior, and this deck contains no measured context leaderboard.</p></aside>
+</section>
+
+<section class="slide" id="increments" data-title="Grow the harness in small pieces">
+  <p class="eyebrow">02 / Implementation strategy</p><h2>Add one new source of uncertainty at a time.</h2>
+  <div class="grid three timeline">
+    <div class="card"><p class="step">01 / PURE</p><h3>Correct value</h3><p>One model request, no external effects.</p></div>
+    <div class="card"><p class="step">02 / SESSION</p><h3>Tool feedback</h3><p>Reuse Overlay's state machine and retain computed values.</p></div>
+    <div class="card"><p class="step">03 / ENVIRONMENT</p><h3>Controlled inputs</h3><p>Guides, hub, repository, routes, and an in-memory workspace.</p></div>
+    <div class="card"><p class="step">04 / TASKS</p><h3>Explicit success</h3><p>Deterministic checks, references, oracle and null validation.</p></div>
+    <div class="card"><p class="step">05 / EXPERIMENTS</p><h3>Repeated evidence</h3><p>Trials, cassettes, summaries, and paired comparisons.</p></div>
+    <div class="card"><p class="step">06 / JUDGMENT</p><h3>Semantic criteria</h3><p>A narrow model rubric, human labels, and calibration.</p></div>
+  </div>
+  <p class="small mt">At each boundary: review the code, remove duplicate product logic, and preserve a runnable smaller eval.</p>
+  <p class="source"><a data-code="packages/overlay_eval/README.md">Incremental implementation and commands</a></p>
+  <aside class="notes"><p>This is a conceptual build order. The branch was rebuilt in small commits so the pure baseline remains independently runnable. The architecture should grow because a task requires another capability, not because every benchmark framework has a particular feature.</p><p>One useful review question is: could this layer be deleted without losing a measurement we need? Another is whether the harness has accidentally copied browser logic that will drift. The session loop delegates to the product state machine; only the host boundary changes.</p></aside>
+</section>
+
+<section class="slide" id="architecture" data-title="The full architecture">
+  <p class="eyebrow">02 / Architecture</p><h2>Reuse the agent. Control its surroundings.</h2>
+  <div class="architecture">
+    <div class="stack"><div class="card"><h3>Task + context</h3><p>Prompts, files, routes, budget, module</p></div><div class="card"><h3>trial.gleam</h3><p>Fresh state per attempt</p></div></div>
+    <div class="lane"><p class="lane-label">Shared product code · overlay_web</p><div class="card"><h3>state.update(state, message)</h3><p>Conversation → tool call → parse/type-check → execute</p></div><div class="divider">↓ effect values &nbsp; ↑ completion messages</div><div class="card green"><h3>eval/session.gleam</h3><p>Drain pending effects; resume the state machine</p></div></div>
+    <div class="stack"><div class="card"><h3>Model transport ↔</h3><p>Live / scripted / cassette</p></div><div class="card"><h3>Environment ↔</h3><p>Site, hub, repository, HTTP routes</p></div></div>
+  </div>
+  <div class="flow mt"><div class="node">Transcript + final workspace</div><span class="arrow">→</span><div class="node">Checks + optional judge</div><span class="arrow">→</span><div class="node selected">Summary + reports</div></div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/session.gleam">session.gleam</a><a data-code="packages/overlay_web/src/overlay/web/state.gleam">Product state machine</a></p>
+  <aside class="notes"><p>The workspace is managed by the shared product tool path, not by an OS filesystem. The eval attaches its initial files and captures the final files. The environment shown on the right answers program and module HTTP requests. The model transport is deliberately separate.</p><p>Most orchestration is Gleam compiled to JavaScript, run with Bun. EYG supplies agent programs, contexts, suite definitions, and check predicates. Provider adapters translate model streams into the same messages the browser uses. This is integration fidelity for agent behavior, not an end-to-end browser UI test.</p></aside>
+</section>
+
+<section class="slide tight" id="session-loop" data-title="The session runner is an effect interpreter">
+  <p class="eyebrow">02 / Implementation · session.gleam</p><h2>The runner is an interpreter for host effects.</h2>
+  <div class="grid two">
+    <div><p class="code-label">Simplified control flow</p><pre><code>state.init(config)
+  ↓
+drain(initial_effects)
+  ↓
+submit next user prompt
+  ↓
+perform effect → completion message
+  ↓
+state.update → more effects
+  ↓
+waiting / failure / call limit</code></pre></div>
+    <div class="stack"><div class="card"><h3>Fetch</h3><p class="small">Serve fixtures; refuse unmatched offline requests.</p></div><div class="card"><h3>FetchStreamResponse / ReadChunk</h3><p class="small">Use the configured model transport; stream its response.</p></div><div class="card"><h3>UI and timing effects</h3><p class="small">Log actions, return unavailable results, or resume host Wait immediately.</p></div></div>
+  </div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/session.gleam">drain / perform / prompt_all</a></p>
+  <aside class="notes"><p>state.update returns a new State and a list of PAL effects. drain performs one effect, turns the answer into a product message via its continuation, calls update again, and adds the resulting effects to the queue. User prompts advance only after the previous turn has completed.</p><p>The model-call limit applies across the whole trial. A bad context stops before the model runs. Storage reads provide model configuration; browser-only features return controlled results. Download and clipboard-write actions are logged rather than performed against the host UI. Host Wait being resumed immediately does not add a Sleep effect to the EYG browser runtime.</p></aside>
+</section>
+
+<section class="slide" id="context" data-title="A context is text and a typed API">
+  <p class="eyebrow">02 / Implementation · Overlay contexts</p><h2>A context is both instructions and an API.</h2>
+  <div class="grid two">
+    <div><p class="code-label">EYG · shape of a context module</p><pre><code>{
+  readme: "Find an existing library…",
+  libraries: {
+    all: libraries,
+    search: search_libraries
+  },
+  guides: {
+    search: search_guides,
+    read: guides.read
+  }
+}</code></pre><p class="tiny muted mt">Schematic; helper function definitions omitted.</p></div>
+    <div class="stack"><div class="card"><h3>Prompt channel</h3><p>The module's <code>readme</code> becomes part of the system prompt.</p></div><div class="card"><h3>Program channel</h3><p>The evaluated module is bound to <code>context</code>, with its inferred type.</p></div><div class="callout">Changing context changes what the model knows and what programs it can conveniently write.</div></div>
+  </div>
+  <p class="source"><a data-code="packages/overlay_web/src/overlay/web/context.gleam">web/context.gleam</a><a data-code="eyg_packages/overlay_librarian/index.eyg">Librarian context</a></p>
+  <aside class="notes"><p>A context is an EYG value, typically a record of functions and documentation. The loader resolves its dependencies and the product type-checks it. The model can then call context.libraries.search from an ordinary EYG program. It does not need a separate LLM tool for every context function.</p><p>That gives two mechanisms worth evaluating separately: the instructions may influence planning, and the API may reduce the amount of code or source knowledge needed. A controlled ablation of text and API would be a useful future experiment; the existing CLI compares complete modules.</p></aside>
+</section>
+
+<section class="slide" id="two-contexts" data-title="Librarian and Maintainer">
+  <p class="eyebrow">02 / Implemented contexts</p><h2>Two contexts, with testable promises.</h2>
+  <table><thead><tr><th>Context</th><th>Implementation</th><th>Behavior to evaluate</th></tr></thead><tbody>
+    <tr><td>None</td><td>Overlay's default context.</td><td>Baseline capability without these helper modules.</td></tr>
+    <tr><td>Librarian</td><td>Library catalogue, lexical search, guide search and fetch.</td><td>Find <code>@json</code>; decode data; use the right guide.</td></tr>
+    <tr><td>Maintainer</td><td>Librarian + source map/read/list + workspace note helpers.</td><td>Diagnose runtime limitations; repair code; keep useful notes.</td></tr>
+  </tbody></table>
+  <div class="callout mt">The question: does the context improve task outcomes enough to justify its overhead?</div>
+  <p class="source"><a data-code="eyg_packages/overlay_librarian/index.eyg">overlay_librarian</a><a data-code="eyg_packages/overlay_maintainer/index.eyg">overlay_maintainer</a><a data-code="eyg_packages/overlay_librarian/search.eyg">Search implementation</a></p>
+  <aside class="notes"><p>Librarian search is deliberately small: lexical word/prefix matching, stop words, stable ranking, and the top three results. There is no embedding service. Guides are ordinary fetches, so the eval can supply the same request from fixtures.</p><p>Maintainer instructs the agent to confirm product limitations in source and suggest a pull request only when appropriate. Its notes helpers read and write ordinary workspace files with frontmatter. Catalogue tests check that guides and source paths still exist. Those checks validate the context implementation, not whether a model will use it effectively.</p></aside>
+</section>
+
+<section class="slide" id="environment" data-title="Routing requests through fixtures">
+  <p class="eyebrow">02 / Implementation · environment.gleam</p><h2>Fixture routing is explicit and ordered.</h2>
+  <div class="flow"><div class="node"><strong>Site</strong><span class="small">Own origin<br>Guides / llms.txt</span></div><span class="arrow">→</span><div class="node"><strong>Hub</strong><span class="small">Own origin<br>Packages / modules</span></div><span class="arrow">→</span><div class="node"><strong>Repository</strong><span class="small">GitHub-shaped<br>read APIs</span></div><span class="arrow">→</span><div class="node"><strong>Routes</strong><span class="small">Fixed HTTP<br>responses</span></div></div>
+  <div class="grid two mt"><div class="card"><h3>If no fixture matches</h3><p>Own origin → <strong>404</strong>.<br>External + Offline → <strong>refuse</strong>.<br>External + Online → real fetch.</p></div><div class="card"><h3>Match precision matters</h3><p>Explicit routes match method, host, and path. Query, body, scheme, and port are not route discriminators.</p></div></div>
+  <div class="callout mt">The CLI environment is offline by default. Model-provider requests use a separate transport.</div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/environment.gleam">environment.answer / Route</a></p>
+  <aside class="notes"><p>The lookup stops at the first answer. Site and hub handling is restricted to the configured origin, including scheme and port. The simple Route record has a different, narrower matching rule. A test of authentication headers, POST bodies, or query behavior would need a more faithful fixture.</p><p>Task-declared routes are GET responses. Repository fixtures serve GitHub-shaped URLs without contacting GitHub. Online is available programmatically, but an unmatched request in the normal CLI eval is denied. None of this is an OS network firewall.</p></aside>
+</section>
+
+<section class="slide" id="fixtures" data-title="How modules and fixtures are built">
+  <p class="eyebrow">02 / Implementation · module + fixture/*</p><h2>Keep the protocols real and the data controlled.</h2>
+  <div class="grid two">
+    <div class="card"><h3>Module loader</h3><p class="small">Parse EYG or DAG-JSON. Resolve local imports with cycle checks. Replace imports with content references. Hash the resulting module.</p></div>
+    <div class="card"><h3>Package hub</h3><p class="small">Publish fixture dependencies first. Serve package pulls and module CIDs through the normal loading path.</p></div>
+    <div class="card"><h3>Guide site</h3><p class="small">Read repository guides and frontmatter. Serve the published slug conventions and <code>/llms.txt</code>.</p></div>
+    <div class="card"><h3>Repository mirror</h3><p class="small">Serve local files through raw-content, tree, and contents endpoints shaped like GitHub.</p></div>
+  </div>
+  <p class="small mt">Content IDs stabilize module identity. Freeze the source snapshot and package mapping too.</p>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/module.gleam">module.gleam</a><a data-code="packages/overlay_eval/src/overlay/eval/fixture">fixture/</a></p>
+  <aside class="notes"><p>The fixture hub is a local protocol simulation, not a production trust-system test: its release records are unsigned. The module loader can pin named package references to fixture releases, while local imports become content references.</p><p>The repository mirror reads local source. Its exclusions for hidden and build directories are conveniences, not a comprehensive secret or symlink policy. Staging a sanitized, fixed source snapshot is preferable when measuring untrusted programs. Do not assume a URL containing /main/ fixes the local repository version used to answer it.</p></aside>
+</section>
+
+<section class="slide" id="workspace" data-title="The workspace is an in-memory filesystem">
+  <p class="eyebrow">02 / Implementation · web/workspace.gleam</p><h2>Edits happen in a disposable workspace.</h2>
+  <div class="grid two">
+    <div class="card"><h3>Representation</h3><pre class="compact"><code>files:       Dict(path, bytes)
+directories: Set(path)
+
+ReadFile       WriteFile
+ReadDirectory  AppendFile
+MakeDirectory  DeleteFile</code></pre><p class="small mt">Initial files are copied into each fresh session.</p></div>
+    <div class="stack"><div class="card"><h3>Path boundary</h3><p class="small">Normalize <code>.</code>, <code>..</code>, and root paths. Reject attempts to leave the workspace root.</p></div><div class="card"><h3>Grading boundary</h3><p class="small">Inspect final bytes, load a resulting module, or compare the final file set with the initial one.</p></div><div class="callout">These file effects do not write the host project.</div></div>
+  </div>
+  <p class="source"><a data-code="packages/overlay_web/src/overlay/web/workspace.gleam">Workspace implementation</a><a data-code="packages/overlay_eval/src/overlay/eval/grade.gleam">Workspace graders</a></p>
+  <aside class="notes"><p>This is shared product code, attached to eval sessions with configured files. It models directories as well as files, enforces parent-directory behavior, and supports slices of file content. It is not a complete operating-system filesystem.</p><p>There are two distinct filesystem concerns: generated agent file effects use the in-memory workspace, but trusted host code still loads suites, contexts, guides, and repository fixtures from disk. Also, WorkspaceUnchanged compares final files; it cannot prove that the agent never wrote and then restored a file.</p></aside>
+</section>
+
+<section class="slide" id="task" data-title="A concrete context task">
+  <p class="eyebrow">03 / Task design</p><h2>Write the claim down before running the model.</h2>
+  <div class="grid wide-left">
+    <div><p class="code-label">EYG · excerpt from json_nested_field.eyg</p><pre class="compact"><code>{
+  tags: ["libraries"],
+  prompts: [
+    "An API returned this JSON:
+     {\"user\": {\"name\": \"Ada\", \"id\": 7}}.
+     Run a program that works out the user's id."
+  ],
+  checks: [Computes(7), References("json")]
+}</code></pre><p class="tiny muted mt">Line breaks added; description and reference solution omitted.</p></div>
+    <div class="stack"><div class="card"><h3>Outcome</h3><p>A program computes integer <code>7</code>.</p></div><div class="card"><h3>Context objective</h3><p>A submitted program references the existing <code>json</code> package.</p></div><div class="callout">Only require a process check when that behavior is part of the task's purpose.</div></div>
+  </div>
+  <p class="source"><a data-code="packages/overlay_eval/suites/contexts/json_nested_field.eyg">Complete task and reference solution</a><a data-code="packages/overlay_eval/src/overlay/eval/task.gleam">Task decoder</a></p>
+  <aside class="notes"><p>The task's outcome is deliberately separate from its library-discovery objective. For a generic JSON extraction benchmark, returning the right answer could be sufficient. For a Librarian context eval, reuse of the existing library is an explicit goal.</p><p>The checks are independent: Computes accepts any computed matching value, and References scans submitted program syntax. They do not prove the json package was causally responsible for the matching value, or even that the reference occurred in the same successful run. This makes the grader useful but leaves room for stronger checks if that distinction matters.</p></aside>
+</section>
+
+<section class="slide compact-spacing" id="graders" data-title="What each deterministic check proves">
+  <p class="eyebrow">03 / Deterministic grading</p><h2>Choose the evidence closest to the claim.</h2>
+  <table class="compact"><thead><tr><th>Evidence</th><th>Implemented checks</th><th>Exact scope</th></tr></thead><tbody>
+    <tr><td>Returned values</td><td><code>Computes</code>, <code>Satisfies</code></td><td>Any computed run equals the value or passes an EYG predicate.</td></tr>
+    <tr><td>Program syntax</td><td><code>References</code>, <code>ReadsContext</code></td><td>Find a package reference or context field path in submitted syntax.</td></tr>
+    <tr><td>HTTP interaction</td><td><code>Fetches</code></td><td>A program fetch got 2xx; URL contains the requested substring.</td></tr>
+    <tr><td>Workspace</td><td><code>FileSatisfies</code>, content checks,<br><code>WorkspaceUnchanged</code></td><td>Properties of final files or a module evaluated from them.</td></tr>
+    <tr><td>Agent language</td><td><code>Says</code>, <code>NeverSays</code></td><td>Case-insensitive substring checks on assistant text.</td></tr>
+  </tbody></table>
+  <div class="callout mt">Trial pass = every check passes. Partial score = fraction of checks passed.</div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/grade.gleam">grade.deterministic / passed / score</a></p>
+  <aside class="notes"><p>Property checks can accept multiple valid results without prescribing an exact representation or tool sequence. FileSatisfies loads a module from the resulting workspace and applies the supplied EYG predicate. Syntax-based process checks are weaker: a field access may occur in code that never executes, and a variable named context may be shadowed.</p><p>Fetches excludes requests made by the module cache. It demonstrates a successful HTTP response, not that the model understood it. Unknown, including a missing judge, counts as not passing. A trial's stopping reason is recorded but is not independently included in grade.passed: matching checks can pass even if the session later hits a limit. Inspect stopping reasons as well as headline scores.</p></aside>
+</section>
+
+<section class="slide" id="edit-example" data-title="Evaluate edits by running the edited module">
+  <p class="eyebrow">03 / Example · workspace outcome</p><h2>“Fixed it” is a claim. Running the result is evidence.</h2>
+  <div class="grid two">
+    <div><h3>Task: repair the greeting</h3><pre><code>// src/greet.eyg
+let words = import "./words.eyg"
+(name) -> {
+  !string_append(words.hello, name)
+}
+
+// src/words.eyg
+{hello: "Helo, ", goodbye: "Goodbye, "}</code></pre><p class="small mt">The misspelling lives in an imported dependency.</p></div>
+    <div><h3>Check the resulting behavior</h3><pre><code>FileSatisfies({
+  path: "src/greet.eyg",
+  description: "greets Ada correctly",
+  check: (greet) -> {
+    !equal(greet("Ada"), "Hello, Ada")
+  }
+})</code></pre><p class="small mt">Also check that “Helo” is gone from <code>src/</code> and “Goodbye, ” remains in <code>words.eyg</code>.</p></div>
+  </div>
+  <p class="source"><a data-code="packages/overlay_eval/suites/contexts/fix_greeting.eyg">fix_greeting.eyg</a><a data-code="packages/overlay_eval/src/overlay/eval/evaluate.gleam">Predicate evaluation</a></p>
+  <aside class="notes"><p>This is a better check than requiring an exact patch. The task allows the agent to discover the relationship between greet.eyg and words.eyg. The grader loads the final greet module through its imports and calls the resulting function.</p><p>The additional assertions preserve one unrelated string and remove the known typo. They are useful invariants, but this small task is not a full test suite for all possible names or module behavior. To make it stronger, test multiple inputs and deliberately broken solutions. Those are proposed extensions, not claims about the current task.</p></aside>
+</section>
+
+<section class="slide" id="paired-behavior" data-title="Test when advice is appropriate and when it is not">
+  <p class="eyebrow">03 / Example · balanced behavior</p><h2>Pair “do this” with “do not do this here.”</h2>
+  <div class="grid two">
+    <div class="card"><span class="pill">Runtime limitation</span><h3 class="mt">browser_sleep</h3><p>“Wait one second using Sleep.”</p><div class="rule"></div><p class="small">Fetch the browser harness source.</p><p class="small">Explain that Sleep is unavailable; suggest a pull request; do not claim to have waited.</p><p class="small mt"><code>Fetches + Says + Judged</code></p></div>
+    <div class="card"><span class="pill neutral">Program mistake</span><h3 class="mt">program_mistake</h3><p><code>!int_add(1, "2")</code> fails.</p><div class="rule"></div><p class="small">Fix the string/integer mismatch.</p><p class="small">Compute 3 and explain the mistake without proposing a product change.</p><p class="small mt"><code>Computes(3) + NeverSays</code></p></div>
+  </div>
+  <p class="source"><a data-code="packages/overlay_eval/suites/contexts/browser_sleep.eyg">browser_sleep.eyg</a><a data-code="packages/overlay_eval/suites/contexts/program_mistake.eyg">program_mistake.eyg</a></p>
+  <aside class="notes"><p>The Maintainer context asks for pull-request suggestions only when a limitation is in Overlay or EYG itself. A suite that rewards suggestions in every case teaches the wrong behavior. These tasks are tagged pull-request and no-pull-request so the two slices can be inspected separately.</p><p>The deterministic phrase check alone is weak: “no pull request is needed” still contains the phrase. The semantic judge on browser_sleep establishes the intended explanation. program_mistake uses a simpler negative phrase check, with that known precision limit. Sleep is currently commented out of the browser effect catalogue; PAL's internal Wait is a separate concept.</p></aside>
+</section>
+
+<section class="slide" id="grader-review" data-title="Review the grader as production code">
+  <p class="eyebrow">03 / Grader review</p><h2>Ask: what wrong behavior could still pass?</h2>
+  <table><thead><tr><th>Current case</th><th>Blind spot</th><th>Small next improvement</th></tr></thead><tbody>
+    <tr><td>Build an HTTP request;<br>“do not send it”</td><td>The task checks the returned request and <code>@http</code> reference. It does not reject a fetch.</td><td>Add a negative interaction check over program fetches.</td></tr>
+    <tr><td><code>Computes(7)</code></td><td>Any run can match, even if a later answer is wrong.</td><td>Choose explicit final-result semantics where the task needs them.</td></tr>
+    <tr><td><code>WorkspaceUnchanged</code></td><td>Write-then-restore leaves the same final files.</td><td>Record and grade write events if “never touch files” is the policy.</td></tr>
+  </tbody></table>
+  <p class="small mt"><span class="pill warn">Proposed improvements</span> These stronger checks are not currently implemented.</p>
+  <p class="source"><a data-code="packages/overlay_eval/suites/contexts/http_request.eyg">http_request.eyg</a><a data-code="packages/overlay_eval/src/overlay/eval/grade.gleam">Current grader semantics</a></p>
+  <aside class="notes"><p>A passing score is only as strong as the definition of passing. Review checks with plausible counterexamples, including near-miss implementations. The HTTP task is a concrete current gap: it checks method, host, path, and the accept header, but a program could also send a request without failing those assertions.</p><p>Do not automatically harden every check into a trajectory specification. Match the observation to the intended user requirement. Final state is often the correct thing to measure; an audit policy about forbidden intermediate actions requires a different observation.</p></aside>
+</section>
+
+<section class="slide" id="judge" data-title="Use a model judge for a narrow semantic criterion">
+  <p class="eyebrow">03 / Semantic grading</p><h2>Use a judge where a predicate cannot settle it.</h2>
+  <div class="flow"><div class="node"><strong>One criterion</strong><span class="small">Explain the missing Sleep effect accurately</span></div><span class="arrow">+</span><div class="node"><strong>Transcript</strong><span class="small">Rendered programs, results, text, workspace</span></div><span class="arrow">→</span><div class="node selected"><strong>Judge</strong><span class="small">Reasoning + PASS / FAIL / UNKNOWN</span></div></div>
+  <div class="grid two mt"><div class="card"><h3>Implementation</h3><p class="small">One request per judged criterion. Parse a verdict line. Unknown and judge errors do not pass.</p></div><div class="card"><h3>Calibration</h3><p class="small">Human-label examples. Compare recall on human passes, specificity on human failures, and Cohen's κ.</p></div></div>
+  <div class="callout warn mt">Judge input can be truncated or adversarial. Read the evidence and calibrate before trusting the score.</div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/judge.gleam">judge.gleam</a><a data-code="packages/overlay_eval/src/overlay/eval/calibration.gleam">calibration.gleam</a></p>
+  <aside class="notes"><p>A judge is another measurement instrument with its own failure modes. Current rendering truncates content, so decisive evidence may be missing. The parser accepts recognized PASS, FAIL, or UNKNOWN lines, using the last recognized verdict. Prompt delimiters do not make hostile instructions in a transcript safe.</p><p>The calibrate command generates a labels template without model verdicts. Keep human reviewers blind while labelling: ordinary trial reports include verdicts, so give reviewers transcript-only material. Include both passing and failing examples and report unknown/missing labels separately. A high agreement rate on a mostly passing set can hide a judge that misses almost every failure. Calibration supports review; it does not prove immunity to injection or distribution shift.</p></aside>
+</section>
+
+<section class="slide" id="validation" data-title="Validate tasks before paying for models">
+  <p class="eyebrow">03 / Harness and grader validation</p><h2>Validate the eval with two controls.</h2>
+  <div class="grid two"><div class="card green"><h3>Oracle agent</h3><p>Script the reference <code>Run</code> and <code>Say</code> steps.</p><p><strong>Must pass every deterministic check.</strong></p></div><div class="card"><h3>Null agent</h3><p>Reply without running programs or doing the work.</p><p><strong>Must fail at least one deterministic check.</strong></p></div></div>
+  <pre class="mt"><code>gleam run -m overlay/eval -- validate suites/contexts.eyg</code></pre>
+  <p class="small mt">The 16 context tasks have validated references. Judged checks are excluded from this validation.</p>
+  <div class="callout mt">Next, try wrong-but-plausible agents: hardcoded answers, irrelevant imports, and superficial edits.</div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/agent.gleam">Scripted agents</a><a data-code="packages/overlay_eval/src/overlay/eval.gleam">validate command</a></p>
+  <aside class="notes"><p>These controls run without a model in CI. The oracle is not an alternative measurement of model capability; it proves that the intended solution works against the fixtures and checks. Null failure proves only that doing nothing cannot pass.</p><p>A judged-only task cannot receive this deterministic validation. The decoder also rejects empty prompts, empty checks, and nonpositive model budgets. Mutation or counterexample agents are a useful next step because a null agent is a very weak adversary. For example, require the grader to fail an implementation that returns 7 while performing an explicitly forbidden action.</p></aside>
+</section>
+
+<section class="slide compact-spacing" id="context-experiment" data-title="Compare contexts as a controlled experiment">
+  <p class="eyebrow">03 / Context experiments</p><h2>Change the context. Hold the conditions fixed.</h2>
+  <pre class="compact"><code># From packages/overlay_eval; configure provider credentials separately.
+# JUDGE_MODEL is a configured provider:model for semantic checks.
+gleam run -m overlay/eval -- run suites/contexts.eyg \
+  --context none \
+  --context ../../eyg_packages/overlay_librarian/index.eyg \
+  --model ollama:gpt-oss:120b --judge "$JUDGE_MODEL" \
+  --trials 5</code></pre>
+  <div class="grid three mt"><div class="card"><h3>Freeze</h3><p class="small">Suite, source snapshot, package mapping, model settings, judge, and call budget.</p></div><div class="card"><h3>Compare</h3><p class="small">Per-task pass rates and tag slices; improvements and regressions.</p></div><div class="card"><h3>Account for overhead</h3><p class="small">Model calls and duration are recorded. Tokens and monetary cost are not yet instrumented.</p></div></div>
+  <p class="small mt"><span class="pill neutral">Experiment design</span> No live context-comparison result is claimed in this deck.</p>
+  <p class="source"><a data-code="packages/overlay_eval/README.md">CLI configuration</a><a data-code="packages/overlay_eval/suites/contexts.eyg">16-task context suite</a></p>
+  <aside class="notes"><p>Five trials is an example budget, not a sample-size guarantee. With 16 tasks and two contexts, this is 160 trials before considering judge calls. Consider a tag-filtered deterministic subset for early experiments. The full suite contains semantic checks, so configure a judge; otherwise those checks are Unknown and do not pass.</p><p>The runner currently executes sequentially. A serious time-sensitive provider comparison may need a counterbalanced or interleaved experimental schedule outside the present runner. Keep a held-out set when tuning contexts, because repeated optimization against the same 16 tasks can overfit their wording or graders. Name equality alone is not proof that two saved runs used identical task definitions.</p></aside>
+</section>
+
+<section class="slide" id="reliability" data-title="Success at least once versus success every time">
+  <p class="eyebrow">03 / Reliability · interactive illustration</p><h2>“Works eventually” and “works every time” differ.</h2>
+  <div class="grid two">
+    <div><div class="controls"><label>p <input id="probability" type="range" min="5" max="100" value="80" step="1" aria-label="Illustrative per-attempt success probability"><output id="p-label">80%</output></label><label>k <input id="attempts" type="range" min="1" max="10" value="3" step="1" aria-label="Number of illustrative attempts"><output id="k-label">3</output></label></div><div class="mt"><div class="metric-row"><span>pass@1</span><div class="bar-track"><div class="bar" id="bar-one"></div></div><output id="one-result">80.0%</output></div><div class="metric-row"><span>pass@k</span><div class="bar-track"><div class="bar" id="bar-any" style="width:99.2%"></div></div><output id="any-result">99.2%</output></div><div class="metric-row"><span>pass^k</span><div class="bar-track"><div class="bar orange" id="bar-all" style="width:51.2%"></div></div><output id="all-result">51.2%</output></div></div><p class="small muted mt">Illustration only: independent attempts with the same success probability p.</p></div>
+    <div class="card"><h3>Estimate from n observed trials</h3><p class="small">If c pass and k ≤ n:</p><p class="formula">pass@k = 1 − C(n−c,k)/C(n,k)</p><p class="formula">pass^k = C(c,k)/C(n,k)</p><p class="small">C(a,b) is the binomial coefficient. The implementation computes ratios without large factorials.</p></div>
+  </div>
+  <div class="callout mt">The current summary uses k = trials per task: “any observed pass” and “all observed passes.”</div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/stats.gleam">stats.gleam</a><a href="https://arxiv.org/abs/2107.03374">Chen et al.: pass@k</a><a href="https://arxiv.org/abs/2406.12045">τ-bench: pass^k</a></p>
+  <aside class="notes"><p>Move the sliders to demonstrate the difference. The bars show p, 1−(1−p)^k, and p^k under an illustrative independent, identically distributed Bernoulli model. They are not measured Overlay results, and multiplying averages across heterogeneous tasks would be misleading.</p><p>The formulas on the right describe the implemented finite-sample estimators. In the current report, k equals the number of trials, so the per-task values collapse to observed any/all indicators. Averaging those indicators across tasks is different from claiming a precise reliability probability for one task. pass@k is useful when a successful attempt can be identified; it does not imply the system knows which of its attempts is correct.</p></aside>
+</section>
+
+<section class="slide" id="uncertainty" data-title="Pair by task and report uncertainty">
+  <p class="eyebrow">03 / Statistical interpretation</p><h2>More retries do not create more distinct tasks.</h2>
+  <div class="grid two"><div class="card"><h3>Suite estimate</h3><p>Compute each task's trial mean. Average those task means with equal weight.</p><p class="formula">SE = sd(task means) / √N</p><p class="small">Reported interval: mean ± 1.96 × SE.</p></div><div class="card"><h3>Context comparison</h3><p>Pair the same task in runs A and B. Estimate the mean task difference.</p><p class="formula">dᵢ = rate(Aᵢ) − rate(Bᵢ)</p><p class="small">Current comparison direction is first run minus second.</p></div></div>
+  <div class="callout warn mt">The interval is a normal approximation across tasks. Small suites, selected tasks, and repeated tuning limit what it supports.</div>
+  <p class="small mt">Inspect per-task regressions and stopping reasons, even when the average improves.</p>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/summary.gleam">summary.gleam</a><a data-code="packages/overlay_eval/src/overlay/eval/stats.gleam">stats.gleam</a><a href="https://arxiv.org/abs/2411.00640">Miller: Adding Error Bars to Evals</a></p>
+  <aside class="notes"><p>Repeated attempts share task difficulty and a common setup. Treating every attempt across the suite as an independent draw of a new task understates the relevant task-level variation. The code therefore computes uncertainty from per-task means and differences. The interval does not include uncertainty from grader mistakes, suite-selection bias, or an unrepresentative deployment distribution.</p><p>With one task, the Markdown report says there are insufficient tasks for an uncertainty estimate; the low-level estimator's standard error is zero, not evidence of certainty. The comparison pairs by task name and does not enforce matching fixture or suite identities. Retain that provenance yourself. With only 16 tasks, read normal-approximation intervals cautiously.</p></aside>
+</section>
+
+<section class="slide" id="replay" data-title="Replay freezes the model side of the experiment">
+  <p class="eyebrow">03 / Reproducibility</p><h2>A cassette freezes the model exchange.</h2>
+  <div class="flow"><div class="node"><strong>Request</strong><span class="small">Method + URL + body</span></div><span class="arrow">→</span><div class="node"><strong>SHA-256 key</strong><span class="small">Auth headers excluded</span></div><span class="arrow">→</span><div class="node selected"><strong>Recorded response</strong><span class="small">Status + completed stream body</span></div></div>
+  <div class="grid two mt"><div class="card"><h3>Strict replay</h3><p>Fail on a changed or missing request. Useful for harness regression and debugging.</p></div><div class="card"><h3>Fresh live eval</h3><p>Needed to measure a changed prompt, context, model, or actual model reliability.</p></div></div>
+  <p class="small mt">Failed streams are not saved as successful responses. Cassettes do not freeze time, randomness, or all environment state.</p>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/cassette.gleam">cassette.gleam</a><a data-code="packages/overlay_eval/src/overlay/eval/model.gleam">Transport interface</a></p>
+  <aside class="notes"><p>The cassette wraps the transport, so it works with the real provider adapter. It stores the key and response rather than a full raw request. Successful stream chunks are accumulated and saved only when the stream completes. Replay feeds the recorded response back through the product's stream processing.</p><p>Strict matching detects request drift. Lenient sequence matching is also implemented, but cannot validate a changed model prompt. A cassette may still contain private information copied into a response, despite excluding authorization headers from the key. To replay a whole experiment faithfully, retain the suite, context, fixture snapshot, and configuration alongside it.</p></aside>
+</section>
+
+<section class="slide" id="reports" data-title="Read reports as evidence, not just scores">
+  <p class="eyebrow">03 / Observability</p><h2>The score tells you where to look.</h2>
+  <div class="grid three"><div class="card"><h3>summary.md</h3><p>Task and tag rates, uncertainty, failure groups, model-call and duration summaries.</p></div><div class="card"><h3>run.json</h3><p>Run configuration and structured results for comparisons and judge calibration.</p></div><div class="card"><h3>trials/*.md</h3><p>Prompts, model text, programs, outcomes, observed effects, files, and verdicts.</p></div></div>
+  <div class="callout mt">Read every new failure and sample the passes. A pass for the wrong reason is a grader defect.</div>
+  <p class="small mt">The full structured transcript exists in memory. <code>run.json</code> is not a complete event archive for arbitrary regrading.</p>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/report.gleam">report.gleam</a><a data-code="packages/overlay_eval/src/overlay/eval/render.gleam">render.gleam</a></p>
+  <aside class="notes"><p>Failure diagnosis should distinguish invalid generated code, incorrect computed values, bad context loading, fixture mismatch, provider failure, call-limit exhaustion, and grader error. The same red task outcome can have very different causes and fixes.</p><p>Rendering and persistence are separate modules. Transcripts may contain model thinking, copied fixture data, and workspace contents. Treat them as potentially sensitive artifacts. The current run JSON is appropriate for aggregate comparisons and calibration but cannot substitute for a complete structured transcript when inventing new graders later.</p></aside>
+</section>
+
+<section class="slide dark-slide" id="sandbox" data-title="Three different sandbox boundaries">
+  <p class="eyebrow">04 / Sandboxing</p><h2>Be precise about which boundary is enforced.</h2>
+  <div class="grid three mt">
+    <div class="card green"><p class="step">LANGUAGE</p><h3>Generated EYG</h3><p>Types and managed effects restrict the operations a program can request.</p><p class="small mt">Pure mode grants no external effects.</p></div>
+    <div class="card"><p class="step accent">APPLICATION</p><h3>Eval harness</h3><p>Fixtures answer fetches. File effects use an in-memory workspace.</p><p class="small mt">Model traffic takes a separate path.</p></div>
+    <div class="card"><p class="step accent">OPERATING SYSTEM</p><h3>Host process</h3><p>The runner can read fixture files and call provider APIs.</p><p class="small mt">No process isolation or resource containment is added here.</p></div>
+  </div>
+  <p class="lead mt">Effect control makes experiments easier to inspect.<br>Resource isolation still needs an outer boundary.</p>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/session.gleam">Session boundary</a><a data-code="packages/pal/src/pal/platform/browser.gleam">Browser adapter</a></p>
+  <aside class="notes"><p>The threat model starts with model-generated code and untrusted text in guides, tool responses, or workspace files. The type checker and interpreter restrict the EYG capabilities, assuming their implementation is correct. They do not place the JavaScript host process inside an OS sandbox.</p><p>Trusted harness code loads local suites, contexts, and fixtures. The model and judge may receive those data through prompts and transcripts even when program Fetch is offline. This is why “offline eval” must be qualified: it describes the program's fixture environment, not the absence of provider network traffic.</p></aside>
+</section>
+
+<section class="slide" id="sandbox-gaps" data-title="Implemented controls and further hardening">
+  <p class="eyebrow">04 / Sandboxing review</p><h2>Current controls have specific limits.</h2>
+  <table class="compact"><thead><tr><th>Concern</th><th>Implemented today</th><th>Hardening to add</th></tr></thead><tbody>
+    <tr><td>Runaway work</td><td>Session model-call limit; provider request and stream-read timeouts.</td><td>Killable worker/process, total deadline, CPU and memory quotas.</td></tr>
+    <tr><td>Network / secrets</td><td>Unmatched offline program fetches refused; model transport separate.</td><td>OS egress policy, credential separation, sanitized fixture snapshots.</td></tr>
+    <tr><td>Filesystem</td><td>Agent writes target an in-memory root. Host loads trusted fixture files.</td><td>Read-only staged inputs; explicit symlink and path-containment policy.</td></tr>
+    <tr><td>Determinism</td><td>Fixed HTTP replies; replayable model responses; fresh workspaces.</td><td>Inject clock/random sources and bound output, file, and effect volume.</td></tr>
+  </tbody></table>
+  <div class="callout warn mt">A timeout promise does not cancel the request or interrupt synchronous EYG execution.</div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/model_ffi.mjs">Timeout implementation</a><a data-code="packages/pal/src/pal/platform/browser.gleam">Now / Random / Flip</a><a href="https://gvisor.dev/docs/">gVisor: an optional outer isolation layer</a></p>
+  <aside class="notes"><p>The full runner's timeout applies to a provider request and each read of its stream. It is neither a whole-trial deadline nor fetch cancellation. The pure command does not use that wrapper. Synchronous interpreter recursion can block the JavaScript event loop, so an event-loop timer cannot reliably stop it. Put such execution behind a boundary that another process can terminate.</p><p>Now, Random, and Flip are currently resolved inside the browser platform adapter before the eval's effect interpreter can substitute them. Hardening suggestions on this slide are not implemented features. A hardened container runtime such as gVisor can add host isolation; it does not replace an egress policy, safe credential handling, input staging, or explicit resource limits.</p></aside>
+</section>
+
+<section class="slide" id="robustness" data-title="The next robustness evals to add">
+  <p class="eyebrow">04 / Proposed next experiments</p><h2>Make the uncomfortable cases reproducible.</h2>
+  <table><thead><tr><th>Change the condition</th><th>Expected behavior</th><th>Evidence to capture</th></tr></thead><tbody>
+    <tr><td>A guide contains hostile instructions</td><td>Complete the user's task without obeying unrelated instructions.</td><td>Returned value, attempted actions, final files.</td></tr>
+    <tr><td>A dependency or HTTP route fails</td><td>Explain the failure; avoid inventing success.</td><td>Failure outcome, retry budget, bounded semantic rubric.</td></tr>
+    <tr><td>A workspace path escapes the root</td><td>Reject the operation and preserve other files.</td><td>Error result plus workspace invariants.</td></tr>
+    <tr><td>Input wording or data changes</td><td>Preserve the intended behavior across variants.</td><td>Parameterized outcomes and paired variant results.</td></tr>
+  </tbody></table>
+  <p class="small mt"><span class="pill warn">Proposed</span> Add these as separate cases; keep the base task and conditions identifiable.</p>
+  <p class="source">Design extensions based on the existing task, fixture, and transcript boundaries.</p>
+  <aside class="notes"><p>This slide describes additions, not an existing adversarial benchmark. The current suite already contains smaller robustness themes, such as correcting a stale note, checking a wrong guide link, and handling a program mistake. Explicit hostile-instruction and resource-exhaustion evaluation would extend that coverage.</p><p>Metamorphic tests are useful where an exact answer is cumbersome: rename an irrelevant file or reorder unrelated data and require the outcome to stay the same. Separate harness tests of path normalization from live tests of the model's behavior when an operation is rejected. Both are useful and answer different questions.</p></aside>
+</section>
+
+<section class="slide" id="cadence" data-title="An engineering cadence for evals">
+  <p class="eyebrow">05 / Day-to-day workflow</p><h2>Make each agent change a small experiment.</h2>
+  <div class="flow"><div class="node"><strong>Observe</strong><span class="small">Save a real failure</span></div><span class="arrow">→</span><div class="node"><strong>Specify</strong><span class="small">Task + grader + reference</span></div><span class="arrow">→</span><div class="node"><strong>Validate</strong><span class="small">Oracle, null, counterexamples</span></div><span class="arrow">→</span><div class="node"><strong>Change</strong><span class="small">One context or code change</span></div><span class="arrow">→</span><div class="node selected"><strong>Measure</strong><span class="small">Repeated live trials + review</span></div></div>
+  <div class="grid two mt"><div class="card"><h3>Fast checks on each change</h3><p class="small">Unit tests, suite validation, catalogue freshness, and selected strict replays.</p></div><div class="card"><h3>Budgeted live checks</h3><p class="small">Capability or context changes; repeated trials; a held-out task set; calibrated judges where needed.</p></div></div>
+  <div class="callout mt">Keep the smallest runnable eval. Add machinery when a new measurement requires it.</div>
+  <p class="source"><a data-code=".github/workflows/test.yml">CI suite validation</a><a data-code="packages/overlay_eval/test/overlay_eval_test.gleam">Harness tests</a></p>
+  <aside class="notes"><p>The existing CI job runs eval tests and validates both Fibonacci and context suites without LLM credentials. The proposed operating cadence extends that with selected replay regressions and budgeted live evaluations; it is not a claim that every scheduled check is already automated.</p><p>Review and simplify both sides of the experiment. Remove unnecessary harness abstraction and redundant checks. Keep failures as regression cases when the behavior improves, then add tasks that still challenge the system. A suite with no remaining failures may be a good regression suite while providing little guidance for further capability work.</p></aside>
+</section>
+
+<section class="slide dark-slide" id="close" data-title="Ship an eval with each behavior">
+  <p class="eyebrow">05 / Take it back to your project</p><h1>Ship an eval<br>with each behavior.</h1>
+  <div class="hero-rule"></div>
+  <div class="grid three"><div><h3>Start with a value.</h3><p class="small">One real request.<br>An executable answer.<br>A deterministic check.</p></div><div><h3>Control the boundary.</h3><p class="small">Reuse the product agent.<br>Stage the environment.<br>Name the sandbox limits.</p></div><div><h3>Earn confidence.</h3><p class="small">Validate the grader.<br>Repeat the experiment.<br>Read successes and failures.</p></div></div>
+  <p class="source"><a data-code="packages/overlay_eval/README.md">Run the evals</a><a data-code="guides/overlay_evals.md">Practical guide</a><a data-code="blog/effect-evals/README.md">Six-part article series</a> · Appendix follows</p>
+  <aside class="notes"><p>The intended action after this talk is small: choose one behavior you need, write a task that can fail, and run a real model against it. Do not start by building every component shown here. The pure baseline is useful on its own.</p><p>For discussion, ask which claim the team's current demos actually establish, and what wrong behavior would still pass their favorite grader. The appendix includes a module map, the successful live Fibonacci program, a sandbox review guide, and sources.</p></aside>
+</section>
+
+<section class="slide" id="map-runtime" data-title="Appendix: runtime and orchestration map">
+  <p class="eyebrow">Appendix A / Component map</p><h2>Runtime and orchestration</h2>
+  <table class="compact module-map"><thead><tr><th>Module</th><th>Responsibility and implementation</th></tr></thead><tbody>
+    <tr><td>eval/pure.gleam</td><td>One Ollama completion; exactly one run call; pure inference; execute; compare value.</td></tr>
+    <tr><td>eval.gleam<br>eval/options.gleam</td><td>Decode commands and flags, build fixtures/configuration, select contexts, coordinate runs and output.</td></tr>
+    <tr><td>eval/process.gleam + FFI</td><td>Report command failures and set the process exit status.</td></tr>
+    <tr><td>eval/session.gleam</td><td>Initialize product state; queue prompts; drain PAL effects; enforce the session call limit.</td></tr>
+    <tr><td>web/state, tools,<br>prompt, context</td><td>Shared agent behavior: conversation, tool schema, parse/type-check/execute, context loading and prompt construction.</td></tr>
+    <tr><td>eval/model.gleam + FFI</td><td>Provider + pluggable Transport. Ollama cloud/local and Mistral. Request/read deadline wrapper.</td></tr>
+    <tr><td>eval/agent.gleam</td><td>Scripted reply sequences produce provider-shaped streams for references and null controls.</td></tr>
+  </tbody></table>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay">Eval source</a><a data-code="packages/overlay_web/src/overlay/web">Shared product source</a></p>
+  <aside class="notes"><p>Eval modules live under packages/overlay_eval/src/overlay/eval/, except the top-level CLI at overlay/eval.gleam. Shared web modules live under packages/overlay_web/src/overlay/web/. The lower layers use the existing parser, analysis/type inference, IR, interpreter, provider adapters, and PAL effect definitions.</p><p>Model is either Provider(llm, transport) or Scripted(agent). A Transport maps a byte-body HTTP request to a promise of a response whose body is a stream reader. That narrow seam is what allows timeouts, recording, and replay to compose without replacing the agent loop. The pure command intentionally bypasses most of this machinery.</p></aside>
+</section>
+
+<section class="slide" id="map-environment" data-title="Appendix: environment and context map">
+  <p class="eyebrow">Appendix B / Component map</p><h2>Environment and context construction</h2>
+  <table class="compact module-map"><thead><tr><th>Module</th><th>Responsibility and implementation</th></tr></thead><tbody>
+    <tr><td>eval/module.gleam</td><td>Load source or DAG-JSON, resolve imports, detect cycles, pin packages, calculate content IDs; optional in-memory file loader.</td></tr>
+    <tr><td>eval/environment.gleam</td><td>Ordered request dispatch and offline/online policy. Returns Answered, Refused, or Unanswered.</td></tr>
+    <tr><td>eval/fixture/hub.gleam</td><td>Dependency-ordered fixture package publication; module cache and package-pull responses.</td></tr>
+    <tr><td>eval/fixture/site.gleam</td><td>Guide frontmatter and slug handling; fixture guide pages and llms.txt.</td></tr>
+    <tr><td>eval/fixture/repository.gleam</td><td>GitHub-shaped source, tree, and directory responses backed by local repository files.</td></tr>
+    <tr><td>web/workspace.gleam</td><td>Normalized paths, file dictionary, directory set, file effects, and final file extraction.</td></tr>
+    <tr><td>overlay_librarian/<br>overlay_maintainer/</td><td>EYG catalogues/search/guides; source map/read/list; note helpers; readme instructions and package tests.</td></tr>
+  </tbody></table>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/fixture">Fixtures</a><a data-code="eyg_packages/overlay_librarian">Librarian</a><a data-code="eyg_packages/overlay_maintainer">Maintainer</a></p>
+  <aside class="notes"><p>In module.gleam, local imports become content references so the same product module-loading mechanism works in an eval. For workspace grading, load_from takes files from memory instead of reading the host. evaluate.gleam, listed next, runs loaded modules and applies predicates.</p><p>Fixtures are intentionally narrower than a real site, registry, or GitHub API. Identify any scenario whose correctness depends on missing details, such as release signature validation, request headers, mutation endpoints, latency, or production authentication. Add fidelity only for a measurement that requires it.</p></aside>
+</section>
+
+<section class="slide" id="map-measurement" data-title="Appendix: measurement and reporting map">
+  <p class="eyebrow">Appendix C / Component map</p><h2>Tasks, measurement, and persistence</h2>
+  <table class="compact module-map"><thead><tr><th>Module</th><th>Responsibility and implementation</th></tr></thead><tbody>
+    <tr><td>task / suite</td><td>Decode task records and checks; validate fields; sort tasks and filter by tags.</td></tr>
+    <tr><td>evaluate</td><td>Load modules with fixture references; apply EYG predicates.</td></tr>
+    <tr><td>transcript</td><td>Capture turns, run outcomes, effects, final files, model calls, and stop reason.</td></tr>
+    <tr><td>grade / judge</td><td>Run deterministic checks and optional rubric requests; produce pass/fail/unknown.</td></tr>
+    <tr><td>trial / run</td><td>Create fresh sessions, measure session time, grade, and repeat sequentially.</td></tr>
+    <tr><td>stats / summary</td><td>Aggregate task means, intervals, reliability metrics, tag slices, and paired differences.</td></tr>
+    <tr><td>render / report</td><td>Render evidence and write Markdown trial reports, summaries, and JSON results.</td></tr>
+    <tr><td>cassette / calibration</td><td>Record/replay model responses; compare judge verdicts with human labels.</td></tr>
+  </tbody></table>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval">All modules under packages/overlay_eval/src/overlay/eval/*.gleam</a></p>
+  <aside class="notes"><p>These modules keep execution separate from grading and reporting. Graders inspect a completed transcript; they do not restart the agent. File predicates do evaluate the resulting workspace module, so that computation is still real work with its own termination risks. trial timing covers the session execution before grading, not the full time spent on a judge.</p><p>Run statistics weight tasks equally. A task's pass flag requires all checks, while its partial score is the fraction of checks passed. These metrics answer different questions and should not be silently interchanged. The current comparison joins on task name; version/provenance checks would be a useful addition.</p></aside>
+</section>
+
+<section class="slide" id="fibonacci-program" data-title="Appendix: the successful live program">
+  <p class="eyebrow">Appendix D / Actual generated program · attempt 2</p><h2>The successful Fibonacci program</h2>
+  <div class="grid wide-left"><pre class="compact"><code>let sum_fib = !fix((self, count, a, b) -> {
+  match !int_compare(count, 0) {
+    Eq(_) -> { 0 }
+    | (_) -> {
+      match !int_compare(count, 1) {
+        Eq(_) -> { a }
+        | (_) -> {
+          let next = !int_add(a, b)
+          let rest = self(!int_subtract(count, 1), b, next)
+          !int_add(a, rest)
+        }
+      }
+    }
+  }
+})
+sum_fib(20, 1, 1)</code></pre><div class="stack"><div class="card green"><h3>Result: 17,710</h3><p class="small">The current term is added once; recursion advances the pair and decrements the count.</p></div><div class="card"><h3>What was checked</h3><p class="small">For this submitted program, the computed value equals the expected integer.</p><p class="small">General correctness, efficiency, and termination on arbitrary inputs were not checked.</p></div></div></div>
+  <p class="source"><a data-code="packages/overlay_eval/evidence/fibonacci.md">Complete live evidence, including the failed first program</a></p>
+  <aside class="notes"><p>This is the actual program from the successful one-shot request, not a hand-written reference presented as model output. Explain !fix as the recursion primitive and !int_compare as producing a tagged comparison value. match consumes tags rather than comparing literal integers.</p><p>The input convention matters: starting 1,1 gives 17,710 for twenty terms. Starting 0,1 would be a different task. Clear task wording prevents ambiguity from being mistaken for a model or grading failure.</p></aside>
+</section>
+
+<section class="slide" id="data-boundaries" data-title="Appendix: sandbox and data review">
+  <p class="eyebrow">Appendix E / Review before an untrusted run</p><h2>Trace both capabilities and data.</h2>
+  <div class="grid two"><div class="boundary"><p class="lane-label">Trusted runner process</p><div class="stack"><div class="card"><h3>Host inputs</h3><p>Suite, predicates, context imports, guides, repository snapshot, provider credentials.</p></div><div class="card green"><h3>Generated EYG</h3><p>Type-checked code; managed effects; virtual workspace; fixture HTTP responses.</p></div></div></div><div class="stack"><div class="card"><h3>Provider / judge</h3><p class="small">Receives prompts, model-visible fixture content, and/or rendered transcripts. Offline program fetches do not prevent this transfer.</p></div><div class="card"><h3>Reports / cassettes</h3><p class="small">May retain source, private file contents, generated text, and copied secrets. Decide access and retention explicitly.</p></div><div class="callout">Treat suite files and grader predicates as trusted code in the current design.</div></div></div>
+  <p class="source"><a data-code="packages/overlay_eval/src/overlay/eval/module.gleam">Host module loading</a><a data-code="packages/overlay_eval/src/overlay/eval/judge.gleam">Judge input</a><a data-code="packages/overlay_eval/src/overlay/eval/report.gleam">Artifact output</a></p>
+  <aside class="notes"><p>Four useful review questions: What code is untrusted? Which secrets are available to the host? Which bytes can reach an external model? What can stop an unbounded computation? Model-generated EYG is constrained by the interpreter; a malicious local suite or context import is a separate threat because the host loader has filesystem access.</p><p>Stage allowlisted fixtures rather than an arbitrary working checkout, keep credentials out of those fixtures, and run untrusted work with an outer process/resource boundary. Content-addressed modules help identify dependencies, but neither content addressing nor syntactic prompt delimiters establishes that the content is safe.</p></aside>
+</section>
+
+<section class="slide compact-spacing" id="references" data-title="Appendix: sources and runnable entry points">
+  <p class="eyebrow">Appendix F / Sources</p><h2>Read the implementation. Reproduce the evidence.</h2>
+  <div class="grid two"><div><h3>Repository · snapshot 441d4e2</h3><ul class="small">
+    <li class="small"><a data-code="packages/overlay_eval/README.md">Commands, task schema, checks, and reports</a></li>
+    <li class="small"><a data-code="packages/overlay_eval/evidence/fibonacci.md">Both live Fibonacci attempts</a></li>
+    <li class="small"><a data-code="packages/overlay_eval/src/overlay/eval">Eval implementation</a> / <a data-code="packages/overlay_eval/suites">task suites</a></li>
+    <li class="small"><a data-code="guides/overlay_evals.md">Practical guide</a> / <a data-code="blog/effect-evals/README.md">article series</a></li>
+  </ul><pre class="compact mt"><code>cd packages/overlay_eval
+gleam run -m overlay/eval -- validate suites/fibonacci.eyg
+gleam run -m overlay/eval/pure -- ollama:gpt-oss:120b</code></pre><p class="tiny muted mt">Live command requires configured OLLAMA_API_KEY.<br>Validation needs no model credentials.</p></div><div><h3>Further reading</h3><ul>
+    <li class="small"><a href="https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents">Demystifying evals for AI agents</a><br><span class="muted">Anthropic · engineering practice</span></li>
+    <li class="small"><a href="https://arxiv.org/abs/2107.03374">Evaluating Large Language Models Trained on Code</a><br><span class="muted">Chen et al. · pass@k estimator</span></li>
+    <li class="small"><a href="https://arxiv.org/abs/2406.12045">τ-bench</a><br><span class="muted">Yao et al. · repeated-success reliability</span></li>
+    <li class="small"><a href="https://arxiv.org/abs/2411.00640">Adding Error Bars to Evals</a><br><span class="muted">Miller · experimental analysis</span></li>
+    <li class="small"><a href="https://gvisor.dev/docs/">gVisor documentation</a><br><span class="muted">An example of host isolation beyond the harness</span></li>
+  </ul></div></div>
+  <p class="source">Slide claims about current behavior are grounded in the linked implementation. Suggested hardening and experiments are labelled.</p>
+  <aside class="notes"><p>All code links are pinned to the implementation commit so the talk remains auditable as the branch changes. This presentation is self-contained and can be opened directly from disk. External links are reading references; they are not required to display the deck.</p><p>For a shorter talk, use slides 1–9, 11–12, 16–23, and 28–32. For a detailed implementation session, include the appendix and follow the source links. Refresh the PDF after editing the HTML so the two artifacts stay aligned.</p></aside>
+</section>
+</div></main>
+<div id="progress" aria-hidden="true"></div>
+<nav id="toolbar" aria-label="Slide controls">
+  <button id="previous" type="button" aria-label="Previous slide">←</button>
+  <span id="counter" aria-live="polite" aria-atomic="true">1 / 38</span>
+  <button id="next" type="button" aria-label="Next slide">→</button>
+  <select id="jump" aria-label="Jump to slide"></select>
+  <span class="spacer"></span><span class="hint">← → navigate · N notes · F fullscreen · P print</span>
+  <button id="notes-button" type="button" aria-controls="notes-panel" aria-pressed="false">Notes</button>
+  <button id="fullscreen-button" type="button">Fullscreen</button>
+  <button id="print-button" type="button">Print / PDF</button>
+</nav>
+<aside id="notes-panel" aria-label="Speaker notes"></aside>
+<script>
+(() => {
+  'use strict';
+  const slides = [...document.querySelectorAll('.slide')];
+  const stage = document.querySelector('#stage');
+  const viewport = document.querySelector('#viewport');
+  const jump = document.querySelector('#jump');
+  const notesButton = document.querySelector('#notes-button');
+  let current = 0;
+
+  // Pin references to the implementation this talk describes.
+  const sourceRoot = 'https://github.com/crowdhailer-bot/eyg-lang/';
+  document.querySelectorAll('[data-code]').forEach(link => {
+    const path = link.dataset.code;
+    const kind = path.split('/').pop().includes('.') ? 'blob' : 'tree';
+    link.href = `${sourceRoot}${kind}/441d4e2/${path}`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+  });
+  slides.forEach((slide, index) => {
+    slide.dataset.page = `${index + 1} / ${slides.length}`;
+    slide.setAttribute('aria-label', `${index + 1}. ${slide.dataset.title}`);
+    const option = document.createElement('option');
+    option.value = index;
+    option.textContent = `${String(index + 1).padStart(2, '0')} · ${slide.dataset.title}`;
+    jump.append(option);
+  });
+
+  function fit() {
+    const scale = Math.min((viewport.clientWidth - 24) / 1280, (viewport.clientHeight - 24) / 720);
+    stage.style.transform = `scale(${Math.max(0.05, scale)})`;
+  }
+
+  function show(index, updateHash = true) {
+    current = Math.max(0, Math.min(slides.length - 1, index));
+    slides.forEach((slide, i) => {
+      slide.classList.toggle('active', i === current);
+      slide.setAttribute('aria-hidden', String(i !== current));
+    });
+    const slide = slides[current];
+    jump.value = current;
+    document.querySelector('#counter').textContent = `${current + 1} / ${slides.length}`;
+    document.querySelector('#previous').disabled = current === 0;
+    document.querySelector('#next').disabled = current === slides.length - 1;
+    document.querySelector('#progress').style.width = `${(current + 1) / slides.length * 100}%`;
+    const panel = document.querySelector('#notes-panel');
+    const heading = document.createElement('h3');
+    heading.textContent = `${current + 1}. ${slide.dataset.title}`;
+    panel.replaceChildren(heading);
+    const notes = slide.querySelector('.notes');
+    if (notes) panel.insertAdjacentHTML('beforeend', notes.innerHTML);
+    panel.scrollTop = 0;
+    if (updateHash) history.replaceState(null, '', `#${slide.id}`);
+    document.title = `${current + 1}. ${slide.dataset.title} — Overlay evals`;
+  }
+
+  function fromHash() {
+    const index = slides.findIndex(slide => `#${slide.id}` === location.hash);
+    show(index < 0 ? 0 : index, false);
+  }
+
+  function toggleNotes() {
+    const visible = document.body.classList.toggle('show-notes');
+    notesButton.setAttribute('aria-pressed', String(visible));
+    fit();
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch (_) { /* Present normally when fullscreen is unavailable. */ }
+  }
+
+  function updateIllustration() {
+    const p = Number(document.querySelector('#probability').value) / 100;
+    const k = Number(document.querySelector('#attempts').value);
+    document.querySelector('#p-label').value = `${Math.round(p * 100)}%`;
+    document.querySelector('#k-label').value = k;
+    for (const [name, value] of [['one', p], ['any', 1 - (1 - p) ** k], ['all', p ** k]]) {
+      document.querySelector(`#bar-${name}`).style.width = `${value * 100}%`;
+      document.querySelector(`#${name}-result`).value = `${(value * 100).toFixed(1)}%`;
+    }
+  }
+
+  document.querySelector('#previous').addEventListener('click', () => show(current - 1));
+  document.querySelector('#next').addEventListener('click', () => show(current + 1));
+  jump.addEventListener('change', () => show(Number(jump.value)));
+  notesButton.addEventListener('click', toggleNotes);
+  document.querySelector('#fullscreen-button').addEventListener('click', toggleFullscreen);
+  document.querySelector('#print-button').addEventListener('click', () => window.print());
+  document.querySelector('#probability').addEventListener('input', updateIllustration);
+  document.querySelector('#attempts').addEventListener('input', updateIllustration);
+  window.addEventListener('resize', fit);
+  window.addEventListener('hashchange', fromHash);
+  document.addEventListener('keydown', event => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.target.matches('input, select, textarea')) return;
+    if (event.target.closest('button, a') && [' ', 'Enter'].includes(event.key)) return;
+    const key = event.key.toLowerCase();
+    if (['arrowright', 'pagedown', ' ', 'arrowleft', 'pageup', 'home', 'end', 'n', 'f', 'p'].includes(key)) event.preventDefault();
+    if (['arrowright', 'pagedown', ' '].includes(key)) show(current + 1);
+    else if (['arrowleft', 'pageup'].includes(key)) show(current - 1);
+    else if (key === 'home') show(0);
+    else if (key === 'end') show(slides.length - 1);
+    else if (key === 'n') toggleNotes();
+    else if (key === 'f') toggleFullscreen();
+    else if (key === 'p') window.print();
+  });
+  // Print all slides with accessible text, even when only one is on screen.
+  window.addEventListener('beforeprint', () => slides.forEach(slide => slide.removeAttribute('aria-hidden')));
+  window.addEventListener('afterprint', () => show(current, false));
+  updateIllustration();
+  fromHash();
+  fit();
+})();
+</script>
+</body>
+</html>
