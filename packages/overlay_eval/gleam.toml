@@ -21,12 +21,14 @@ gleam_fetch = ">= 1.4.0 and < 2.0.0"
 gleam_http = ">= 4.3.0 and < 5.0.0"
 gleam_javascript = ">= 1.0.1 and < 2.0.0"
 gleam_json = ">= 3.1.0 and < 4.0.0"
+javascript_mutable_reference = ">= 1.0.0 and < 2.0.0"
 midas = ">= 3.0.0 and < 4.0.0"
 multiformats = ">= 4.0.0 and < 5.0.0"
 oas_generator_utils = ">= 1.1.0 and < 2.0.0"
 ogre = ">= 1.1.0 and < 2.0.0"
 overlay_llm = ">= 0.2.0 and < 1.0.0"
 overlay_web = { path = "../overlay_web" }
+pal = { path = "../pal" }
 simplifile = ">= 2.4.0 and < 3.0.0"
 untethered = { path = "../untethered" }
 
