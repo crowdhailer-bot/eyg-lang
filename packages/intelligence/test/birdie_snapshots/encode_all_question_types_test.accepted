@@ -1,0 +1,30 @@
+---
+version: 2.0.2
+title: encode_all_question_types_test
+file: ./test/intelligence/jev_test.gleam
+test_name: encode_all_question_types_test
+---
+{
+  "model": "jev-test",
+  "questions": {
+    "0": {
+      "criteria": ["Calm", "Frustrated", "Very angry"],
+      "instructions": "How frustrated?",
+      "type": "score"
+    },
+    "1": {
+      "criteria": {
+        "billing": "Payments, invoicing, refunds",
+        "sales": "Pricing, upgrades, new accounts",
+        "technical": "Bugs, outages, integrations"
+      },
+      "instructions": "Which team?",
+      "type": "choice"
+    },
+    "2": {
+      "instructions": "Is this urgent?",
+      "type": "noul"
+    }
+  },
+  "state": "Hello"
+}

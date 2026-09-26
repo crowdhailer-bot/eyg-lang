@@ -1,0 +1,7 @@
+---
+version: 2.0.2
+title: empty questions validation
+file: ./test/intelligence/jev_test.gleam
+test_name: empty_questions_reports_the_location_test
+---
+Dictionary should have at least 1 item after validation, not 0

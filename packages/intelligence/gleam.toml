@@ -1,0 +1,19 @@
+name = "intelligence"
+version = "1.0.0"
+
+description = "A type-safe implementation of evaluating questions using the Jev mode from typesafe.ai."
+licences = ["Apache-2.0"]
+repository = { type = "github", user = "crowdhailer", repo = "eyg-lang", path = "packages/intelligence", tag_prefix = "intelligence-" }
+links = []
+
+[dependencies]
+gleam_stdlib = ">= 1.0.0 and < 2.0.0"
+gleam_json = ">= 3.1.0 and < 4.0.0"
+ogre = ">= 1.2.0 and < 2.0.0"
+midas = ">= 3.1.0 and < 4.0.0"
+gleam_http = ">= 4.4.0 and < 5.0.0"
+
+[dev_dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"
+birdie = ">= 2.0.2 and < 3.0.0"
+simplifile = ">= 2.7.0 and < 3.0.0"

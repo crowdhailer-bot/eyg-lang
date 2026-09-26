@@ -1,0 +1,7 @@
+---
+version: 2.0.2
+title: missing API key
+file: ./test/intelligence/jev_test.gleam
+test_name: missing_key_is_unauthenticated_test
+---
+Must supply an API key! Check your request and try again.

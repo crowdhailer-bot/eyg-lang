@@ -1,0 +1,7 @@
+---
+version: 2.0.2
+title: latest model description
+file: ./test/intelligence/jev_test.gleam
+test_name: models_decode_test
+---
+The latest iteration of TypeSafe's System One Model: Jev

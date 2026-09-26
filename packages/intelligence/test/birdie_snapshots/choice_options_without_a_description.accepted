@@ -1,0 +1,19 @@
+---
+version: 2.0.2
+title: choice options without a description
+file: ./test/intelligence/jev_test.gleam
+test_name: choice_options_without_description_are_null_test
+---
+{
+  "model": "jev-test",
+  "questions": {
+    "0": {
+      "criteria": {
+        "a": null
+      },
+      "instructions": "Which?",
+      "type": "choice"
+    }
+  },
+  "state": "Hello"
+}

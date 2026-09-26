@@ -1,0 +1,19 @@
+---
+version: 2.0.2
+title: noul true criteria
+file: ./test/intelligence/jev_test.gleam
+test_name: noul_criteria_are_encoded_test
+---
+{
+  "model": "jev-test",
+  "questions": {
+    "0": {
+      "criteria": {
+        "true": "urgent"
+      },
+      "instructions": "Is it urgent?",
+      "type": "noul"
+    }
+  },
+  "state": "Hello"
+}

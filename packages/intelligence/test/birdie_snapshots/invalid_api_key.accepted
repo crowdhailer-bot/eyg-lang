@@ -1,0 +1,7 @@
+---
+version: 2.0.2
+title: invalid API key
+file: ./test/intelligence/jev_test.gleam
+test_name: invalid_key_is_unauthenticated_test
+---
+Cannot authenticate with the server. Please check your API key and try again.
