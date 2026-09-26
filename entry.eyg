@@ -12,7 +12,8 @@ let tests = list.flatten([
   import "./eyg_packages/edit/entry.eyg".tests,
   import "./eyg_packages/option/entry.eyg".tests,
   import "./eyg_packages/http/entry.eyg".tests,
-  import "./eyg_packages/overlay_librarian/entry.eyg".tests
+  import "./eyg_packages/overlay_librarian/entry.eyg".tests,
+  import "./eyg_packages/overlay_maintainer/entry.eyg".tests
 ])
 let test = (_) -> {
   aok.all(tests)
