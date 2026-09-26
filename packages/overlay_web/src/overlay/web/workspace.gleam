@@ -106,7 +106,9 @@ pub fn perform(
     MakeDirectory(path:) ->
       update(workspace, make_directory.encode, {
         use normal <- result.try(normalize(path))
-        case dict.has_key(workspace.files, normal) {
+        case
+          list.any([normal, ..parents(normal)], dict.has_key(workspace.files, _))
+        {
           True -> Error("a file exists at: " <> path)
           False -> {
             let directories =
@@ -197,7 +199,7 @@ fn list_directory(workspace: Workspace, path) {
           #(name, read_directory.File(bit_array.byte_size(contents)))
         })
       let directories =
-        all_directories(workspace)
+        set.to_list(workspace.directories)
         |> list.filter_map(fn(directory) {
           use name <- result.map(child(normal, directory))
           #(name, read_directory.Directory)
@@ -230,14 +232,7 @@ fn child(directory, path) {
 }
 
 fn is_directory(workspace: Workspace, path) {
-  path == "" || list.contains(all_directories(workspace), path)
-}
-
-fn all_directories(workspace: Workspace) {
-  dict.keys(workspace.files)
-  |> list.flat_map(parents)
-  |> list.fold(workspace.directories, set.insert)
-  |> set.to_list
+  path == "" || set.contains(workspace.directories, path)
 }
 
 /// Every directory above a path, nearest first, not including the root.

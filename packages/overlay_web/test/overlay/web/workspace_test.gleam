@@ -78,6 +78,22 @@ pub fn paths_cannot_leave_the_workspace_test() {
   assert [#("b.txt", <<"x">>)] == workspace.files(workspace)
 }
 
+pub fn a_directory_cannot_be_created_under_a_file_test() {
+  let original = workspace.from_files([#("notes", <<"a file">>)])
+  let #(after, value) =
+    workspace.perform(original, workspace.MakeDirectory("notes/today"))
+  assert v.error(v.String("a file exists at: notes/today")) == value
+  assert original == after
+}
+
+pub fn deleting_the_last_file_keeps_its_directory_test() {
+  let original = workspace.from_files([#("notes/today.md", <<>>)])
+  let #(after, _) =
+    workspace.perform(original, workspace.DeleteFile("notes/today.md"))
+  let #(_, value) = workspace.perform(after, workspace.ReadDirectory("notes"))
+  assert v.ok(v.LinkedList([])) == value
+}
+
 pub fn append_creates_and_extends_test() {
   let append = fn(workspace, text) {
     workspace.perform(
