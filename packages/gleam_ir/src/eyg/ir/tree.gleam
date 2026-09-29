@@ -259,11 +259,39 @@ pub fn multiply(a, b) {
 }
 
 pub fn get_annotation(node: Node(a)) {
-  fold(node, [], fn(acc, node) { return([node.1, ..acc]) })(list.reverse)
+  walk([node], [], fn(acc, node) { [node.1, ..acc] }) |> list.reverse
 }
 
+/// Plain recursion, so the stack grows with the depth of the tree.
+/// `rewrite_meta` does the same with a stack that grows with its size.
 pub fn map_annotation(in: Node(a), f: fn(a) -> b) -> Node(b) {
-  rewrite_meta(in, fn(m) { return(f(m)) })(fn(x) { x })
+  let #(exp, meta) = in
+  let exp = case exp {
+    Lambda(label, body) -> Lambda(label, map_annotation(body, f))
+    Apply(func, argument) ->
+      Apply(map_annotation(func, f), map_annotation(argument, f))
+    Let(label, definition, body) ->
+      Let(label, map_annotation(definition, f), map_annotation(body, f))
+    Variable(label:) -> Variable(label:)
+    Binary(value:) -> Binary(value:)
+    Integer(value:) -> Integer(value:)
+    String(value:) -> String(value:)
+    Tail -> Tail
+    Cons -> Cons
+    Vacant -> Vacant
+    Empty -> Empty
+    Extend(label:) -> Extend(label:)
+    Select(label:) -> Select(label:)
+    Overwrite(label:) -> Overwrite(label:)
+    Tag(label:) -> Tag(label:)
+    Case(label:) -> Case(label:)
+    NoCases -> NoCases
+    Perform(label:) -> Perform(label:)
+    Handle(label:) -> Handle(label:)
+    Builtin(identifier:) -> Builtin(identifier:)
+    Reference(reference:) -> Reference(reference:)
+  }
+  #(exp, f(meta))
 }
 
 pub fn clear_annotation(source) {
@@ -272,24 +300,32 @@ pub fn clear_annotation(source) {
 
 pub fn list_builtins(node: Node(a)) {
   {
-    use acc, #(exp, _meta) <- fold(node, [])
+    use acc, #(exp, _meta) <- walk([node], [])
     case exp {
       Builtin(i) -> utils.push_new(acc, i)
       _ -> acc
     }
-    |> return
-  }(list.reverse)
+  }
+  |> list.reverse
 }
 
 pub fn list_references(node: Node(a)) -> List(Reference) {
   {
-    use acc, #(exp, _meta) <- fold(node, [])
+    use acc, #(exp, _meta) <- walk([node], [])
     case exp {
       Reference(reference) -> utils.push_new(acc, reference)
       _ -> acc
     }
-    |> return
-  }(list.reverse)
+  }
+  |> list.reverse
+}
+
+// The same order as `fold`, in a loop rather than a chain of continuations.
+fn walk(nodes: List(Node(a)), acc: b, f: fn(b, Node(a)) -> b) -> b {
+  case nodes {
+    [] -> acc
+    [node, ..rest] -> walk(list.append(children(node), rest), f(acc, node), f)
+  }
 }
 
 /// The variables that are free in this expressions.
