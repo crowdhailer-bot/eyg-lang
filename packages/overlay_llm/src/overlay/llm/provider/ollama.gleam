@@ -113,13 +113,9 @@ pub fn tool_encode(tool) {
 pub fn completion_chunk_parse(remaining: BitArray, chunk: BitArray) {
   let assert Ok(buffer) = bit_array.to_string(<<remaining:bits, chunk:bits>>)
   let #(lines, remaining) = stringx.chunk_lines(buffer)
-  let assert Ok(completion) =
-    list.try_map(lines, fn(line) {
-      case json.parse(line, event_decoder()) {
-        Ok(event) -> Ok(event)
-        Error(_reason) -> Error(Nil)
-      }
-    })
+  // A blank line, or an error page from something in between, is not an event.
+  let completion =
+    list.filter_map(lines, fn(line) { json.parse(line, event_decoder()) })
   #(completion, <<remaining:utf8>>)
 }
 
