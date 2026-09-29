@@ -45,6 +45,23 @@ pub fn with_effects(context: Context, effects) {
   })
 }
 
+/// Put a variable in scope, a generic type is instantiated wherever it is used.
+pub fn with_variable(
+  context: Context,
+  label: String,
+  type_: binding.Poly,
+) -> Context {
+  Context(..context, env: [#(label, type_), ..context.env])
+}
+
+/// Put variables in scope, the first of any repeated label is the one used.
+pub fn with_variables(
+  context: Context,
+  variables: List(#(String, binding.Poly)),
+) -> Context {
+  Context(..context, env: list.append(variables, context.env))
+}
+
 pub type Analysis(meta) {
   Analysis(
     bindings: Dict(Int, binding.Binding),
