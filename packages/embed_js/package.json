@@ -1,0 +1,10 @@
+{
+  "name": "eyg-embed-js",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "gleam build && bun build build/dev/javascript/embed_js/eyg.mjs --outfile dist/eyg.mjs --format esm && cp eyg.d.ts dist/eyg.d.ts && cp eyg.d.ts dist/eyg.d.mts",
+    "test": "gleam test --runtime bun && bun run build && bun test ./test_js"
+  }
+}
