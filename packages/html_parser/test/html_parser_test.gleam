@@ -177,6 +177,22 @@ pub fn get_attrs_test() {
       [html_parser.Attribute("a", "b"), html_parser.Attribute("c", "d")],
       " \n</div>",
     )),
+    #("single quoted attr", "a='say \"hi\"'>", #(
+      [html_parser.Attribute("a", "say \"hi\"")],
+      "",
+    )),
+    #("unquoted attr", "a=b c=d>", #(
+      [html_parser.Attribute("a", "b"), html_parser.Attribute("c", "d")],
+      "",
+    )),
+    #("attr without a value", "disabled a=\"b\">", #(
+      [html_parser.Attribute("disabled", ""), html_parser.Attribute("a", "b")],
+      "",
+    )),
+    #("closing bracket in quoted attr", "a=\"1 > 0\">rest", #(
+      [html_parser.Attribute("a", "1 > 0")],
+      "rest",
+    )),
   ]
 
   list.each(tests, fn(testcase) {

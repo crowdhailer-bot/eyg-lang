@@ -84,59 +84,76 @@ fn do_get_first_element(
   }
 }
 
-type AttrState {
-  ReadingKey
-  AfterEquals
-  ValueInsideQuotes
-  AfterValue
-}
-
 /// get the attributes for a StartElement and remaining String
 pub fn get_attrs(in: String) -> #(List(Attribute), String) {
-  in
-  |> trim_space_to_elem_begin
-  |> do_get_attrs("", "", ReadingKey)
+  do_get_attrs(in, [])
 }
 
+// Attribute values may be double quoted, single quoted or unquoted,
+// an attribute without a value has an empty value.
 fn do_get_attrs(
   in: String,
-  key: String,
-  val: String,
-  state: AttrState,
+  attrs: List(Attribute),
 ) -> #(List(Attribute), String) {
-  case in {
-    "" | ">" ->
-      case key, val {
-        "", "" -> #([], "")
-        _, "" -> #([], key)
-        _, _ -> #([Attribute(key, val)], "")
+  case skip_space(in) {
+    "" -> #(list.reverse(attrs), "")
+    ">" <> remain -> #(list.reverse(attrs), remain)
+    rest -> {
+      let #(key, remain) = get_key(rest, "")
+      case skip_space(remain) {
+        "=" <> remain -> {
+          let #(value, remain) = get_value(skip_space(remain))
+          do_get_attrs(remain, [Attribute(key, value), ..attrs])
+        }
+        _ -> do_get_attrs(remain, [Attribute(key, ""), ..attrs])
       }
-    ">" <> remain ->
-      case key, val {
-        "", "" -> #([], remain)
-        _, _ -> #([Attribute(key, val)], remain)
-      }
-    " " <> remain | "\n" <> remain | "\t" <> remain
-      if state == ReadingKey || state == AfterEquals
-    -> do_get_attrs(remain, key, val, state)
-    " " <> remain | "\n" <> remain | "\t" <> remain if state == AfterValue -> {
-      let #(attrs, remain_after_attr) = do_get_attrs(remain, "", "", ReadingKey)
-      #([Attribute(key, val), ..attrs], remain_after_attr)
     }
-    "=" <> remain if state == ReadingKey ->
-      do_get_attrs(remain, key, "", AfterEquals)
-    "\"" <> remain if state == AfterEquals ->
-      do_get_attrs(remain, key, val, ValueInsideQuotes)
-    "\"" <> remain if state == ValueInsideQuotes ->
-      do_get_attrs(remain, key, val, AfterValue)
+  }
+}
+
+fn get_key(in: String, key: String) -> #(String, String) {
+  case in {
+    "" | " " <> _ | "\n" <> _ | "\t" <> _ | "\r" <> _ | "=" <> _ | ">" <> _ -> #(
+      key,
+      in,
+    )
     _ -> {
       let assert Ok(#(head, remain)) = string.pop_grapheme(in)
-      case state {
-        ReadingKey -> do_get_attrs(remain, key <> head, "", state)
-        AfterEquals | ValueInsideQuotes | AfterValue ->
-          do_get_attrs(remain, key, val <> head, state)
-      }
+      get_key(remain, key <> head)
     }
+  }
+}
+
+fn get_value(in: String) -> #(String, String) {
+  case in {
+    "\"" <> remain -> until_quote(remain, "\"")
+    "'" <> remain -> until_quote(remain, "'")
+    _ -> unquoted_value(in, "")
+  }
+}
+
+fn until_quote(in: String, quote: String) -> #(String, String) {
+  case string.split_once(in, quote) {
+    Ok(#(value, remain)) -> #(value, remain)
+    Error(Nil) -> #(in, "")
+  }
+}
+
+fn unquoted_value(in: String, value: String) -> #(String, String) {
+  case in {
+    "" | " " <> _ | "\n" <> _ | "\t" <> _ | "\r" <> _ | ">" <> _ -> #(value, in)
+    _ -> {
+      let assert Ok(#(head, remain)) = string.pop_grapheme(in)
+      unquoted_value(remain, value <> head)
+    }
+  }
+}
+
+fn skip_space(in: String) -> String {
+  case in {
+    " " <> remain | "\n" <> remain | "\t" <> remain | "\r" <> remain ->
+      skip_space(remain)
+    _ -> in
   }
 }
 
