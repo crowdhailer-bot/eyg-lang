@@ -262,3 +262,52 @@ let do_handle = (label, handler, m) => {
       ])
   }
 }
+
+/// A module exporting the program and a runner for its effects.
+pub fn render_module(exp: ir.Node(Nil)) -> String {
+  let builtins =
+    ir.list_builtins(exp)
+    |> list.filter(fn(builtin) { builtin != "bind" })
+    |> list.map(render_builtin)
+  let program = "const program = (() => {\n" <> render_body(exp) <> ";\n})()"
+  // njs's own engine supports only a default export.
+  let exports = "export default { program, run, runAsync, Eff }"
+  [effects_runtime, ..list.append(builtins, [program, exports])]
+  |> string.join(";\n")
+  <> ";\n"
+}
+
+const effects_runtime = "function Eff(label, value, k) {
+  this.label = label;
+  this.value = value;
+  this.k = k;
+}
+
+const bind = (m, then) => {
+  if (!(m instanceof Eff)) return then(m);
+  const k = (x) => bind(m.k(x), then);
+  return new Eff(m.label, m.value, k);
+};
+
+const perform = (label) => (value) => new Eff(label, value, (x) => x);
+
+function handler(handlers, label) {
+  if (!Object.hasOwn(handlers, label)) throw new Error(\"no handler for \" + label);
+  return handlers[label];
+}
+
+function run(value, handlers) {
+  let m = value;
+  while (m instanceof Eff) m = m.k(handler(handlers, m.label)(m.value));
+  return m;
+}
+
+async function runAsync(value, handlers) {
+  let m = value;
+  while (m instanceof Eff) {
+    // njs's own engine does not await inside arguments.
+    const reply = await handler(handlers, m.label)(m.value);
+    m = m.k(reply);
+  }
+  return m;
+}"
