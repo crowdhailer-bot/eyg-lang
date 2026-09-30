@@ -6,11 +6,14 @@
 
 import gleam/bit_array
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/result.{try}
 import gleam/string
 import gleam/uri
+import html_parser.{Content, StartElement}
 import overlay/web/artifact.{type Bundle, type File}
 import overlay/web/artifact/css
+import overlay/web/artifact/html
 
 /// Find the file a reference in `from` refers to.
 /// Returns the file and any fragment, e.g. `#icon` for SVG sprites.
@@ -151,6 +154,91 @@ fn do_stylesheet(bundle, source, from, ancestors) {
       }
     }
   })
+}
+
+/// Rewrite an HTML document found in `from` so every file it uses is inline.
+/// The doctype is removed.
+pub fn document(
+  bundle: Bundle,
+  source: String,
+  from: String,
+) -> Result(String, String) {
+  html.rewrite(source, inline_element(bundle, _, from))
+}
+
+fn inline_element(bundle, element, from) {
+  case html.name(element) {
+    "base" -> Ok(None)
+    "link" -> link(bundle, element, from)
+    _ -> {
+      use element <- try(case html.name(element), element {
+        "style", StartElement(children: [Content(css)], ..) -> {
+          use css <- try(stylesheet(bundle, css, from))
+          Ok(StartElement(..element, children: [Content(css)]))
+        }
+        _, _ -> Ok(element)
+      })
+      use element <- try(case html.attribute(element, "style") {
+        Ok(declarations) -> {
+          use css <- try(stylesheet(bundle, declarations, from))
+          Ok(html.set_attribute(element, "style", css))
+        }
+        Error(Nil) -> Ok(element)
+      })
+      use <- guard(
+        result.is_ok(html.attribute(element, "srcset")),
+        "Use a bundled src instead of srcset",
+      )
+      let sources = case html.name(element) {
+        "img" | "script" | "audio" | "video" | "source" | "track" | "input" -> [
+          "src",
+        ]
+        "image" | "use" -> ["href", "xlink:href"]
+        _ -> []
+      }
+      use element <- try(
+        list.try_fold(["poster", ..sources], element, fn(element, name) {
+          inline_attribute(bundle, element, name, from)
+        }),
+      )
+      // Integrity and CORS settings do not apply to inline data.
+      case sources, html.attribute(element, "src") {
+        ["src"], Ok(_) ->
+          element
+          |> html.remove_attribute("integrity")
+          |> html.remove_attribute("crossorigin")
+        _, _ -> element
+      }
+      |> Some
+      |> Ok
+    }
+  }
+}
+
+fn inline_attribute(bundle, element, name, from) {
+  case html.attribute(element, name) {
+    Ok(reference) -> {
+      use location <- try(asset(bundle, reference, from))
+      Ok(html.set_attribute(element, name, location))
+    }
+    Error(Nil) -> Ok(element)
+  }
+}
+
+// Stylesheets are inlined, other links are removed.
+fn link(bundle, element, from) {
+  let rel = html.attribute(element, "rel") |> result.unwrap("")
+  case string.lowercase(string.trim(rel)) {
+    "stylesheet" -> {
+      let href = html.attribute(element, "href") |> result.unwrap("")
+      use #(file, _fragment) <- try(resolve(bundle, href, from))
+      use source <- try(text(file))
+      use css <- try(stylesheet(bundle, source, file.path))
+      let href = text_data_url("text/css", css)
+      Ok(Some(html.set_attribute(element, "href", href)))
+    }
+    _ -> Ok(None)
+  }
 }
 
 pub fn text(file: File) -> Result(String, String) {

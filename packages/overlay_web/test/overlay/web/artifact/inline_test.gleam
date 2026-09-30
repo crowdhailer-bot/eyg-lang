@@ -107,3 +107,29 @@ pub fn circular_imports_are_rejected_test() {
   assert inline.stylesheet(bundle(), "@import 'loop/a.css';", "index.html")
     == Error("Circular CSS import: loop/a.css")
 }
+
+pub fn document_inlines_references_test() {
+  let assert Ok(output) =
+    inline.document(
+      bundle(),
+      "<!doctype html><base href=\"https://example.com/\"><link rel=icon href=x.ico><link rel=\"stylesheet\" href=\"css/nested.css\"><style>p{background:url(icon.svg)}</style><img src=\"icon.svg\" integrity=\"sha-x\" style=\"background:url(icon.svg)\">",
+      "index.html",
+    )
+  let assert "<link rel=\"stylesheet\" href=\"data:text/css;" <> rest = output
+  let assert Ok(#(_, rest)) = string.split_once(rest, "\">")
+  let assert "<style>p{background:url(\"data:image/svg+xml;" <> rest = rest
+  let assert Ok(#(_, rest)) = string.split_once(rest, "</style>")
+  let assert "<img src=\"data:image/svg+xml;" <> rest = rest
+  assert !string.contains(rest, "integrity")
+  assert string.contains(
+    rest,
+    "style=\"background:url(&quot;data:image/svg+xml;",
+  )
+}
+
+pub fn document_rejects_srcset_and_missing_files_test() {
+  assert inline.document(bundle(), "<img srcset=\"a.png 2x\">", "index.html")
+    == Error("Use a bundled src instead of srcset")
+  assert inline.document(bundle(), "<img src=\"secret.png\">", "index.html")
+    == Error("Missing bundle file: secret.png")
+}
