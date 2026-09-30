@@ -29,7 +29,7 @@ ogre = ">= 1.1.0 and < 2.0.0"
 pal = { path = "../pal" }
 # pamphlet = ">= 1.0.0 and < 2.0.0"
 pamphlet = { git = "https://github.com/crowdhailer/pamphlet", ref = "750623b" }
-plinth = ">= 0.10.2 and < 1.0.0"
+plinth = { git = "https://github.com/crowdhailer/plinth", ref = "ba246f2" }
 simplifile = ">= 2.4.0 and < 3.0.0"
 snag = ">= 1.2.0 and < 2.0.0"
 spotless = ">= 7.0.0 and < 8.0.0"
