@@ -1,0 +1,18 @@
+{
+  "name": "todomvc-eyg",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "todomvc-app-css": "^2.4.3"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0",
+    "vite": "^8.1.5",
+    "vite-gleam": "^1.7.1"
+  }
+}
