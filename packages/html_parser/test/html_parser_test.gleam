@@ -84,6 +84,10 @@ pub fn get_first_element_test() {
       html_parser.Content("hello"),
       "</div>",
     )),
+    #("with angle brackets in content", "1 < 2 > 0<div>", #(
+      html_parser.Content("1 < 2 > 0"),
+      "<div>",
+    )),
     #("div", "<div>", #(html_parser.StartElement("div", [], []), "")),
     #("end div", "</div>", #(html_parser.EndElement("div"), "")),
     #("end div with leading spaces", "     </div>", #(

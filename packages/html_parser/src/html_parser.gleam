@@ -54,15 +54,14 @@ fn do_get_first_element(
   currently_parsing: CurrentElementType,
 ) -> #(Element, String) {
   case in {
-    "</" <> remain ->
-      case out {
-        "" -> do_get_first_element(remain, out, End)
-        _ -> #(Content(out), "</" <> remain)
-      }
+    ">" <> remain if currently_parsing == None ->
+      do_get_first_element(remain, out <> ">", None)
     "<" <> remain ->
-      case out {
-        "" -> do_get_first_element(remain, out, Start)
-        _ -> #(Content(out), "<" <> remain)
+      case currently_parsing == None && !starts_tag(remain), out, remain {
+        True, _, _ -> do_get_first_element(remain, out <> "<", None)
+        False, "", "/" <> remain -> do_get_first_element(remain, out, End)
+        False, "", _ -> do_get_first_element(remain, out, Start)
+        False, _, _ -> #(Content(out), "<" <> remain)
       }
     "/>" <> remain if currently_parsing == Start ->
       start_element(out, [], True, remain)
@@ -83,6 +82,26 @@ fn do_get_first_element(
       let assert Ok(#(head, remain)) = string.pop_grapheme(in)
       do_get_first_element(remain, out <> head, currently_parsing)
     }
+  }
+}
+
+// A < that is not followed by a tag name is text.
+fn starts_tag(in: String) -> Bool {
+  case in {
+    "/" <> in -> starts_with_letter(in)
+    "!" <> _ | "?" <> _ -> True
+    _ -> starts_with_letter(in)
+  }
+}
+
+fn starts_with_letter(in: String) -> Bool {
+  case string.pop_grapheme(in) {
+    Ok(#(letter, _)) ->
+      string.contains(
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        letter,
+      )
+    Error(Nil) -> False
   }
 }
 
