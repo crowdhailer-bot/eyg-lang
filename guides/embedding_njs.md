@@ -132,15 +132,16 @@ With `js_engine njs` the answers are the same.
 ## What had to change
 
 The first version of this example compiled with `to_js`, which is what `eyg compile` on the command line still produces.
-The JavaScript was compatible with njs, and the rough edges were all in the compiler. Each is fixed on the way to `to_module`:
+The JavaScript was compatible with njs, and the rough edges were in the compiler:
 
-- String literals were escaped for HTML, `"a<b"` compiled to `"a&lt;b"`, and a newline broke the script. They are escaped for JavaScript.
-- `!string_starts_with` and `!string_ends_with` compiled to `Ok(rest)`, where the interpreter, the types and the spec say `True` or `False`. They agree now.
-- Record overwrite compiled to object spread, which njs's own engine rejects. It compiles to `Object.assign`.
-- The output was a script that ended by running the program with the compiler's own browser effects, and the glue relied on a variable the compiler happened to name `program`. Now it is a module, and the host passes its handlers.
+- The output was a script that ended by running the program with the compiler's own browser effects, and the glue relied on a variable the compiler happened to name `program`.
+  `to_module` makes it a module, and the host passes its handlers, synchronous or not.
 - Ill typed programs were compiled. `to_module` refuses them.
 - njs's own engine does not allow named exports, or `await` inside a call's arguments, so the module avoids both.
+- String literals were escaped for HTML, and `!string_starts_with` and `!string_ends_with` returned `Ok(rest)` where the spec says `True` or `False`.
+  The `spec-compiler` branch fixes these, and runs the shared spec against the compiler; this handler uses none of them.
+- Record overwrite compiles to object spread, which njs's own engine rejects. The example configures QuickJS, and this handler does not overwrite a record, so it runs on both.
 
-Still open: builtins such as `!equal`, `!fix` and `!string_split` compile to a function that throws, and the published `eyg_compiler` on hex depends on `eyg_ir` 1.x, so the example depends on the repository by path.
+Still open: the published `eyg_compiler` on hex depends on `eyg_ir` 1.x, so the example depends on the repository by path.
 
 The handler is tested by compiling it and running the module under Bun with the same handlers, in `test/njs_test.gleam`.
