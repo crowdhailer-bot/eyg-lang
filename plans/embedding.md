@@ -83,3 +83,16 @@ Publishing it to npm is a release decision; building it is not.
   but the page also streams, fetches contexts from the hub and asks for providers, and is a change to a product rather than a library.
 - **Type errors that say which side was expected**, for records and effects with an unexpected field.
 - **`eyg check` fetching references** like `eyg eval` does.
+
+## Status
+
+On the `embedable` branch, on top of main's block and CORS fixes:
+
+- Easy wins 2, 4 and 5, each with a test that failed before it. The compiler fixes are left to `spec-compiler`.
+- `eyg_embed`, in `packages/gleam_embed`: `run`, `shell`, `json`, `agent` and `browser`.
+- `cache.load` in `gleam_hub`.
+- `compiler.to_module` in `eyg_compiler`.
+- `dist/eyg.mjs`, built by `packages/embed_js`. Its `runAsync` loads the packages a piece of code refers to before running it,
+  which the Gleam shell leaves to the host.
+
+The examples are built on these in the `embedable-examples` branch.
