@@ -2,6 +2,8 @@
 //// It might make sense to implement a version of the effect interface built on this
 
 import gleam/bit_array
+import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/fetch
 import gleam/fetchx
 import gleam/http/request
@@ -20,12 +22,16 @@ import ogre/origin
 import plinth/browser/clipboard
 import plinth/browser/crypto
 import plinth/browser/crypto/subtle
+import plinth/browser/document
+import plinth/browser/element
 import plinth/browser/file
 import plinth/browser/file_system
 import plinth/browser/location
+import plinth/browser/message_event
 import plinth/browser/web_storage
 import plinth/browser/window
 import plinth/browser/window_proxy
+import plinth/javascript/date
 import spotless
 import spotless/oauth_2_1
 import spotless/oauth_2_1/authorization
@@ -84,6 +90,21 @@ pub type Effect(m) {
     reader: Reader,
     resume: fn(Result(Option(BitArray), fetch.FetchError)) -> Effect(m),
   )
+  /// Send `message` to the window of an iframe in this document and wait for its reply.
+  ///
+  /// The iframe is the first element matching `selector`. Its window receives
+  /// `{id, request}` and replies by posting `{id, reply}` to this window,
+  /// the id is random so only a window that received the request can reply.
+  ///
+  /// A frame that is still loading misses messages, so the request is sent again
+  /// with increasing delay until a reply arrives or `timeout` milliseconds pass.
+  /// Every copy has the same id, a frame should act once for each id.
+  RequestFrame(
+    selector: String,
+    message: Json,
+    timeout: Int,
+    resume: fn(Result(Dynamic, String)) -> Effect(m),
+  )
   SaveFile(
     handle: file_system.DirectoryHandle,
     filename: String,
@@ -140,6 +161,8 @@ pub fn then(effect: Effect(a), func: fn(a) -> Effect(b)) -> Effect(b) {
       PostMessage(target, payload, fn(x) { then(resume(x), func) })
     Prompt(question, resume) ->
       Prompt(question, fn(x) { then(resume(x), func) })
+    RequestFrame(selector, message, timeout, resume) ->
+      RequestFrame(selector, message, timeout, fn(x) { then(resume(x), func) })
     ReadFromClipboard(resume) ->
       ReadFromClipboard(fn(x) { then(resume(x), func) })
     ReadChunk(reader, resume) ->
@@ -261,6 +284,10 @@ pub fn run(effect: Effect(m)) -> Promise(m) {
 
     PostMessage(target:, payload:, resume:) ->
       run(resume(window_proxy.post_message(target, payload, "*")))
+    RequestFrame(selector:, message:, timeout:, resume:) -> {
+      use reply <- promise.await(request_frame(selector, message, timeout))
+      run(resume(reply))
+    }
     ReadChunk(reader, resume) -> {
       use result <- promise.await(reader())
       run(resume(result))
@@ -295,6 +322,71 @@ pub fn run(effect: Effect(m)) -> Promise(m) {
       run(resume(result))
     }
   }
+}
+
+fn request_frame(selector, message, timeout) {
+  let deadline = date.get_time(date.now()) + timeout
+  let id = request_id()
+  let reply =
+    promise.new(fn(resolve) {
+      // plinth cannot remove a window listener, after the reply it does nothing.
+      window.add_event_listener("message", fn(event) {
+        case decode.run(message_event.data(event), reply_decoder(id)) {
+          Ok(reply) -> resolve(Ok(reply))
+          Error(_) -> Nil
+        }
+      })
+    })
+  let message = json.object([#("id", json.string(id)), #("request", message)])
+  send_request(selector, message, reply, deadline, 50)
+}
+
+fn reply_decoder(id) {
+  use received <- decode.field("id", decode.string)
+  use reply <- decode.field("reply", decode.dynamic)
+  case received == id {
+    True -> decode.success(reply)
+    False -> decode.failure(reply, "reply")
+  }
+}
+
+fn send_request(selector, message, reply, deadline, delay) {
+  case frame(selector) {
+    Ok(target) -> window_proxy.post_message(target, message, "*")
+    Error(Nil) -> Nil
+  }
+  let remaining = deadline - date.get_time(date.now())
+  case remaining > 0 {
+    False -> promise.resolve(Error("No reply from frame " <> selector))
+    True -> {
+      let waiting =
+        promise.wait(int.min(delay, remaining))
+        |> promise.map(fn(_) { Error(Nil) })
+      use result <- promise.await(promise.race_list([waiting, reply]))
+      case result {
+        Ok(reply) -> promise.resolve(Ok(reply))
+        Error(Nil) ->
+          send_request(
+            selector,
+            message,
+            reply,
+            deadline,
+            int.min(delay * 2, 1000),
+          )
+      }
+    }
+  }
+}
+
+fn frame(selector) {
+  use iframe <- result.try(document.query_selector(selector))
+  element.content_window(iframe)
+}
+
+fn request_id() {
+  let assert Ok(crypto) = window.crypto(window.self())
+  let assert Ok(bytes) = crypto.get_random_values(crypto, 16)
+  bit_array.base16_encode(bytes)
 }
 
 fn get_storage_item(
