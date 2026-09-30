@@ -87,15 +87,44 @@ fn do_get_first_element(
 }
 
 // A self-closing tag, like `<br/>`, is followed by its EndElement.
+// The contents of script and style elements are text up to their end tag,
+// and are the only child of the StartElement.
 fn start_element(
   name: String,
   attrs: List(Attribute),
   self_closing: Bool,
   remain: String,
 ) -> #(Element, String) {
-  case self_closing {
-    True -> #(StartElement(name, attrs, []), "</" <> name <> ">" <> remain)
-    False -> #(StartElement(name, attrs, []), remain)
+  case self_closing, string.lowercase(name) {
+    True, _ -> #(StartElement(name, attrs, []), "</" <> name <> ">" <> remain)
+    False, "script" as raw | False, "style" as raw -> {
+      let #(text, remain) = raw_text(remain, raw, "")
+      let children = case text {
+        "" -> []
+        _ -> [Content(text)]
+      }
+      #(StartElement(name, attrs, children), remain)
+    }
+    False, _ -> #(StartElement(name, attrs, []), remain)
+  }
+}
+
+fn raw_text(in: String, name: String, text: String) -> #(String, String) {
+  case string.split_once(in, "</") {
+    Error(Nil) -> #(text <> in, "")
+    Ok(#(before, after)) -> {
+      let length = string.length(name)
+      let is_end =
+        string.lowercase(string.slice(after, 0, length)) == name
+        && case string.slice(after, length, 1) {
+          "" | ">" | "/" | " " | "\n" | "\t" | "\r" -> True
+          _ -> False
+        }
+      case is_end {
+        True -> #(text <> before, "</" <> after)
+        False -> raw_text(after, name, text <> before <> "</")
+      }
+    }
   }
 }
 

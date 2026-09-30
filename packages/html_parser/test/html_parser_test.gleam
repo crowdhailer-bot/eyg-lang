@@ -146,6 +146,20 @@ pub fn get_first_element_test() {
       html_parser.StartElement("path", [html_parser.Attribute("d", "M0 0")], []),
       "</path>rest",
     )),
+    #("script contents", "<script>if (a<b) {}</script>", #(
+      html_parser.StartElement("script", [], [
+        html_parser.Content("if (a<b) {}"),
+      ]),
+      "</script>",
+    )),
+    #("style contents", "<style>p > a {}</b></STYLE >", #(
+      html_parser.StartElement("style", [], [html_parser.Content("p > a {}</b>")]),
+      "</STYLE >",
+    )),
+    #("empty script", "<script src=\"a.js\"></script>", #(
+      html_parser.StartElement("script", [html_parser.Attribute("src", "a.js")], []),
+      "</script>",
+    )),
   ]
 
   list.each(tests, fn(testcase) {
