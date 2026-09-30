@@ -59,3 +59,27 @@ fn monadic(node: tree.Node(Bool)) -> tree.Node(Bool) {
     _ -> #(exp, meta)
   }
 }
+
+/// Compile a program to an ES module, refusing one that does not type check.
+///
+/// The module's default export holds `program`, the program's value, and `run`
+/// and `runAsync` for the host to answer the effects it performs, with a
+/// handler for each label: `run(program, {Log: (message) => {}})`. A handler
+/// for `runAsync` may return a promise. A program that is a function is called
+/// by the host and what it returns is run.
+pub fn to_module(program, refs) {
+  let analysis = j.check_with_references(j.unpure(), refs, program)
+  case j.all_errors(analysis) {
+    [] ->
+      program
+      |> infer_purity(refs)
+      |> ir.alpha
+      |> ir.k()
+      |> ir.unnest
+      |> monadic()
+      |> tree.clear_annotation()
+      |> js.render_module()
+      |> Ok
+    errors -> Error(errors)
+  }
+}
