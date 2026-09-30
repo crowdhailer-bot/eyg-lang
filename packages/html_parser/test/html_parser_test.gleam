@@ -138,6 +138,14 @@ pub fn get_first_element_test() {
         "",
       ),
     ),
+    #("self-closing", "<br/>", #(
+      html_parser.StartElement("br", [], []),
+      "</br>",
+    )),
+    #("self-closing with attribute", "<path d=\"M0 0\" />rest", #(
+      html_parser.StartElement("path", [html_parser.Attribute("d", "M0 0")], []),
+      "</path>rest",
+    )),
   ]
 
   list.each(tests, fn(testcase) {

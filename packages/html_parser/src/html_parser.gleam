@@ -64,17 +64,19 @@ fn do_get_first_element(
         "" -> do_get_first_element(remain, out, Start)
         _ -> #(Content(out), "<" <> remain)
       }
+    "/>" <> remain if currently_parsing == Start ->
+      start_element(out, [], True, remain)
     ">" <> remain ->
       case currently_parsing {
-        Start -> #(StartElement(out, [], []), remain)
+        Start -> start_element(out, [], False, remain)
         End -> #(EndElement(out), remain)
         None -> #(Content(out), remain)
       }
     " " <> remain | "\n" <> remain | "\t" <> remain
       if currently_parsing == Start
     -> {
-      let #(attrs, remain_after_attr) = get_attrs(remain)
-      #(StartElement(out, attrs, []), remain_after_attr)
+      let #(attrs, self_closing, remain_after_attr) = do_get_attrs(remain, [])
+      start_element(out, attrs, self_closing, remain_after_attr)
     }
     "" -> #(EmptyElement, "")
     _ -> {
@@ -84,9 +86,23 @@ fn do_get_first_element(
   }
 }
 
+// A self-closing tag, like `<br/>`, is followed by its EndElement.
+fn start_element(
+  name: String,
+  attrs: List(Attribute),
+  self_closing: Bool,
+  remain: String,
+) -> #(Element, String) {
+  case self_closing {
+    True -> #(StartElement(name, attrs, []), "</" <> name <> ">" <> remain)
+    False -> #(StartElement(name, attrs, []), remain)
+  }
+}
+
 /// get the attributes for a StartElement and remaining String
 pub fn get_attrs(in: String) -> #(List(Attribute), String) {
-  do_get_attrs(in, [])
+  let #(attrs, _self_closing, remain) = do_get_attrs(in, [])
+  #(attrs, remain)
 }
 
 // Attribute values may be double quoted, single quoted or unquoted,
@@ -94,10 +110,12 @@ pub fn get_attrs(in: String) -> #(List(Attribute), String) {
 fn do_get_attrs(
   in: String,
   attrs: List(Attribute),
-) -> #(List(Attribute), String) {
+) -> #(List(Attribute), Bool, String) {
   case skip_space(in) {
-    "" -> #(list.reverse(attrs), "")
-    ">" <> remain -> #(list.reverse(attrs), remain)
+    "" -> #(list.reverse(attrs), False, "")
+    ">" <> remain -> #(list.reverse(attrs), False, remain)
+    "/>" <> remain -> #(list.reverse(attrs), True, remain)
+    "/" <> remain -> do_get_attrs(remain, attrs)
     rest -> {
       let #(key, remain) = get_key(rest, "")
       case skip_space(remain) {
@@ -113,10 +131,14 @@ fn do_get_attrs(
 
 fn get_key(in: String, key: String) -> #(String, String) {
   case in {
-    "" | " " <> _ | "\n" <> _ | "\t" <> _ | "\r" <> _ | "=" <> _ | ">" <> _ -> #(
-      key,
-      in,
-    )
+    ""
+    | " " <> _
+    | "\n" <> _
+    | "\t" <> _
+    | "\r" <> _
+    | "=" <> _
+    | ">" <> _
+    | "/" <> _ -> #(key, in)
     _ -> {
       let assert Ok(#(head, remain)) = string.pop_grapheme(in)
       get_key(remain, key <> head)
