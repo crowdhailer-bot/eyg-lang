@@ -96,6 +96,7 @@ A sensible reason could be to create a runtime with a unique set of effects, i.e
 Another reason could be to imagine your own syntax, or even visual editor, and reuse the EYG interpreter and packages.
 
 - [spec](./spec) A JSON spec of all evaluation rules. Compiler and interpreter implementations should use this as their test suite.
+- [ash_eyg](./packages/ash_eyg/) Expose Ash domains to EYG scripts as typed effects. (Unpublished)
 - [eyg_beam](./packages/eyg_beam/) Check and run EYG programs from Erlang and Elixir hosts. (Unpublished)
 - [gleam_analysis](./packages/gleam_analysis/) Type inference for expressions, effects and scope variables in EYG programs.
 - [gleam_cli](./packages/gleam_cli/) The CLI for running EYG programs and interacting with the EYG hub.
