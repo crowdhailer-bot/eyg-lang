@@ -28,10 +28,10 @@ Tasks:
       - [x] Press enter or click submit to send the messages
   - [x] create the same video of scripts and effects in this application
   - [x] Write a blog post about embedding EYG in an Elixir program, include the video
-- [ ] Create a package in this repo called ash_eyg
-  - [ ] Implement The automatic creation of EYG effects from Ash constructs in the same way as for ash_lua
-  - [ ] Show how to add just some of the effects to a eyg execution environment
-  - [ ] Create a standard getting started ash project and show how to set up EYG to access the first domains and resources
-  - [ ] Review and simplify the ash_eyg package
-  - [ ] Create a video of setting up the project and installing EYG
-  - [ ] Write a blog post about how to use EYG in Ash, be super focused on the technical steps
+- [x] Create a package in this repo called ash_eyg
+  - [x] Implement The automatic creation of EYG effects from Ash constructs in the same way as for ash_lua
+  - [x] Show how to add just some of the effects to a eyg execution environment
+  - [x] Create a standard getting started ash project and show how to set up EYG to access the first domains and resources
+  - [x] Review and simplify the ash_eyg package
+  - [x] Create a video of setting up the project and installing EYG
+  - [x] Write a blog post about how to use EYG in Ash, be super focused on the technical steps
