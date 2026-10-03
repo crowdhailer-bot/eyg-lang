@@ -12,7 +12,7 @@ This post adds it to the project from the Ash [getting started guide](https://he
 The finished project is [`examples/helpdesk`](../../examples/helpdesk).
 The video sets EYG up in a shell, then runs scripts from AshAdmin.
 
-<video src="demo.mp4" controls width="100%"></video>
+<video src="../../examples/helpdesk/video/ash-eyg.mp4" controls width="100%"></video>
 
 ## 1. Add the dependency
 
@@ -30,8 +30,8 @@ end
 mix deps.get
 ```
 
-`ash_eyg` depends on `eyg_beam`, the EYG parser, type checker and interpreter compiled from Gleam.
-Mix builds it with `make`, so `gleam` must be on your path.
+The EYG parser, type checker, interpreter and hub client are Gleam packages that are not published for Erlang.
+`ash_eyg` lists them in its own `gleam/gleam.toml`, and a compiler in its `mix.exs` builds them and copies their modules into `ash_eyg`, so `gleam` must be on your path.
 
 ## 2. Expose the domain and resources
 
@@ -110,6 +110,12 @@ Ok(
 )
 ```
 
+Packages a script refers to are fetched from the [hub](https://eyg.run), nothing is preloaded.
+
+```sh
+mix ash_eyg.run -e '@standard.list.map(["Printer on fire"], (s) -> { perform SupportTicketOpen({subject: s}) })'
+```
+
 The tasks give a script every effect and no actor.
 `mix ash_eyg.check` type checks without running.
 
@@ -127,14 +133,28 @@ hint: check the expression matches the expected type
 
 ## 5. Run scripts from your application
 
+Add a session to the supervision tree, it owns the cache of packages that scripts refer to.
+
+```elixir
+# lib/helpdesk/application.ex
+children = [
+  {Phoenix.PubSub, name: Helpdesk.PubSub},
+  {AshEyg.Session, name: Helpdesk.Scripts},
+  HelpdeskWeb.Endpoint
+]
+```
+
 ```elixir
 effects = AshEyg.effects(otp_app: :helpdesk)
 
-case AshEyg.run(source, effects: effects, actor: current_user) do
+case AshEyg.Session.run(Helpdesk.Scripts, source, effects: effects, actor: current_user) do
   {:ok, value} -> AshEyg.inspect(value)
   {:error, message} -> message
 end
 ```
+
+The first script that uses `@standard` fetches it, the session keeps it for later scripts.
+Without a session, `AshEyg.run/3` takes a cache and returns `{result, cache}`, on success and on error, for the caller to keep.
 
 `actor`, `tenant` and `context` are passed to every action, so your policies apply.
 Scripts cannot read or change them.
@@ -150,7 +170,8 @@ defmodule Helpdesk.Triage do
     |> Enum.filter(&(&1.action in [:read, :assign]))
   end
 
-  def run(source, actor), do: AshEyg.run(source, effects: effects(), actor: actor)
+  def run(source, actor),
+    do: AshEyg.Session.run(Helpdesk.Scripts, source, effects: effects(), actor: actor)
 end
 ```
 
@@ -193,7 +214,7 @@ log =
     {:record, %{}}
   end)
 
-AshEyg.run(source, effects: [log | Helpdesk.Triage.effects()])
+AshEyg.Session.run(Helpdesk.Scripts, source, effects: [log | Helpdesk.Triage.effects()])
 ```
 
 ## 8. Run scripts from AshAdmin
@@ -215,9 +236,7 @@ defmodule Helpdesk.Scripting.Script do
     action :run, :string do
       argument :source, :string, allow_nil?: false
 
-      run {AshEyg.RunScript,
-           otp_app: :helpdesk,
-           packages: %{"standard" => Application.compile_env!(:helpdesk, :standard_library)}}
+      run {AshEyg.RunScript, otp_app: :helpdesk, session: Helpdesk.Scripts}
     end
   end
 end
@@ -225,7 +244,7 @@ end
 
 `AshEyg.RunScript` runs the script as the actor chosen in AshAdmin and returns its value as EYG.
 A type error is an invalid `source` argument, so AshAdmin shows it under the box.
-The `packages` option makes `@standard` available, loaded once from its IR JSON.
+The `session` option keeps packages such as `@standard` once they are fetched.
 
 ```eyg
 let subjects = ["Printer on fire", "Mouse will not click", "Coffee machine is empty"]
