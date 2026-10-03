@@ -136,14 +136,14 @@ defmodule AshEyg.Type do
   defp tag(atom), do: atom |> Atom.to_string() |> Macro.camelize()
 
   @doc "The type of a record with these fields."
-  def record(fields), do: :eyg_beam.record_type(fields)
+  def record(fields), do: :eyg@analysis@type_@isomorphic.record(fields)
 
   @doc "The type of a union with these variants."
-  def union(variants), do: :eyg_beam.union_type(variants)
+  def union(variants), do: :eyg@analysis@type_@isomorphic.union(variants)
 
   @doc "The type of a value that may be missing."
   def option(type), do: union([{"Some", type}, {"None", @unit}])
 
   @doc "The type of a result."
-  def result(value, reason), do: :eyg_beam.result_type(value, reason)
+  def result(value, reason), do: :eyg@analysis@type_@isomorphic.result(value, reason)
 end

@@ -134,9 +134,7 @@ defmodule AshEyg.Test.Scripts.Script do
     action :run, :string do
       argument :source, :string, allow_nil?: false
 
-      run {AshEyg.RunScript,
-           otp_app: :ash_eyg,
-           packages: %{"standard" => "../../eyg_packages/standard/index.eyg.json"}}
+      run {AshEyg.RunScript, otp_app: :ash_eyg, session: AshEyg.Test.Scripts.Session}
     end
   end
 end

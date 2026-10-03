@@ -7,16 +7,27 @@ defmodule AshEyg do
 
       effects = AshEyg.effects(otp_app: :helpdesk)
 
-      AshEyg.run(~s|perform SupportTicketOpen({subject: "Printer on fire"})|,
-        effects: effects,
-        actor: current_user
-      )
+      {result, cache} =
+        AshEyg.run(~s|perform SupportTicketOpen({subject: "Printer on fire"})|, AshEyg.empty_cache(),
+          effects: effects,
+          actor: current_user
+        )
+
+  Packages a program refers to, such as `@standard`, are fetched from the hub into the cache.
+  `check/3` and `run/3` return the cache on success and on error, keep it for the next call.
+  `AshEyg.Session` is a process that does this.
 
   The actor, tenant and context are given to every action a program calls.
   A program cannot read or change them.
   """
 
-  alias AshEyg.Effect
+  alias AshEyg.{Effect, Packages}
+
+  @cache :eyg@hub@cache
+  @infer :eyg@analysis@inference@levels_j@contextual
+  @type_debug :eyg@analysis@type_@binding@debug
+  @value_debug :eyg@interpreter@simple_debug
+  @expression :eyg@interpreter@expression
 
   @doc """
   The effects for the actions of exposed resources.
@@ -40,73 +51,111 @@ defmodule AshEyg do
         do: effect
   end
 
-  @doc """
-  Type check a program against the effects.
+  @doc "A cache with no packages."
+  def empty_cache, do: @cache.empty()
 
-  Returns `{:ok, type}` or `{:error, message}` with every error rendered against the source.
+  @doc """
+  Load the packages a program refers to and type check it against the effects.
+
+  Returns `{{:ok, type} | {:error, message}, cache}`, errors are rendered against the source.
 
   ## Options
 
     * `:effects` - required, the effects the program may perform.
-    * `:packages` - a map of name to package for `@name` references, see `:eyg_beam.load_package/1`.
   """
-  def check(source, opts) do
-    :eyg_beam.check(source, signatures(opts), Keyword.get(opts, :packages, %{}))
+  def check(source, cache, opts) do
+    case parse_and_check(source, cache, opts) do
+      {{:ok, {_tree, analysis}}, cache} ->
+        {{:ok, @type_debug.render_type(@infer.type_(analysis))}, cache}
+
+      failed ->
+        failed
+    end
   end
 
   @doc """
-  Type check a program then run it.
+  Check a program then run it.
 
-  Returns `{:ok, value}` where the value is an EYG value, see `inspect/1`, or `{:error, message}`.
+  Returns `{{:ok, value} | {:error, message}, cache}` where the value is an EYG value, see `inspect/1`.
 
   ## Options
 
-  As `check/2`, and
+  As `check/3`, and
 
     * `:actor`, `:tenant`, `:context` - given to every action the program calls.
   """
-  def run(source, opts) do
-    effects = Map.new(Keyword.fetch!(opts, :effects), &{&1.label, &1})
-    ash_opts = Keyword.take(opts, [:actor, :tenant, :context])
+  def run(source, cache, opts) do
+    case parse_and_check(source, cache, opts) do
+      {{:ok, {tree, _analysis}}, cache} ->
+        effects = Map.new(Keyword.fetch!(opts, :effects), &{&1.label, &1})
+        ash_opts = Keyword.take(opts, [:actor, :tenant, :context])
+        {run_step(@expression.execute(tree, []), source, cache, effects, ash_opts), cache}
 
-    handler = fn label, lift ->
-      %Effect{handle: handle} = Map.fetch!(effects, label)
-      handle.(lift, ash_opts)
-    end
-
-    :eyg_beam.run(source, signatures(opts), Keyword.get(opts, :packages, %{}), handler)
-  end
-
-  @doc """
-  Load a package from the path of its IR JSON file, for the `:packages` option.
-
-  Packages are evaluated and type checked once, then cached.
-
-      {:ok, standard} = AshEyg.load_package("eyg_packages/standard/index.eyg.json")
-      AshEyg.run(source, effects: effects, packages: %{"standard" => standard})
-  """
-  def load_package(path) do
-    key = {__MODULE__, :package, Path.expand(path)}
-
-    case :persistent_term.get(key, nil) do
-      nil ->
-        with {:ok, json} <- File.read(path),
-             {:ok, package} <- :eyg_beam.load_package(json) do
-          :persistent_term.put(key, package)
-          {:ok, package}
-        end
-
-      package ->
-        {:ok, package}
+      failed ->
+        failed
     end
   end
 
   @doc "Render an EYG value as EYG source."
-  def inspect(value), do: :eyg_beam.inspect(value)
+  def inspect(value), do: @value_debug.inspect(value)
 
-  defp signatures(opts) do
-    opts
-    |> Keyword.fetch!(:effects)
-    |> Enum.map(&{&1.label, {&1.lift, &1.lower}})
+  # static_loop answers references from the cache, only effects reach the handlers.
+  defp run_step(step, source, cache, effects, ash_opts) do
+    case @cache.static_loop(step, cache, &@expression.resume/3) do
+      {:error, {{:unhandled_effect, label, lift}, _span, env, k}} ->
+        %Effect{handle: handle} = Map.fetch!(effects, label)
+        reply = handle.(lift, ash_opts)
+        run_step(@expression.resume(reply, env, k), source, cache, effects, ash_opts)
+
+      {:error, {reason, span, _env, _k}} ->
+        {:error,
+         :eyg@parser.render_error(
+           @value_debug.describe(reason),
+           @value_debug.hint(reason),
+           source,
+           span
+         )}
+
+      {:ok, value} ->
+        {:ok, value}
+    end
+  end
+
+  defp parse_and_check(source, cache, opts) do
+    case :eyg@parser.all_from_string(source) do
+      {:error, reason} ->
+        {{:error, :eyg@parser.format_error(reason, source)}, cache}
+
+      {:ok, tree} ->
+        case Packages.prepare(tree, cache) do
+          {:ok, loaded} -> {analyse(tree, source, loaded, opts), loaded}
+          # A failed batch was not validated, keep the caller's cache.
+          error -> {error, cache}
+        end
+    end
+  end
+
+  defp analyse(tree, source, cache, opts) do
+    signatures = Enum.map(Keyword.fetch!(opts, :effects), &{&1.label, {&1.lift, &1.lower}})
+    context = @infer.with_effects(@infer.pure(), signatures)
+    analysis = @cache.infer_sync(@infer.check(context, tree), cache)
+
+    case @infer.all_errors(analysis) do
+      [] ->
+        {:ok, {tree, analysis}}
+
+      errors ->
+        errors
+        |> Enum.map(fn {span, reason} ->
+          :eyg@parser.render_error(
+            @type_debug.render_reason(reason),
+            @type_debug.hint(reason),
+            source,
+            span
+          )
+        end)
+        |> Enum.join("\n\n")
+        |> then(&{:error, &1})
+    end
   end
 end

@@ -14,7 +14,10 @@ defmodule Mix.Tasks.AshEyg.Check do
   def run(args) do
     {source, app} = AshEyg.Mix.setup(args)
 
-    case AshEyg.check(source, effects: AshEyg.effects(otp_app: app)) do
+    {result, _cache} =
+      AshEyg.check(source, AshEyg.empty_cache(), effects: AshEyg.effects(otp_app: app))
+
+    case result do
       {:ok, type} -> Mix.shell().info(type)
       {:error, message} -> Mix.raise(message)
     end

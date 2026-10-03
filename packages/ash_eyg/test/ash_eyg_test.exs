@@ -7,10 +7,13 @@ defmodule AshEygTest do
 
   defp effects, do: AshEyg.effects(domains: [AshEyg.Test.Support])
 
+  defp check(source, opts), do: source |> AshEyg.check(AshEyg.empty_cache(), opts) |> elem(0)
+  defp run_once(source, opts), do: source |> AshEyg.run(AshEyg.empty_cache(), opts) |> elem(0)
+
   defp run(source, opts \\ []) do
     opts = Keyword.merge([effects: effects(), actor: @actor], opts)
 
-    case AshEyg.run(source, opts) do
+    case run_once(source, opts) do
       {:ok, value} -> {:ok, AshEyg.inspect(value)}
       {:error, message} -> {:error, message}
     end
@@ -36,7 +39,7 @@ defmodule AshEygTest do
 
   test "inputs are typed from attributes and arguments" do
     assert {:ok, type} =
-             AshEyg.check(~s|perform SupportTicketOpen({subject: "Hi", priority: Some(1)})|,
+             check(~s|perform SupportTicketOpen({subject: "Hi", priority: Some(1)})|,
                effects: effects()
              )
 
@@ -44,7 +47,7 @@ defmodule AshEygTest do
     assert type =~ "status: [Open: {} | Closed: {}]"
 
     assert {:error, message} =
-             AshEyg.check(~s|perform SupportTicketOpen({subject: 1, priority: None({})})|,
+             check(~s|perform SupportTicketOpen({subject: 1, priority: None({})})|,
                effects: effects()
              )
 
@@ -59,13 +62,13 @@ defmodule AshEygTest do
     }
     """
 
-    assert {:error, message} = AshEyg.check(script, effects: effects())
+    assert {:error, message} = check(script, effects: effects())
     assert message =~ "missing row 'secret'"
   end
 
   test "create, update, read and destroy records" do
     assert {:ok, {:tagged, "Ok", {:record, %{"id" => {:string, id}}}}} =
-             AshEyg.run(
+             run_once(
                ~s|perform SupportTicketOpen({subject: "Printer on fire", priority: None({})})|,
                effects: effects(),
                actor: @actor
@@ -91,7 +94,7 @@ defmodule AshEygTest do
     effects = Enum.filter(effects(), &(&1.action == :read))
 
     assert {:error, message} =
-             AshEyg.check(~s|perform SupportTicketOpen({subject: "Hi", priority: None({})})|,
+             check(~s|perform SupportTicketOpen({subject: "Hi", priority: None({})})|,
                effects: effects
              )
 

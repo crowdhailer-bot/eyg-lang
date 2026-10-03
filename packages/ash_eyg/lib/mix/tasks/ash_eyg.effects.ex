@@ -14,8 +14,8 @@ defmodule Mix.Tasks.AshEyg.Effects do
     for effect <- AshEyg.effects(otp_app: Mix.Project.config()[:app]) do
       Mix.shell().info("""
       #{effect.label}
-        lift:  #{indent(:eyg_beam.render_type(effect.lift))}
-        reply: #{indent(:eyg_beam.render_type(effect.lower))}
+        lift:  #{indent(:eyg@analysis@type_@binding@debug.render_type(effect.lift))}
+        reply: #{indent(:eyg@analysis@type_@binding@debug.render_type(effect.lower))}
       """)
     end
   end

@@ -22,3 +22,6 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 ash_eyg-*.tar
 
+
+# Gleam builds the EYG libraries here.
+/gleam/build/

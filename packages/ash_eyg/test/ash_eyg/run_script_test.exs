@@ -1,7 +1,8 @@
 defmodule AshEyg.RunScriptTest do
   # Uses the :ash_domains of the :ash_eyg application, set in config/config.exs
-  use ExUnit.Case, async: true
+  use ExUnit.Case
 
+  import AshEyg.Test.HubFixture
   alias AshEyg.Test.Scripts.Script
 
   defp run(source, actor \\ %{id: "admin"}) do
@@ -16,7 +17,8 @@ defmodule AshEyg.RunScriptTest do
     assert value =~ ~s|subject: "Hi"|
   end
 
-  test "scripts can use packages" do
+  test "scripts can use packages from the hub" do
+    use_fetch(fetch([{"standard", standard()}]))
     assert run("@standard.list.map([1, 2], (x) -> { !int_add(x, 1) })") == {:ok, "[2, 3]"}
   end
 
