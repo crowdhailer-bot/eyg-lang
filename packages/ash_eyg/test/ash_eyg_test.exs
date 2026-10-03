@@ -30,6 +30,10 @@ defmodule AshEygTest do
              ])
   end
 
+  test "domains and resources can be renamed" do
+    assert [%{label: "DeskItemRead"}] = AshEyg.effects(domains: [AshEyg.Test.Named])
+  end
+
   test "inputs are typed from attributes and arguments" do
     assert {:ok, type} =
              AshEyg.check(~s|perform SupportTicketOpen({subject: "Hi", priority: Some(1)})|,

@@ -83,3 +83,36 @@ defmodule AshEyg.Test.Note do
     defaults [:read]
   end
 end
+
+defmodule AshEyg.Test.Named do
+  @moduledoc false
+  use Ash.Domain, extensions: [AshEyg.Domain], validate_config_inclusion?: false
+
+  eyg do
+    name "Desk"
+  end
+
+  resources do
+    resource AshEyg.Test.Named.Thing
+  end
+end
+
+defmodule AshEyg.Test.Named.Thing do
+  @moduledoc false
+  use Ash.Resource,
+    domain: AshEyg.Test.Named,
+    data_layer: Ash.DataLayer.Ets,
+    extensions: [AshEyg.Resource]
+
+  eyg do
+    name "Item"
+  end
+
+  attributes do
+    uuid_primary_key :id
+  end
+
+  actions do
+    defaults [:read]
+  end
+end
