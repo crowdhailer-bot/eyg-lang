@@ -74,3 +74,8 @@ pub fn type_mismatch_names_given_and_expected_types_test() {
     eyg_beam.check("perform Add(\"x\")", effects, dict.new())
   assert string.contains(message, "given: String expected: Integer")
 }
+
+pub fn parse_test() {
+  assert eyg_beam.parse("perform Log(1)") == Ok(Nil)
+  let assert Error(_) = eyg_beam.parse("perform Log(")
+}

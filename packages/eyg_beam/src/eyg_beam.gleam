@@ -59,6 +59,14 @@ pub fn load_package(json: String) -> Result(Package, String) {
   }
 }
 
+/// Parse a program without checking it, useful for checking only complete programs as they are typed.
+pub fn parse(source: String) -> Result(Nil, String) {
+  case parser.all_from_string(source) {
+    Ok(_) -> Ok(Nil)
+    Error(reason) -> Error(parser.format_error(reason, source))
+  }
+}
+
 /// Type check a program, allowing only the host's effects.
 /// Returns the type of the program or every error rendered against the source.
 pub fn check(
