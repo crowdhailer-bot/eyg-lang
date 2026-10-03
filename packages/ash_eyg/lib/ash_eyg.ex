@@ -77,6 +77,30 @@ defmodule AshEyg do
     :eyg_beam.run(source, signatures(opts), Keyword.get(opts, :packages, %{}), handler)
   end
 
+  @doc """
+  Load a package from the path of its IR JSON file, for the `:packages` option.
+
+  Packages are evaluated and type checked once, then cached.
+
+      {:ok, standard} = AshEyg.load_package("eyg_packages/standard/index.eyg.json")
+      AshEyg.run(source, effects: effects, packages: %{"standard" => standard})
+  """
+  def load_package(path) do
+    key = {__MODULE__, :package, Path.expand(path)}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        with {:ok, json} <- File.read(path),
+             {:ok, package} <- :eyg_beam.load_package(json) do
+          :persistent_term.put(key, package)
+          {:ok, package}
+        end
+
+      package ->
+        {:ok, package}
+    end
+  end
+
   @doc "Render an EYG value as EYG source."
   def inspect(value), do: :eyg_beam.inspect(value)
 
