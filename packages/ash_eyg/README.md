@@ -17,7 +17,8 @@ def deps do
 end
 ```
 
-`ash_eyg` depends on [`eyg_beam`](../eyg_beam), building it needs `gleam`.
+Building `ash_eyg` needs `gleam`.
+The EYG libraries are not published for Erlang, so [`gleam/gleam.toml`](gleam/gleam.toml) lists them and a compiler in [`mix.exs`](mix.exs) builds them and copies their modules into `ash_eyg`.
 
 Add `AshEyg.Domain` to a domain and `AshEyg.Resource` to the resources scripts can use.
 
@@ -58,11 +59,17 @@ mix ash_eyg.effects
 
 ## Running scripts
 
+Add a session to your supervision tree, it owns the cache of packages scripts refer to.
+
+```elixir
+children = [{AshEyg.Session, name: Helpdesk.Scripts}]
+```
+
 ```elixir
 effects = AshEyg.effects(otp_app: :helpdesk)
 
 {:ok, value} =
-  AshEyg.run(~s|perform SupportTicketOpen({subject: "Printer on fire"})|,
+  AshEyg.Session.run(Helpdesk.Scripts, ~s|perform SupportTicketOpen({subject: "Printer on fire"})|,
     effects: effects,
     actor: current_user
   )
@@ -71,8 +78,22 @@ AshEyg.inspect(value)
 # Ok({id: "...", subject: "Printer on fire", status: Open({})})
 ```
 
-`AshEyg.check/2` type checks without running, errors are rendered against the source.
+`AshEyg.Session.check/3` type checks without running, errors are rendered against the source.
 From the command line use `mix ash_eyg.check` and `mix ash_eyg.run` with a path or `-e`.
+
+Without a session, `AshEyg.check/3` and `AshEyg.run/3` take a cache and return `{result, cache}`, on success and on error.
+Keep the returned cache for the next call.
+
+```elixir
+{result, cache} = AshEyg.run(source, AshEyg.empty_cache(), effects: effects)
+```
+
+### Packages
+
+Scripts can use packages from the [hub](https://eyg.run), i.e. `@standard`.
+Nothing is preloaded, a check or run fetches what the script refers to, and their dependencies, then type checks them.
+A script whose references are already in the cache makes no requests.
+Set `config :ash_eyg, hub: "..."` to use another hub.
 
 ### Only some effects
 
@@ -91,11 +112,9 @@ effects =
 ```elixir
 action :run, :string do
   argument :source, :string, allow_nil?: false
-  run {AshEyg.RunScript, otp_app: :helpdesk, packages: %{"standard" => "path/to/index.eyg.json"}}
+  run {AshEyg.RunScript, otp_app: :helpdesk, session: Helpdesk.Scripts}
 end
 ```
-
-Packages for `@name` references are loaded with `AshEyg.load_package/1`.
 
 ### Host effects
 
@@ -108,7 +127,7 @@ log =
     {:record, %{}}
   end)
 
-AshEyg.run(source, effects: [log | effects])
+AshEyg.Session.run(Helpdesk.Scripts, source, effects: [log | effects])
 ```
 
 ## Example
