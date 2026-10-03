@@ -20,14 +20,14 @@ Tasks:
     - second script, multiple effects
     - use the std library and create many effects
   - [x] Write a blog post about embedding EYG in an erlang program, include the video
-- [ ] Create the same counter example in Elixir, but in a phoenix application
-  - [ ] There should be a script box on the homepage
-  - [ ] The script box uses the textmate syntax highlighting
-  - [ ] Use live view
-      - [ ] Any program that parses has it's types checked, show errors on the page
-      - [ ] Press enter or click submit to send the messages
-  - [ ] create the same video of scripts and effects in this application
-  - [ ] Write a blog post about embedding EYG in an Elixir program, include the video
+- [x] Create the same counter example in Elixir, but in a phoenix application
+  - [x] There should be a script box on the homepage
+  - [x] The script box uses the textmate syntax highlighting
+  - [x] Use live view
+      - [x] Any program that parses has it's types checked, show errors on the page
+      - [x] Press enter or click submit to send the messages
+  - [x] create the same video of scripts and effects in this application
+  - [x] Write a blog post about embedding EYG in an Elixir program, include the video
 - [ ] Create a package in this repo called ash_eyg
   - [ ] Implement The automatic creation of EYG effects from Ash constructs in the same way as for ash_lua
   - [ ] Show how to add just some of the effects to a eyg execution environment
