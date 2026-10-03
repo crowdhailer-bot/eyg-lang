@@ -5,7 +5,7 @@
 To test all the packages on the BEAM environment.
 ```sh
 # Erlang-target Gleam packages
-for pkg in packages/{gleam_analysis,gleam_hub,gleam_ir,gleam_parser,intelligence,overlay_llm,topological,touch_grass,untethered}; do
+for pkg in packages/{eyg_beam,gleam_analysis,gleam_hub,gleam_ir,gleam_parser,intelligence,overlay_llm,topological,touch_grass,untethered}; do
   ( cd "$pkg" && gleam format --check src test && gleam build --warnings-as-errors && gleam test )
 done
 ```
@@ -14,6 +14,13 @@ To test all the packages on the JavaScript environment.
 for pkg in packages/{gleam_analysis,gleam_cli,gleam_compiler,gleam_hub,gleam_interpreter,gleam_ir,gleam_parser,gleam_x,intelligence,morph,overlay_llm,topological,touch_grass,untethered,website}; do
   ( cd "$pkg" && gleam format --check src test && gleam build --target javascript --warnings-as-errors && gleam test --target javascript --runtime bun )
 done
+```
+To test the Elixir package and the examples that embed EYG.
+```sh
+( cd packages/ash_eyg && mix test )
+( cd examples/erlang_counters && gleam test )
+( cd examples/phoenix_counters && mix test )
+( cd examples/helpdesk && mix test )
 ```
 Test all the eyg packages.
 ```sh
