@@ -14,9 +14,7 @@ defmodule Helpdesk.Scripting.Script do
     action :run, :string do
       argument :source, :string, allow_nil?: false
 
-      run {AshEyg.RunScript,
-           otp_app: :helpdesk,
-           packages: %{"standard" => Application.compile_env!(:helpdesk, :standard_library)}}
+      run {AshEyg.RunScript, otp_app: :helpdesk, session: Helpdesk.Scripts}
     end
   end
 end

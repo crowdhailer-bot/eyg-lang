@@ -11,7 +11,8 @@ defmodule Helpdesk.Triage do
     |> Enum.filter(&(&1.action in [:read, :assign]))
   end
 
-  def check(source), do: AshEyg.check(source, effects: effects())
+  def check(source), do: AshEyg.Session.check(Helpdesk.Scripts, source, effects: effects())
 
-  def run(source, actor \\ nil), do: AshEyg.run(source, effects: effects(), actor: actor)
+  def run(source, actor \\ nil),
+    do: AshEyg.Session.run(Helpdesk.Scripts, source, effects: effects(), actor: actor)
 end

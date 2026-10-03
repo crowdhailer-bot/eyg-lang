@@ -1,13 +1,17 @@
 defmodule Helpdesk.ScriptTest do
   use ExUnit.Case
 
+  import Helpdesk.HubFixture
+
   defp run(source) do
     Helpdesk.Scripting.Script
     |> Ash.ActionInput.for_action(:run, %{source: source})
     |> Ash.run_action()
   end
 
-  test "scripts use the standard library and the helpdesk" do
+  test "scripts use packages from the hub and the helpdesk" do
+    use_fetch(fetch([{"standard", standard()}]))
+
     source = """
     @standard.list.map(["Printer on fire"], (subject) -> {
       perform SupportTicketOpen({subject: subject})

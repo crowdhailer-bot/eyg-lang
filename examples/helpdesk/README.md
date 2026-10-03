@@ -44,6 +44,8 @@ Scripts only see public attributes, `status` is made public in this project.
 
 ## Running scripts
 
+Scripts can use packages from the [hub](https://eyg.run), i.e. `@standard`, they are fetched when a script refers to them.
+
 ```sh
 mix ash_eyg.check scripts/assign.eyg
 mix ash_eyg.run scripts/assign.eyg
@@ -78,7 +80,8 @@ iex> Helpdesk.Triage.check(File.read!("scripts/open.eyg"))
 ## AshAdmin
 
 Scripts can also be run from [AshAdmin](https://hexdocs.pm/ash_admin).
-[`Helpdesk.Scripting.Script`](lib/helpdesk/scripting/script.ex) has a `run` action that uses `AshEyg.RunScript`, with `@standard` available.
+[`Helpdesk.Scripting.Script`](lib/helpdesk/scripting/script.ex) has a `run` action that uses `AshEyg.RunScript`.
+Scripts can use packages from the hub, i.e. `@standard`, the `Helpdesk.Scripts` session keeps them once fetched.
 
 ```sh
 (cd assets && bun install)

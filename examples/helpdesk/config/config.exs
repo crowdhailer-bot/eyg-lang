@@ -4,10 +4,6 @@ import Config
 # available resource and actions
 config :helpdesk, :ash_domains, [Helpdesk.Support, Helpdesk.Scripting]
 
-config :helpdesk,
-       :standard_library,
-       Path.expand("../../../eyg_packages/standard/index.eyg.json", __DIR__)
-
 config :helpdesk, HelpdeskWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,

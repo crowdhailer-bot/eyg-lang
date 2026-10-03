@@ -6,6 +6,8 @@ defmodule Helpdesk.Application do
   def start(_type, _args) do
     children = [
       {Phoenix.PubSub, name: Helpdesk.PubSub},
+      # Owns the packages that scripts refer to
+      {AshEyg.Session, name: Helpdesk.Scripts},
       HelpdeskWeb.Endpoint
     ]
 
