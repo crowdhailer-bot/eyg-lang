@@ -10,16 +10,16 @@ We will follow the projects structure for components we need, however we will no
 
 Tasks:
 
-- [ ] install the latest Elixir and erlang
-- [ ] create an example erlang application. It should have a dynamic supervisor for counters that tick every 10 seconds
-  - [ ] Create functions to `start_counter`, `set_tick_rate`, `get_value`, `shutdown`
-  - [ ] Create an EYG effect for each of these. write the type and implementation in erlang.
-  - [ ] Write a module counters_eyg that has `run` and `check` functions. These take a string which is EYG code, both type check the code in an environment with only the application effects available. pretty print any type errors. The run function then runs the changes
-  - [ ] Create a video of joining the cluster and writing eyg scripts and executing them. Show that opening the obsever shows the new counter children and you can inspect there shape
+- [x] install the latest Elixir and erlang
+- [x] create an example erlang application. It should have a dynamic supervisor for counters that tick every 10 seconds
+  - [x] Create functions to `start_counter`, `set_tick_rate`, `get_value`, `shutdown`
+  - [x] Create an EYG effect for each of these. write the type and implementation in erlang.
+  - [x] Write a module counters_eyg that has `run` and `check` functions. These take a string which is EYG code, both type check the code in an environment with only the application effects available. pretty print any type errors. The run function then runs the changes
+  - [x] Create a video of joining the cluster and writing eyg scripts and executing them. Show that opening the obsever shows the new counter children and you can inspect there shape
     - first script, very simple single effect
     - second script, multiple effects
     - use the std library and create many effects
-  - [ ] Write a blog post about embedding EYG in an erlang program, include the video
+  - [x] Write a blog post about embedding EYG in an erlang program, include the video
 - [ ] Create the same counter example in Elixir, but in a phoenix application
   - [ ] There should be a script box on the homepage
   - [ ] The script box uses the textmate syntax highlighting
