@@ -9,29 +9,39 @@ This post puts an EYG script box on the home page of a Phoenix application.
 Scripts typed into it manage a supervisor of counters, and they can do nothing else.
 Every program that parses is type checked as you type, enter runs it.
 
-<video src="demo.mp4" controls width="100%"></video>
+<video src="../../examples/phoenix_counters/video/phoenix-counters.mp4" controls width="100%"></video>
 
 The code is in [`examples/phoenix_counters`](../../examples/phoenix_counters).
-The same application in Erlang is described in [Embedding EYG in an Erlang program](../embedding-eyg-in-erlang/index.md).
+It follows the design of the Erlang example, described in [Embedding EYG in an Erlang program](../embedding-eyg-in-erlang/index.md).
 
-## Depending on EYG
+## Building EYG for Elixir
 
-The EYG parser, type checker and interpreter are written in Gleam.
-[`eyg_beam`](../../packages/eyg_beam) wraps them for Erlang and Elixir hosts, and its Makefile bundles them, with their Gleam dependencies, into one OTP application.
-Mix builds a path dependency with a Makefile using `make`, so the dependency is one line.
+The EYG parser, type checker, interpreter and hub client are Gleam packages in this repository.
+They are not published for Erlang, so Mix cannot fetch them.
+Instead a small Gleam project lists them, in its own directory because Gleam would also compile the Elixir files in `test`.
 
-```elixir
-# mix.exs
-{:eyg_beam, path: "../../packages/eyg_beam"}
+```toml
+# gleam/gleam.toml
+name = "phoenix_counters_eyg"
+target = "erlang"
+
+[dependencies]
+eyg_analysis = { path = "../../../packages/gleam_analysis" }
+eyg_hub = { path = "../../../packages/gleam_hub" }
+eyg_interpreter = { path = "../../../packages/gleam_interpreter" }
+eyg_ir = { path = "../../../packages/gleam_ir" }
+eyg_parser = { path = "../../../packages/gleam_parser" }
+gleam_crypto = ">= 1.6.0 and < 2.0.0"
+gleam_httpc = ">= 5.0.0 and < 6.0.0"
 ```
 
-Building it needs `gleam` on the path.
-From Elixir, `eyg_beam` is an Erlang module.
+A compiler defined in `mix.exs` builds it and copies the modules into the application, before the Elixir compiler runs.
 
 ```elixir
-iex> :eyg_beam.check("perform Add(1)", [{"Add", {:integer, :integer}}], %{})
-{:ok, "Integer"}
+compilers: [:gleam_libraries, :phoenix_live_view] ++ Mix.compilers()
 ```
+
+From Elixir a Gleam module is an Erlang module, `eyg/hub/cache` is `:eyg@hub@cache`.
 
 ## Counters
 
@@ -55,15 +65,16 @@ An effect is a label, the type of the value a script lifts to the host and the t
 EYG types and values are plain terms, `:string` is a type and `{:string, "apples"}` is a value.
 
 ```elixir
+@type_ :eyg@analysis@type_@isomorphic
 @unit {:record, :empty}
 
-def effects do
-  reply = :eyg_beam.result_type(@unit, :string)
+def types do
+  reply = @type_.result(@unit, :string)
 
   [
     {"StartCounter", {:string, reply}},
-    {"SetTickRate", {:eyg_beam.record_type([{"name", :string}, {"seconds", :integer}]), reply}},
-    {"GetValue", {:string, :eyg_beam.result_type(:integer, :string)}},
+    {"SetTickRate", {@type_.record([{"name", :string}, {"seconds", :integer}]), reply}},
+    {"GetValue", {:string, @type_.result(:integer, :string)}},
     {"Shutdown", {:string, reply}}
   ]
 end
@@ -77,9 +88,6 @@ def handle("StartCounter", {:string, name}), do: reply(name, Counters.start_coun
 def handle("SetTickRate", {:record, %{"name" => {:string, name}, "seconds" => {:integer, seconds}}}),
   do: reply(name, Counters.set_tick_rate(name, seconds))
 
-def handle("GetValue", {:string, name}), do: reply(name, Counters.get_value(name))
-def handle("Shutdown", {:string, name}), do: reply(name, Counters.shutdown(name))
-
 defp reply(_name, :ok), do: {:tagged, "Ok", {:record, %{}}}
 defp reply(_name, {:ok, value}), do: {:tagged, "Ok", {:integer, value}}
 defp reply(name, {:error, reason}), do: {:tagged, "Error", {:string, message(name, reason)}}
@@ -87,22 +95,48 @@ defp reply(name, {:error, reason}), do: {:tagged, "Error", {:string, message(nam
 
 ## Checking and running
 
-`PhoenixCounters.Counters.Eyg` passes the effects to `eyg_beam`.
-`@standard` is loaded once when the application starts.
+`PhoenixCounters.Counters.Eyg` has `check/2` and `run/2`.
+Both take the source and a package cache and return `{result, cache}`.
+Each parses the script, loads the packages it refers to, and type checks it against exactly the counter effects.
 
 ```elixir
-def check(source), do: :eyg_beam.check(source, Effects.effects(), packages())
+context = @infer.with_effects(@infer.pure(), Effects.types())
+analysis = @cache.infer_sync(@infer.check(context, tree), cache)
+```
 
-def run(source) do
-  case :eyg_beam.run(source, Effects.effects(), packages(), &Effects.handle/2) do
-    {:ok, value} -> {:ok, :eyg_beam.inspect(value)}
-    {:error, message} -> {:error, message}
-  end
+`run` only executes a script that checks, so a mistake on its last line stops the effects on its first.
+While it runs, references are answered from the cache and effects go to `Effects.handle/2`.
+
+```elixir
+case @cache.static_loop(step, cache, &@expression.resume/3) do
+  {:error, {{:unhandled_effect, label, lift}, _span, env, k}} ->
+    reply = Effects.handle(label, lift)
+    run_step(@expression.resume(reply, env, k), source, cache)
+  ...
 end
 ```
 
-`run` type checks before it runs anything.
-A script with a mistake in its last line does not perform the effects in its first.
+## Packages are loaded by reference
+
+Scripts can use any package on the hub, nothing is preloaded.
+`PhoenixCounters.Counters.Packages` lists the references in a parsed script and loads only those, with their dependencies, using `eyg_hub`'s cache.
+It supplies HTTP and hashing and drives the cache's actions until none are left, then checks every downloaded module.
+A script with no references, or whose packages are cached, makes no requests.
+
+## A process owns the cache
+
+`PhoenixCounters.Scripts` is a `GenServer` in the supervision tree.
+Every check and run goes through it, and it keeps the cache that comes back, even when the result is an error.
+
+```elixir
+def handle_call({:run, source}, _from, cache) do
+  {result, cache} = Eyg.run(source, cache)
+  {:reply, result, cache}
+end
+```
+
+The first script that uses `@standard` fetches it, later ones do not.
+The LiveView only ever receives results, the cache stays in the process that owns it.
 
 ## The script box
 
@@ -117,7 +151,7 @@ end
 # Only programs that parse are type checked, an unfinished program has no errors yet.
 defp check(source) do
   case Eyg.parse(source) do
-    :ok -> Eyg.check(source)
+    :ok -> Scripts.check(source)
     {:error, _} -> nil
   end
 end
@@ -198,8 +232,8 @@ let names = ["plums", "figs", "limes", "kiwis"]
 
 ## What the host still trusts
 
-Scripts run in the LiveView process.
-Type checking guarantees which effects a script performs, it does not limit how long a script runs, so a recursive script can loop until the LiveView is killed.
+Scripts run in the `PhoenixCounters.Scripts` process, one at a time.
+Type checking guarantees which effects a script performs, it does not limit how long a script runs, so a recursive script can loop until that process is killed.
 
 ## Try it
 
