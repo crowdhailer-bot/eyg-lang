@@ -2,7 +2,20 @@ import Config
 
 # This tells Ash about your domain, which is used to find
 # available resource and actions
-config :helpdesk, :ash_domains, [Helpdesk.Support]
+config :helpdesk, :ash_domains, [Helpdesk.Support, Helpdesk.Scripting]
+
+config :helpdesk,
+       :standard_library,
+       Path.expand("../../../eyg_packages/standard/index.eyg.json", __DIR__)
+
+config :helpdesk, HelpdeskWeb.Endpoint,
+  url: [host: "localhost"],
+  adapter: Bandit.PhoenixAdapter,
+  pubsub_server: Helpdesk.PubSub,
+  render_errors: [formats: [html: HelpdeskWeb.ErrorHTML], layout: false],
+  live_view: [signing_salt: "oZuqiClsm23daSJ"]
+
+config :phoenix, :json_library, Jason
 
 # These enable behaviors that will become the default in the next major
 # version of Ash. Setting them now opts your application into the new
