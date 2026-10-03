@@ -69,13 +69,12 @@ defmodule AshEyg.Type do
   end
 
   @doc "Encode an Ash value as an EYG value."
-  def to_eyg(type, constraints, nullable?, value) do
-    case {nullable?, value} do
-      {true, nil} -> {:tagged, "None", {:record, %{}}}
-      {true, value} -> {:tagged, "Some", to_eyg(type, constraints, value)}
-      {false, value} -> to_eyg(type, constraints, value)
-    end
-  end
+  def to_eyg(_type, _constraints, true, nil), do: {:tagged, "None", {:record, %{}}}
+
+  def to_eyg(type, constraints, true, value),
+    do: {:tagged, "Some", to_eyg(type, constraints, value)}
+
+  def to_eyg(type, constraints, false, value), do: to_eyg(type, constraints, value)
 
   def to_eyg({:array, type}, constraints, values) do
     items = Keyword.get(constraints, :items, [])
@@ -99,13 +98,12 @@ defmodule AshEyg.Type do
   end
 
   @doc "Decode an EYG value as input to an Ash action."
-  def from_eyg(type, constraints, nullable?, value) do
-    case {nullable?, value} do
-      {true, {:tagged, "None", _}} -> nil
-      {true, {:tagged, "Some", value}} -> from_eyg(type, constraints, value)
-      {false, value} -> from_eyg(type, constraints, value)
-    end
-  end
+  def from_eyg(_type, _constraints, true, {:tagged, "None", _}), do: nil
+
+  def from_eyg(type, constraints, true, {:tagged, "Some", value}),
+    do: from_eyg(type, constraints, value)
+
+  def from_eyg(type, constraints, false, value), do: from_eyg(type, constraints, value)
 
   def from_eyg({:array, type}, constraints, {:linked_list, values}) do
     items = Keyword.get(constraints, :items, [])

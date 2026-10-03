@@ -12,7 +12,8 @@ defmodule AshEyg.Actions do
 
   A record has the primary key and public attributes of the resource.
   An input that is not required is an option, `None({})` leaves it out.
-  Actions with a required input of a type `AshEyg.Type` cannot map are not exposed.
+  Fields of a type `AshEyg.Type` cannot map are left out,
+  an action with such a required input is not exposed.
   """
 
   alias AshEyg.{Effect, Type}
@@ -29,69 +30,28 @@ defmodule AshEyg.Actions do
 
   @doc "The effect for one action, or `:error` if the action cannot be exposed."
   def effect(domain, resource, action) do
-    label =
-      AshEyg.Domain.Info.name(domain) <>
-        AshEyg.Resource.Info.name(resource) <> Macro.camelize(to_string(action.name))
-
     with {:ok, inputs} <- inputs(resource, action),
-         {:ok, value} <- reply(resource, action) do
-      lift = Type.record(Enum.map(inputs, &{&1.name, &1.eyg}))
-
-      %Effect{
-        label: label,
-        lift: lift,
-        lower: Type.result(value, :string),
-        resource: resource,
-        action: action.name,
-        handle: fn {:record, fields}, opts ->
-          params = decode(inputs, fields)
-
-          case call(domain, resource, action, params, opts) do
-            {:ok, value} -> {:tagged, "Ok", encode(resource, action, value)}
-            {:error, error} -> {:tagged, "Error", {:string, message(error)}}
-          end
-        end
-      }
-      |> then(&{:ok, &1})
+         {:ok, {reply, encode}} <- reply(resource, action) do
+      {:ok,
+       %Effect{
+         label:
+           AshEyg.Domain.Info.name(domain) <>
+             AshEyg.Resource.Info.name(resource) <> Macro.camelize(to_string(action.name)),
+         lift: record_type(inputs),
+         lower: Type.result(reply, :string),
+         resource: resource,
+         action: action.name,
+         handle: fn {:record, fields}, opts ->
+           case call(domain, resource, action, decode(inputs, fields), opts) do
+             {:ok, value} -> {:tagged, "Ok", encode.(value)}
+             {:error, error} -> {:tagged, "Error", {:string, message(error)}}
+           end
+         end
+       }}
     end
   end
 
-  defp inputs(resource, action) do
-    key = primary_key(resource)
-
-    keys =
-      case action.type do
-        type when type in [:update, :destroy] and not is_nil(key) ->
-          [field(Ash.Resource.Info.attribute(resource, key), true)]
-
-        type when type in [:update, :destroy] ->
-          [:error]
-
-        _ ->
-          []
-      end
-
-    attributes =
-      for name <- Map.get(action, :accept) || [] do
-        attribute = Ash.Resource.Info.attribute(resource, name)
-        required? = action.type == :create and required?(attribute)
-        field(attribute, required?)
-      end
-
-    arguments =
-      for argument <- action.arguments, argument.public? do
-        field(argument, required?(argument))
-      end
-
-    Enum.reduce_while(keys ++ attributes ++ arguments, {:ok, []}, fn
-      {:ok, field}, {:ok, fields} -> {:cont, {:ok, fields ++ [field]}}
-      {:skip, _}, acc -> {:cont, acc}
-      _, _ -> {:halt, :error}
-    end)
-  end
-
-  defp required?(field), do: not field.allow_nil? and is_nil(field.default)
-
+  # A field is an input or attribute EYG can represent, optional fields are options.
   defp field(field, required?) do
     case Type.eyg_type(field.type, field.constraints, not required?) do
       {:ok, eyg} ->
@@ -106,69 +66,97 @@ defmodule AshEyg.Actions do
          }}
 
       :error ->
-        if required?, do: :error, else: {:skip, field.name}
+        if required?, do: :error, else: :skip
     end
   end
 
+  defp required?(field), do: not field.allow_nil? and is_nil(field.default)
+
+  defp record_type(fields), do: Type.record(Enum.map(fields, &{&1.name, &1.eyg}))
+
+  defp inputs(resource, action) do
+    attributes =
+      for name <- Map.get(action, :accept) || [] do
+        attribute = Ash.Resource.Info.attribute(resource, name)
+        field(attribute, action.type == :create and required?(attribute))
+      end
+
+    arguments =
+      for argument <- action.arguments, argument.public?, do: field(argument, required?(argument))
+
+    with {:ok, keys} <- keys(resource, action) do
+      Enum.reduce_while(attributes ++ arguments, {:ok, keys}, fn
+        {:ok, field}, {:ok, fields} -> {:cont, {:ok, fields ++ [field]}}
+        :skip, acc -> {:cont, acc}
+        :error, _ -> {:halt, :error}
+      end)
+    end
+  end
+
+  # Updates and destroys find their record by a single field primary key.
+  defp keys(resource, %{type: type}) when type in [:update, :destroy] do
+    case Ash.Resource.Info.primary_key(resource) do
+      [key] ->
+        with {:ok, field} <- field(Ash.Resource.Info.attribute(resource, key), true),
+             do: {:ok, [field]}
+
+      _ ->
+        :error
+    end
+  end
+
+  defp keys(_resource, _action), do: {:ok, []}
+
+  # The type of a successful reply and a function to encode it.
   defp reply(resource, action) do
+    attributes = attributes(resource)
+
+    record =
+      &{:record,
+       Map.new(attributes, fn field -> {field.name, to_eyg(field, Map.get(&1, field.key))} end)}
+
+    unit = {Type.unit(), fn _ -> {:record, %{}} end}
+
     case action.type do
-      :read -> {:ok, {:list, record_type(resource)}}
-      type when type in [:create, :update] -> {:ok, record_type(resource)}
-      :destroy -> {:ok, Type.unit()}
-      :action when is_nil(action.returns) -> {:ok, Type.unit()}
-      :action -> Type.eyg_type(action.returns, action.constraints, action.allow_nil?)
+      :read ->
+        {:ok, {{:list, record_type(attributes)}, &{:linked_list, Enum.map(&1, record)}}}
+
+      type when type in [:create, :update] ->
+        {:ok, {record_type(attributes), record}}
+
+      :destroy ->
+        {:ok, unit}
+
+      :action when is_nil(action.returns) ->
+        {:ok, unit}
+
+      :action ->
+        %{returns: type, constraints: constraints, allow_nil?: optional?} = action
+
+        with {:ok, eyg} <- Type.eyg_type(type, constraints, optional?),
+             do: {:ok, {eyg, &Type.to_eyg(type, constraints, optional?, &1)}}
     end
   end
 
-  defp record_type(resource) do
-    Type.record(Enum.map(attributes(resource), &{&1.name, &1.eyg}))
-  end
-
-  # The primary key and public attributes of a resource, that EYG can represent.
+  # The primary key and public attributes of a resource.
   defp attributes(resource) do
     key = Ash.Resource.Info.primary_key(resource)
 
-    resource
-    |> Ash.Resource.Info.attributes()
-    |> Enum.filter(&(&1.public? or &1.name in key))
-    |> Enum.flat_map(fn attribute ->
-      nullable? = attribute.allow_nil? and attribute.name not in key
-
-      case Type.eyg_type(attribute.type, attribute.constraints, nullable?) do
-        {:ok, eyg} ->
-          [
-            %{
-              name: to_string(attribute.name),
-              attribute: attribute,
-              nullable?: nullable?,
-              eyg: eyg
-            }
-          ]
-
-        :error ->
-          []
-      end
-    end)
+    for attribute <- Ash.Resource.Info.attributes(resource),
+        attribute.public? or attribute.name in key,
+        {:ok, field} <- [field(attribute, not attribute.allow_nil? or attribute.name in key)],
+        do: field
   end
 
-  defp primary_key(resource) do
-    case Ash.Resource.Info.primary_key(resource) do
-      [key] -> key
-      _ -> nil
-    end
-  end
+  defp to_eyg(field, value),
+    do: Type.to_eyg(field.type, field.constraints, field.optional?, value)
 
   defp decode(inputs, fields) do
-    Enum.reduce(inputs, %{}, fn input, params ->
-      case {input.optional?, Map.fetch!(fields, input.name)} do
-        {true, {:tagged, "None", _}} ->
-          params
-
-        {_, value} ->
-          value = Type.from_eyg(input.type, input.constraints, input.optional?, value)
-          Map.put(params, input.key, value)
-      end
-    end)
+    for input <- inputs,
+        value = Map.fetch!(fields, input.name),
+        not (input.optional? and match?({:tagged, "None", _}, value)),
+        into: %{},
+        do: {input.key, Type.from_eyg(input.type, input.constraints, input.optional?, value)}
   end
 
   defp call(domain, resource, action, params, opts) do
@@ -182,20 +170,19 @@ defmodule AshEyg.Actions do
         resource |> Ash.Changeset.for_create(action.name, params, opts) |> Ash.create(opts)
 
       :update ->
-        {id, params} = Map.pop(params, primary_key(resource))
+        {id, params} = Map.pop(params, hd(Ash.Resource.Info.primary_key(resource)))
 
         with {:ok, record} <- Ash.get(resource, id, opts) do
           record |> Ash.Changeset.for_update(action.name, params, opts) |> Ash.update(opts)
         end
 
       :destroy ->
-        {id, params} = Map.pop(params, primary_key(resource))
+        {id, params} = Map.pop(params, hd(Ash.Resource.Info.primary_key(resource)))
 
         with {:ok, record} <- Ash.get(resource, id, opts),
              :ok <-
-               record |> Ash.Changeset.for_destroy(action.name, params, opts) |> Ash.destroy(opts) do
-          {:ok, nil}
-        end
+               record |> Ash.Changeset.for_destroy(action.name, params, opts) |> Ash.destroy(opts),
+             do: {:ok, nil}
 
       :action ->
         case resource
@@ -205,26 +192,6 @@ defmodule AshEyg.Actions do
           other -> other
         end
     end
-  end
-
-  defp encode(resource, action, value) do
-    case action.type do
-      :read -> {:linked_list, Enum.map(value, &encode_record(resource, &1))}
-      type when type in [:create, :update] -> encode_record(resource, value)
-      :destroy -> {:record, %{}}
-      :action when is_nil(action.returns) -> {:record, %{}}
-      :action -> Type.to_eyg(action.returns, action.constraints, action.allow_nil?, value)
-    end
-  end
-
-  defp encode_record(resource, record) do
-    fields =
-      Map.new(attributes(resource), fn %{attribute: attribute} = field ->
-        value = Map.get(record, attribute.name)
-        {field.name, Type.to_eyg(attribute.type, attribute.constraints, field.nullable?, value)}
-      end)
-
-    {:record, fields}
   end
 
   defp message(error) do
