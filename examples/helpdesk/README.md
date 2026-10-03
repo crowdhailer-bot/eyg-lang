@@ -56,7 +56,7 @@ The tasks give a script every effect of the application.
 From code, pass the effects a script may use.
 
 ```elixir
-AshEyg.run(source, effects: AshEyg.effects(otp_app: :helpdesk), actor: current_user)
+AshEyg.Session.run(Helpdesk.Scripts, source, effects: AshEyg.effects(otp_app: :helpdesk), actor: current_user)
 ```
 
 ## Only some effects
