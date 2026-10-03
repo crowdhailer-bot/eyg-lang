@@ -18,7 +18,7 @@ done
 To test the Elixir package and the examples that embed EYG.
 ```sh
 ( cd packages/ash_eyg && mix test )
-( cd examples/erlang_counters && gleam test )
+( cd examples/erl_counter && gleam build --warnings-as-errors && erl -pa build/dev/erlang/*/ebin -noshell -s erl_counter_test main -s init stop )
 ( cd examples/phoenix_counters && mix test )
 ( cd examples/helpdesk && mix test )
 ```
