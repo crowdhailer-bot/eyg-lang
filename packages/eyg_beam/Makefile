@@ -2,7 +2,10 @@
 # Mix builds a path dependency on this directory with make.
 APP = {application, eyg_beam, [{description, "EYG for Erlang and Elixir hosts"}, {vsn, "0.1.0"}, {modules, Mods}, {registered, []}, {applications, [kernel, stdlib]}]}
 
-ebin: gleam.toml manifest.toml src/*.gleam
+# Rebuild when this package or the EYG packages it builds from change.
+SOURCES = $(shell find src ../gleam_ir/src ../gleam_parser/src ../gleam_analysis/src ../gleam_interpreter/src -name "*.gleam")
+
+ebin: gleam.toml manifest.toml $(SOURCES)
 	gleam export erlang-shipment
 	rm -rf ebin
 	mkdir ebin
