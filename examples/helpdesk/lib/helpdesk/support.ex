@@ -1,5 +1,5 @@
 defmodule Helpdesk.Support do
-  use Ash.Domain
+  use Ash.Domain, extensions: [AshEyg.Domain]
 
   resources do
     resource Helpdesk.Support.Ticket

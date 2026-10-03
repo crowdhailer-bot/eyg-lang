@@ -2,7 +2,8 @@ defmodule Helpdesk.Support.Ticket do
   # This turns this module into a resource
   use Ash.Resource,
     domain: Helpdesk.Support,
-    data_layer: Ash.DataLayer.Ets
+    data_layer: Ash.DataLayer.Ets,
+    extensions: [AshEyg.Resource]
 
   actions do
     # Use the default implementation of the :read action

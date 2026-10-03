@@ -2,7 +2,8 @@ defmodule Helpdesk.Support.Representative do
   # This turns this module into a resource using the in memory ETS data layer
   use Ash.Resource,
     domain: Helpdesk.Support,
-    data_layer: Ash.DataLayer.Ets
+    data_layer: Ash.DataLayer.Ets,
+    extensions: [AshEyg.Resource]
 
   actions do
     # Add the default simple actions
