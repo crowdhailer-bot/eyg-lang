@@ -10,6 +10,7 @@ Scripts are type checked against the effects you give them, then run with your a
 
 This post adds it to the project from the Ash [getting started guide](https://hexdocs.pm/ash/get-started.html).
 The finished project is [`examples/helpdesk`](../../examples/helpdesk).
+The video sets EYG up in a shell, then runs scripts from AshAdmin.
 
 <video src="demo.mp4" controls width="100%"></video>
 
@@ -194,6 +195,59 @@ log =
 
 AshEyg.run(source, effects: [log | Helpdesk.Triage.effects()])
 ```
+
+## 8. Run scripts from AshAdmin
+
+Ash itself has no views, [AshAdmin](https://hexdocs.pm/ash_admin) is its admin UI.
+AshAdmin renders a form for any generic action and shows its result, so a script page is one action.
+
+```elixir
+defmodule Helpdesk.Scripting.Script do
+  use Ash.Resource, domain: Helpdesk.Scripting, extensions: [AshAdmin.Resource]
+
+  admin do
+    form do
+      field :source, type: :long_text
+    end
+  end
+
+  actions do
+    action :run, :string do
+      argument :source, :string, allow_nil?: false
+
+      run {AshEyg.RunScript,
+           otp_app: :helpdesk,
+           packages: %{"standard" => Application.compile_env!(:helpdesk, :standard_library)}}
+    end
+  end
+end
+```
+
+`AshEyg.RunScript` runs the script as the actor chosen in AshAdmin and returns its value as EYG.
+A type error is an invalid `source` argument, so AshAdmin shows it under the box.
+The `packages` option makes `@standard` available, loaded once from its IR JSON.
+
+```eyg
+let subjects = ["Printer on fire", "Mouse will not click", "Coffee machine is empty"]
+@standard.list.map(subjects, (subject) -> {
+  perform SupportTicketOpen({subject: subject})
+})
+```
+
+Mount AshAdmin in the router as usual.
+
+```elixir
+scope "/" do
+  pipe_through [:browser, HelpdeskWeb.EygHighlight]
+  ash_admin "/admin"
+end
+```
+
+AshAdmin renders its own layout with its own JavaScript, there is no place for an application's script.
+`HelpdeskWeb.EygHighlight` is a plug that adds one to AshAdmin pages before they are sent.
+The script highlights with [shiki](https://shiki.style) and the TextMate grammar from the EYG VS Code extension.
+It draws the highlighted source over the `source` textarea, whose own text is transparent, and highlights each result as AshAdmin renders it.
+See [`assets/js/admin_eyg.js`](../../examples/helpdesk/assets/js/admin_eyg.js).
 
 ## Options
 
