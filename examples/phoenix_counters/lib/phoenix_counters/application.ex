@@ -7,6 +7,8 @@ defmodule PhoenixCounters.Application do
 
   @impl true
   def start(_type, _args) do
+    PhoenixCounters.Counters.Eyg.load_packages()
+
     children =
       [
         PhoenixCountersWeb.Telemetry,
