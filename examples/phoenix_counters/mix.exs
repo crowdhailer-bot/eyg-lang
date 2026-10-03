@@ -53,7 +53,8 @@ defmodule PhoenixCounters.MixProject do
   def application do
     [
       mod: {PhoenixCounters.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      # The hub client uses httpc
+      extra_applications: [:logger, :runtime_tools, :crypto, :inets, :ssl]
     ]
   end
 
