@@ -63,3 +63,30 @@ build/video-venv/bin/python video/record.py --render-only
 ```
 
 The video is H.264 MP4, 1600×1008, 15 fps, with fast-start metadata for playback.
+
+## Observer video
+
+[erl-counter-observer.mp4](erl-counter-observer.mp4) is an 80-second silent recording of a real session:
+
+| Time | Action |
+| --- | --- |
+| 0:00 | Start the application on a named node, join it with `erl -remsh` |
+| 0:15 | Start a `counters_session` and open Observer on the application node |
+| 0:25 | A single effect, `StartCounter("apples")` |
+| 0:30 | A type error, `StartCounter(1)`, found before anything runs |
+| 0:35 | Several effects, starting `pears` and setting it to tick every second |
+| 0:45 | Inspect a counter's state in Observer |
+| 0:55 | `@standard.list.map` starts four more counters, the library is fetched from the hub |
+| 1:15 | Read the value of `pears` |
+
+The results are printed with a small shell function that renders EYG values with
+`eyg@interpreter@simple_debug:inspect/1`.
+
+Record it again from `examples/erl_counter`, this needs Xvfb, openbox, xterm, xdotool and ffmpeg:
+
+```sh
+video/record_observer.sh
+```
+
+`video/record_observer.sh --dry` writes screenshots to `build/observer-shots` instead of a video.
+The recorder starts and stops its own display and nodes.
