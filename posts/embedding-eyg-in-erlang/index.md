@@ -10,16 +10,18 @@ Connect a remote shell and you can call any function in the system.
 That power is also the problem: one typo in a remote shell can stop a production system.
 
 EYG is a scripting language where every interaction with the outside world is an effect, and the host decides which effects exist.
-In this post we embed EYG in an Erlang application so scripts can manage a supervisor of counters, and nothing else.
+This post embeds EYG in an Erlang application so scripts can manage a supervisor of counters, and nothing else.
 
-<video src="demo.mp4" controls width="100%"></video>
+<video src="../../examples/erl_counter/video/erl-counter-observer.mp4" controls width="100%"></video>
 
-The code is in [`examples/erlang_counters`](../../examples/erlang_counters).
+The code is [`examples/erl_counter`](../../examples/erl_counter).
+A second [video](../../examples/erl_counter/video/erl-counter.mp4) follows a script that uses the standard library from check to run.
 
 ## The application
 
 The application is plain OTP.
-A `simple_one_for_one` supervisor starts counters on demand, each counter is a `gen_server` that adds one to its value every ten seconds.
+A `one_for_one` supervisor starts counters on demand, each counter is a `gen_server` that adds one to its value every ten seconds.
+Counter names are binaries used as child ids, so scripts never create atoms.
 
 ```erlang
 %% counters_api.erl
@@ -29,147 +31,186 @@ get_value(Name) -> ...
 shutdown(Name) -> ...
 ```
 
-Counters are registered by name with `global`, so a name is all a script needs to refer to one.
+## Building EYG for Erlang
 
-## Depending on EYG
-
-The EYG parser, type checker and interpreter are written in Gleam, which compiles to Erlang.
-[`eyg_beam`](../../packages/eyg_beam) wraps them in three functions for Erlang and Elixir hosts:
-
-- `eyg_beam:check(Source, Effects, Packages)` returns `{ok, Type}` or `{error, Errors}`.
-- `eyg_beam:run(Source, Effects, Packages, Handler)` checks then runs, returning `{ok, Value}` or `{error, Errors}`.
-- `eyg_beam:load_package(Json)` loads a module for scripts to use as `@name`.
-
-The example has no Gleam source, but it is built with `gleam` so that it can depend on `eyg_beam` by path.
-Gleam compiles any `.erl` files in `src` and writes the `.app` file.
+The EYG parser, type checker, interpreter and hub client are Gleam packages in the same repository.
+Gleam compiles them for Erlang, so the example is built with `gleam` and depends on them by path.
+The application itself is all Erlang, Gleam compiles any `.erl` file in `src` too.
 
 ```toml
 # gleam.toml
-name = "counters"
+name = "erl_counter"
 target = "erlang"
 
 [dependencies]
-eyg_beam = { path = "../../packages/eyg_beam" }
+eyg_analysis = { path = "../../packages/gleam_analysis" }
+eyg_hub = { path = "../../packages/gleam_hub" }
+eyg_interpreter = { path = "../../packages/gleam_interpreter" }
+eyg_ir = { path = "../../packages/gleam_ir" }
+eyg_parser = { path = "../../packages/gleam_parser" }
+gleam_crypto = ">= 1.6.0 and < 2.0.0"
+gleam_httpc = ">= 5.0.0 and < 6.0.0"
 
 [erlang]
 application_start_module = "counters_app"
 ```
 
+There is no adapter package, Erlang calls the Gleam modules directly.
+A Gleam module `eyg/hub/cache` is the Erlang module `eyg@hub@cache`, strings are binaries and results are `{ok, Value}` or `{error, Reason}`.
+
 ## Effects
 
 An effect has a label, the type of the value a script lifts to the host, and the type of the reply.
-EYG types are plain Erlang terms: `string`, `integer`, `{record, Rows}` and so on.
+EYG types are plain terms, the unit type is `{record, empty}`.
 
 ```erlang
-effects() ->
-    Reply = eyg_beam:result_type({record, empty}, string),
+-define(TYPE, eyg@analysis@type_@isomorphic).
+
+types() ->
+    Reply = ?TYPE:result({record, empty}, string),
+    Rate = ?TYPE:record([{<<"name">>, string}, {<<"seconds">>, integer}]),
     [
         {<<"StartCounter">>, {string, Reply}},
-        {<<"SetTickRate">>, {eyg_beam:record_type([{<<"name">>, string}, {<<"seconds">>, integer}]), Reply}},
-        {<<"GetValue">>, {string, eyg_beam:result_type(integer, string)}},
+        {<<"SetTickRate">>, {Rate, Reply}},
+        {<<"GetValue">>, {string, ?TYPE:result(integer, string)}},
         {<<"Shutdown">>, {string, Reply}}
     ].
 ```
 
 The implementation is a function from label and lifted value to the reply.
-Values are plain terms too, `{string, <<"apples">>}` is the EYG string `"apples"`.
+EYG values keep their tags, `{string, <<"apples">>}` is the string `"apples"`.
 
 ```erlang
 handle(<<"StartCounter">>, {string, Name}) ->
-    reply(Name, counters_api:start_counter(Name));
-handle(<<"SetTickRate">>, {record, #{<<"name">> := {string, Name}, <<"seconds">> := {integer, Seconds}}}) ->
-    reply(Name, counters_api:set_tick_rate(Name, Seconds));
+    reply(counters_api:start_counter(Name));
 ...
 
-reply(_Name, ok) -> {tagged, <<"Ok">>, {record, #{}}};
-reply(_Name, {ok, Value}) -> {tagged, <<"Ok">>, {integer, Value}};
-reply(Name, {error, Reason}) -> {tagged, <<"Error">>, {string, message(Name, Reason)}}.
+reply(ok) -> {tagged, <<"Ok">>, {record, #{}}};
+reply({ok, Value}) -> {tagged, <<"Ok">>, {integer, Value}};
+reply({error, Reason}) -> {tagged, <<"Error">>, {string, message(Reason)}}.
 ```
 
-Errors from the API become EYG `Error` values, so scripts handle them like any other result.
+A duplicate or missing counter is an EYG `Error` value, scripts handle it like any other result.
 
-## Checking and running
+## Check and run
 
-`counters_eyg` is the module you call from a shell.
-Both functions type check the script against only the counters effects and pretty print any errors.
+`counters_eyg` has two functions.
+Both take the source and a package cache, and both return `{Result, Cache}`.
 
 ```erlang
-check(Source) ->
-    case eyg_beam:check(to_binary(Source), counters_effects:effects(), packages()) of
-        {ok, Type} -> io:format("~ts~n", [Type]), ok;
-        {error, Errors} -> io:format("~ts~n", [Errors]), error
-    end.
-
-run(Source) ->
-    Handler = fun counters_effects:handle/2,
-    case eyg_beam:run(to_binary(Source), counters_effects:effects(), packages(), Handler) of
-        {ok, Value} -> io:format("~ts~n", [eyg_beam:inspect(Value)]), {ok, Value};
-        {error, Errors} -> io:format("~ts~n", [Errors]), error
-    end.
+Cache0 = eyg@hub@cache:empty(),
+{{ok, Type}, Cache1} = counters_eyg:check("perform StartCounter(\"apples\")", Cache0),
+{{ok, Value}, Cache2} = counters_eyg:run("perform StartCounter(\"apples\")", Cache1).
 ```
 
-A script that uses an effect the host does not provide, or passes the wrong type to one, is rejected before anything happens.
+Each call parses the script, loads the packages it refers to, then type checks it against exactly the counter effects.
+`run` only executes a script that checks, so a mistake on the last line stops the effects on the first.
 
 ```
-(counters@host)3> counters_eyg:check("perform StartCounter(1)").
 error: type mismatch given: Integer expected: String
 hint: check the expression matches the expected type
 
  1 | perform StartCounter(1)
      ^^^^^^^^^^^^^^^^^^^^^^^
-error
 ```
 
-This matters most for scripts with several steps.
-If the third step is wrong, the first two never run, so there is no half finished change to clean up.
+The inference context starts pure and permits only the host's effects.
+
+```erlang
+Context = ?INFER:with_effects(?INFER:pure(), counters_effects:types()),
+Analysis = ?CACHE:infer_sync(?INFER:check(Context, Tree), Cache),
+```
+
+## Packages are loaded by reference
+
+A script can refer to a package as `@standard`, `@standard:1` or by content id.
+Nothing is preloaded, and `standard` is not special.
+After parsing, `counters_packages` lists the script's references and loads only what they need from the hub, with their dependencies.
+A script with no references, or whose references are cached, makes no requests.
+
+The hub protocol, CID checks and dependency resolution are all existing `eyg_hub` functions.
+Erlang supplies the HTTP and hashing, then drives the cache's actions until there is nothing left to do.
+
+```erlang
+drain(Cache0, Origin, Fetch, Hash, Trees) ->
+    {Cache1, Actions} = ?CACHE:flush(Cache0),
+    case Actions of
+        [] -> {ok, Cache1, Trees};
+        _ -> ... ?CACHE:compute(Action, Origin, Fetch, Hash) ... ?CACHE:update(...)
+    end.
+```
+
+Every downloaded module is type checked before the cache is returned, so a script never runs against a package that does not check.
+
+## The caller owns the cache
+
+There is no hidden global cache.
+The caller passes a cache in and keeps the one that comes back, even when the result is an error.
+A corrected script then does not download its packages again.
+
+The example keeps it in a `gen_server`, `counters_session`.
+
+```erlang
+handle_call({run, Source}, _From, Cache0) ->
+    {Result, Cache1} = counters_eyg:run(Source, Cache0),
+    {reply, Result, Cache1};
+```
+
+The remote shell in the video starts a session and only ever sees results.
+Keeping the evaluated cache in a remote shell's variables stalled the shell, the session avoids that.
+
+```erlang
+{ok, S} = counters_session:start_link().
+counters_session:run(S, "perform StartCounter(\"apples\")").
+```
+
+## Running a script
+
+`run_step` drives the interpreter.
+It stops at every reference and effect, and resumes with an answer.
+
+```erlang
+run_step(Step, Source, Cache) ->
+    case ?CACHE:static_loop(Step, Cache, fun ?EXPR:resume/3) of
+        {error, {{unhandled_effect, Label, Lift}, _Span, Env, K}} ->
+            Reply = counters_effects:handle(Label, Lift),
+            run_step(?EXPR:resume(Reply, Env, K), Source, Cache);
+        {error, {Reason, Span, _Env, _K}} -> ... runtime diagnostic ...;
+        {ok, Value} -> {ok, Value}
+    end.
+```
+
+`static_loop` answers references with values from the cache.
+An effect goes to the Erlang handler, and the program resumes where it stopped.
 
 ## Scripts in the video
 
-Start the node, then join the cluster with a remote shell.
+A single effect.
 
-```sh
-bin/start
-erl -sname dev -setcookie eyg -remsh counters@$(hostname -s)
+```eyg
+perform StartCounter("apples")
 ```
 
-The first script performs a single effect.
+Several effects, the last reply is the result of the script.
 
-```erlang
-counters_eyg:run("perform StartCounter(\"apples\")").
+```eyg
+let _ = perform StartCounter("pears")
+let _ = perform SetTickRate({name: "pears", seconds: 1})
+perform GetValue("pears")
 ```
 
-The second performs several, each result is a value the script can use.
+The standard library performing effects for every name in a list, it is fetched from the hub the first time.
 
-```erlang
-counters_eyg:run("
-  let _ = perform StartCounter(\"pears\")
-  let _ = perform SetTickRate({name: \"pears\", seconds: 1})
-  perform GetValue(\"pears\")
-").
+```eyg
+let names = ["plums", "figs", "limes", "kiwis"]
+@standard.list.map(names, (name) -> {
+  let _ = perform StartCounter(name)
+  perform SetTickRate({name: name, seconds: 2})
+})
 ```
 
-The third uses the standard library to perform effects for every item in a list.
-
-```erlang
-counters_eyg:run("
-  let names = [\"plums\", \"figs\", \"limes\", \"kiwis\"]
-  @standard.list.map(names, (name) -> {
-    let _ = perform StartCounter(name)
-    perform SetTickRate({name: name, seconds: 2})
-  })
-").
-```
-
-`@standard` is loaded once when the application starts, from the IR of the standard library in this repository.
-
-```erlang
-{ok, Json} = file:read_file(Path),
-{ok, Standard} = eyg_beam:load_package(Json),
-persistent_term:put({?MODULE, packages}, #{<<"standard">> => Standard}).
-```
-
-Running `observer:start()` from the remote shell opens observer on the node.
-The Applications tab shows a child of `counters_sup` for every counter a script started, and double clicking one shows its state.
+Opening Observer on the node shows a child of `counters_sup` for every counter.
+Double click one to see its state.
 
 ```erlang
 #{name => <<"apples">>, seconds => 10, value => 1, timer => #Ref<...>}
@@ -177,14 +218,14 @@ The Applications tab shows a child of `counters_sup` for every counter a script 
 
 ## What the host still trusts
 
-Type checking guarantees a script only performs the effects you list, with the types you declared.
-It does not limit how long a script runs, a recursive script can loop forever in the calling process.
-The handler runs in the caller's process too, so a crash in an effect implementation crashes the caller like any other function call.
+Type checking guarantees a script only performs the counter effects, with the right types.
+It does not limit how long a script runs, and execution is not transactional, a runtime failure does not undo earlier effects.
 
 ## Try it
 
 ```sh
-git clone https://github.com/crowdhailer/eyg-lang
-cd eyg-lang/examples/erlang_counters
-bin/start
+cd examples/erl_counter
+gleam build
+erl -sname counters -pa build/dev/erlang/*/ebin \
+  -eval '{ok, _} = application:ensure_all_started(erl_counter).'
 ```

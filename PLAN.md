@@ -10,17 +10,17 @@ We will follow the projects structure for components we need, however we will no
 
 Tasks:
 
-- [ ] install the latest Elixir and erlang
+- [x] install the latest Elixir and erlang
 - [x] create an example erlang application in `examples/erl_counter`. It has a dynamic supervisor for counters that tick every 10 seconds
   - [x] Create functions to `start_counter`, `set_tick_rate`, `get_value`, `shutdown`
   - [x] Create an EYG effect for each of these. write the type and implementation in erlang.
   - [x] Write `counters_eyg:check/2` and `run/2`: automatically load references, typecheck against the application effects, and return `{Result, Cache}` for the application to retain. Format source-positioned diagnostics.
   - [x] Record starting the application, connecting a remote shell, typing an `@standard` script, silently loading the dependency during check, and running it with the retained cache. See [video](examples/erl_counter/video/erl-counter.mp4).
-  - [ ] Create a video of joining the cluster and writing eyg scripts and executing them. Show that opening the obsever shows the new counter children and you can inspect there shape
+  - [x] Create a video of joining the cluster and writing eyg scripts and executing them. Show that opening the obsever shows the new counter children and you can inspect there shape
     - first script, very simple single effect
     - second script, multiple effects
     - use the std library and create many effects
-  - [ ] Write a blog post about embedding EYG in an erlang program, include the video
+  - [x] Write a blog post about embedding EYG in an erlang program, include the video
 - [ ] Create the same counter example in Elixir, but in a phoenix application
   - [ ] There should be a script box on the homepage
   - [ ] The script box uses the textmate syntax highlighting
