@@ -21,21 +21,21 @@ Tasks:
     - second script, multiple effects
     - use the std library and create many effects
   - [x] Write a blog post about embedding EYG in an erlang program, include the video
-- [ ] Create the same counter example in Elixir, but in a phoenix application
-  - [ ] There should be a script box on the homepage
-  - [ ] The script box uses the textmate syntax highlighting
-  - [ ] Use live view
-      - [ ] Any program that parses has it's types checked, show errors on the page
-      - [ ] Press enter or click submit to send the messages
-  - [ ] create the same video of scripts and effects in this application
-  - [ ] Write a blog post about embedding EYG in an Elixir program, include the video
-- [ ] Create a package in this repo called ash_eyg
-  - [ ] Implement The automatic creation of EYG effects from Ash constructs in the same way as for ash_lua
-  - [ ] Show how to add just some of the effects to a eyg execution environment
-  - [ ] Create a standard getting started ash project and show how to set up EYG to access the first domains and resources
-  - [ ] Review and simplify the ash_eyg package
-  - [ ] Create a video of setting up the project and installing EYG
-  - [ ] Write a blog post about how to use EYG in Ash, be super focused on the technical steps
+- [x] Create the same counter example in Elixir, but in a phoenix application
+  - [x] There should be a script box on the homepage
+  - [x] The script box uses the textmate syntax highlighting
+  - [x] Use live view
+      - [x] Any program that parses has it's types checked, show errors on the page
+      - [x] Press enter or click submit to send the messages
+  - [x] create the same video of scripts and effects in this application
+  - [x] Write a blog post about embedding EYG in an Elixir program, include the video
+- [x] Create a package in this repo called ash_eyg
+  - [x] Implement The automatic creation of EYG effects from Ash constructs in the same way as for ash_lua
+  - [x] Show how to add just some of the effects to a eyg execution environment
+  - [x] Create a standard getting started ash project and show how to set up EYG to access the first domains and resources
+  - [x] Review and simplify the ash_eyg package
+  - [x] Create a video of setting up the project and installing EYG
+  - [x] Write a blog post about how to use EYG in Ash, be super focused on the technical steps
 
 ## Implementation decisions and learnings (2026-10-03)
 
@@ -253,3 +253,24 @@ The actual live recording completed all assertions. Its poster was visually insp
 The earlier type-diagnostic fix also passed the analysis package's formatting/build checks and 44 Erlang tests.
 
 For future Elixir/Ash work, carry forward the same reference-driven loading, effect whitelist, explicit cache return on all result paths, and application-side session ownership. Do not resurrect the superseded hardcoded preload or hidden-global-cache designs.
+
+## Elixir, Phoenix and Ash decisions and learnings (2026-10-03)
+
+The Phoenix example and `ash_eyg` follow the decisions above. `eyg_beam` was removed.
+
+- **Building.** Mix cannot fetch the EYG libraries, they are not published for Erlang.
+  Each Mix project has a Gleam project in a `gleam/` directory listing them by path, with a committed `manifest.toml`.
+  A `gleam_libraries` compiler defined in `mix.exs` runs `gleam build` there and copies the modules into the Mix application's `ebin`.
+  The Gleam project needs its own directory: Gleam also compiles `.ex` files in the root project's `test/`, even for `gleam export`.
+  Copying modules into the application means a host using two such libraries would load two copies of `gleam_stdlib`.
+  Publishing Erlang artifacts remains the proper fix.
+- Copied modules lose their `.app` files, so the Mix application declares `:crypto`, `:inets` and `:ssl` for `gleam_httpc`.
+- **Loading.** `PhoenixCounters.Counters.Packages` and `AshEyg.Packages` port `counters_packages`, configured with the `:hub` and `:package_fetch` settings of their application.
+  `check` and `run` take and return the cache on every path.
+- **Ownership.** `PhoenixCounters.Scripts` and `AshEyg.Session` are `GenServer`s that own a cache, the LiveView and AshAdmin only see results.
+  `AshEyg.RunScript` takes a `session` option, without one each run starts with an empty cache. The `ash_eyg.check` and `ash_eyg.run` tasks are one off runs from an empty cache.
+- **Tests** serve packages from a fixture built with the hub's own codecs, as in `erl_counter`, and make no requests.
+- **AshAdmin** has no extension point for an application's JavaScript. The helpdesk adds its highlighting script with a plug before the page is sent.
+- **Videos** are recorded by scripts in each example's `video/` directory, with Xvfb, xdotool and ffmpeg.
+  Chrome for Testing under Xvfb can take over 20 seconds to show the first page of a cold profile, start it off camera first.
+  Only run one browser instance per display, a second instance stopped repainting.
