@@ -1,18 +1,38 @@
-# PhoenixCounters
+# Phoenix counters
 
-To start your Phoenix server:
+A Phoenix application where EYG scripts, typed into the home page, control a supervisor of counters.
 
-* Run `mix setup` to install and setup dependencies
-* Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+The same example in Erlang is [`examples/erlang_counters`](../erlang_counters).
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+- `PhoenixCounters.Counters` starts named counters under a `DynamicSupervisor`, each ticks every 10 seconds.
+- `PhoenixCounters.Counters.Effects` gives each function an EYG effect, a type and an implementation.
+- `PhoenixCounters.Counters.Eyg` checks and runs scripts that can use only those effects.
+- `PhoenixCountersWeb.HomeLive` type checks every program that parses as it is typed, enter runs it.
 
-Ready to run in production? Please [check our deployment guides](https://phoenix.hexdocs.pm/deployment.html).
+The script box highlights EYG in the browser with [shiki](https://shiki.style) and the TextMate grammar from [`packages/vscode-eyg`](../../packages/vscode-eyg).
 
-## Learn more
+## Run
 
-* Official website: https://www.phoenixframework.org/
-* Guides: https://phoenix.hexdocs.pm/overview.html
-* Docs: https://phoenix.hexdocs.pm
-* Forum: https://elixirforum.com/c/phoenix-forum
-* Source: https://github.com/phoenixframework/phoenix
+Requires Elixir, Gleam, to build [`eyg_beam`](../../packages/eyg_beam), and a JavaScript package manager for shiki.
+
+```sh
+mix setup
+(cd assets && bun install)
+mix phx.server
+```
+
+Visit [`localhost:4000`](http://localhost:4000), set `PORT` to use another port.
+
+```eyg
+let _ = perform StartCounter("apples")
+let _ = perform SetTickRate({name: "apples", seconds: 1})
+perform GetValue("apples")
+```
+
+Scripts can use the standard library as `@standard`, it is loaded from `eyg_packages/standard/index.eyg.json`.
+
+## Test
+
+```sh
+mix test
+```
