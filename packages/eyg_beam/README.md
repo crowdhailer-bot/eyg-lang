@@ -53,3 +53,5 @@ Only the bare `@name` form is resolved, nothing is fetched from a hub.
 `eyg_beam` and the EYG packages it builds on target JavaScript on Hex, so a host builds them from this repository.
 
 - A Gleam project, including one whose source is all Erlang, adds `eyg_beam = { path = "..." }`, see [`examples/erlang_counters`](../../examples/erlang_counters).
+- A Mix project adds `{:eyg_beam, path: "..."}`, Mix builds it with `make`, which bundles `eyg_beam` and its Gleam dependencies into one OTP application in `ebin/`.
+  Building needs `gleam` on the path. See [`examples/phoenix_counters`](../../examples/phoenix_counters).
