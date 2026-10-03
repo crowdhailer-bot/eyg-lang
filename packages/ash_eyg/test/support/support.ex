@@ -116,3 +116,27 @@ defmodule AshEyg.Test.Named.Thing do
     defaults [:read]
   end
 end
+
+defmodule AshEyg.Test.Scripts do
+  @moduledoc false
+  use Ash.Domain, validate_config_inclusion?: false
+
+  resources do
+    resource AshEyg.Test.Scripts.Script
+  end
+end
+
+defmodule AshEyg.Test.Scripts.Script do
+  @moduledoc false
+  use Ash.Resource, domain: AshEyg.Test.Scripts
+
+  actions do
+    action :run, :string do
+      argument :source, :string, allow_nil?: false
+
+      run {AshEyg.RunScript,
+           otp_app: :ash_eyg,
+           packages: %{"standard" => "../../eyg_packages/standard/index.eyg.json"}}
+    end
+  end
+end
