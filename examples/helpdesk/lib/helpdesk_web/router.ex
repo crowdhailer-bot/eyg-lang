@@ -5,7 +5,7 @@ defmodule HelpdeskWeb.Router do
   admin_browser_pipeline(:browser)
 
   scope "/" do
-    pipe_through [:browser]
+    pipe_through [:browser, HelpdeskWeb.EygHighlight]
 
     ash_admin("/admin")
   end

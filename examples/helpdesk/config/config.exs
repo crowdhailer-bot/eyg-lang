@@ -17,6 +17,14 @@ config :helpdesk, HelpdeskWeb.Endpoint,
 
 config :phoenix, :json_library, Jason
 
+config :esbuild,
+  version: "0.25.4",
+  helpdesk: [
+    args:
+      ~w(js/admin_eyg.js --bundle --format=esm --target=es2022 --outdir=../priv/static/assets),
+    cd: Path.expand("../assets", __DIR__)
+  ]
+
 # These enable behaviors that will become the default in the next major
 # version of Ash. Setting them now opts your application into the new
 # behavior and ensures a seamless upgrade. See the backwards compatibility

@@ -8,7 +8,8 @@ defmodule Helpdesk.MixProject do
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      consolidate_protocols: Mix.env() != :dev
+      consolidate_protocols: Mix.env() != :dev,
+      aliases: aliases()
     ]
   end
 
@@ -17,6 +18,12 @@ defmodule Helpdesk.MixProject do
     [
       mod: {Helpdesk.Application, []},
       extra_applications: [:logger]
+    ]
+  end
+
+  defp aliases do
+    [
+      "assets.build": ["esbuild.install --if-missing", "esbuild helpdesk"]
     ]
   end
 
@@ -30,6 +37,7 @@ defmodule Helpdesk.MixProject do
       {:phoenix, "~> 1.8"},
       {:phoenix_live_view, "~> 1.1"},
       {:bandit, "~> 1.5"},
+      {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:igniter, "~> 0.6", only: [:dev, :test]}
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
