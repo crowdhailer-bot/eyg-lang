@@ -1,5 +1,8 @@
 # Bundle eyg_beam and its Gleam dependencies as one OTP application in ebin/.
 # Mix builds a path dependency on this directory with make.
+# Mix runs make on every compile, keep quiet when there is nothing to do.
+.SILENT:
+
 APP = {application, eyg_beam, [{description, "EYG for Erlang and Elixir hosts"}, {vsn, "0.1.0"}, {modules, Mods}, {registered, []}, {applications, [kernel, stdlib]}]}
 
 # Rebuild when this package or the EYG packages it builds from change.
