@@ -1,5 +1,9 @@
 import Config
 
+# This tells Ash about your domain, which is used to find
+# available resource and actions
+config :helpdesk, :ash_domains, [Helpdesk.Support]
+
 # These enable behaviors that will become the default in the next major
 # version of Ash. Setting them now opts your application into the new
 # behavior and ensures a seamless upgrade. See the backwards compatibility
