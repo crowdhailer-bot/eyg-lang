@@ -1,0 +1,7 @@
+#!/bin/sh
+# Start the node counters@<host> running the counters application.
+set -e
+cd "$(dirname "$0")/.."
+gleam build
+exec erl -sname counters -setcookie eyg -pa build/dev/erlang/*/ebin \
+  -eval 'application:ensure_all_started(counters)' "$@"
