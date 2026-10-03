@@ -52,8 +52,16 @@ defmodule PhoenixCounters.Counters do
 
   defp with_counter(name, fun) do
     case Registry.lookup(@registry, name) do
-      [{pid, _}] -> fun.(pid)
-      [] -> {:error, :not_found}
+      # A counter can stop between looking it up and calling it.
+      [{pid, _}] ->
+        try do
+          fun.(pid)
+        catch
+          :exit, {:noproc, _} -> {:error, :not_found}
+        end
+
+      [] ->
+        {:error, :not_found}
     end
   end
 end

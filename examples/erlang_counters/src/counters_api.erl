@@ -25,5 +25,6 @@ shutdown(Name) ->
 with_counter(Name, Fun) ->
     case global:whereis_name({counter, Name}) of
         undefined -> {error, not_found};
-        Pid -> Fun(Pid)
+        %% A counter can stop between looking it up and calling it.
+        Pid -> try Fun(Pid) catch exit:{noproc, _} -> {error, not_found} end
     end.
