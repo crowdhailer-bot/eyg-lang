@@ -84,6 +84,19 @@ effects =
   |> Enum.filter(&(&1.action in [:read, :assign]))
 ```
 
+### From a generic action
+
+`AshEyg.RunScript` runs the script in a `source` argument, so any interface for generic actions can run scripts, for example AshAdmin.
+
+```elixir
+action :run, :string do
+  argument :source, :string, allow_nil?: false
+  run {AshEyg.RunScript, otp_app: :helpdesk, packages: %{"standard" => "path/to/index.eyg.json"}}
+end
+```
+
+Packages for `@name` references are loaded with `AshEyg.load_package/1`.
+
 ### Host effects
 
 Add effects of your own with `AshEyg.Effect.new/4`.

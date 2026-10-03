@@ -75,6 +75,23 @@ iex> Helpdesk.Triage.check(File.read!("scripts/open.eyg"))
 {:error, "error: missing row 'SupportTicketOpen'\n..."}
 ```
 
+## AshAdmin
+
+Scripts can also be run from [AshAdmin](https://hexdocs.pm/ash_admin).
+[`Helpdesk.Scripting.Script`](lib/helpdesk/scripting/script.ex) has a `run` action that uses `AshEyg.RunScript`, with `@standard` available.
+
+```sh
+(cd assets && bun install)
+mix assets.build
+mix phx.server
+```
+
+Visit [`localhost:4000/admin`](http://localhost:4000/admin), open Scripting, Script.
+Set `PORT` to use another port.
+
+AshAdmin has no place for an application's scripts, so [`HelpdeskWeb.EygHighlight`](lib/helpdesk_web/eyg_highlight.ex) adds [`admin_eyg.js`](assets/js/admin_eyg.js) to its pages.
+It highlights the script and its result with the TextMate grammar from [`packages/vscode-eyg`](../../packages/vscode-eyg).
+
 ## Test
 
 ```sh
