@@ -79,3 +79,8 @@ pub fn parse_test() {
   assert eyg_beam.parse("perform Log(1)") == Ok(Nil)
   let assert Error(_) = eyg_beam.parse("perform Log(")
 }
+
+pub fn render_type_test() {
+  assert eyg_beam.render_type(eyg_beam.result_type(t.Integer, t.String))
+    == "[Ok: Integer | Error: String]"
+}

@@ -105,6 +105,11 @@ pub fn inspect(value: Value) -> String {
   simple_debug.inspect(value)
 }
 
+/// Render a type as EYG source.
+pub fn render_type(type_: Type) -> String {
+  type_debug.render_type(type_)
+}
+
 /// The type of a record with these fields.
 pub fn record_type(fields: List(#(String, Type))) -> Type {
   t.record(fields)
