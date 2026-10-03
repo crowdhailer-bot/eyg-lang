@@ -1,3 +1,35 @@
+defmodule Mix.Tasks.Compile.GleamLibraries do
+  @moduledoc """
+  Builds the EYG libraries listed in gleam/gleam.toml for Erlang, with Gleam,
+  and copies their modules into this application.
+
+  The EYG packages are not published for Erlang, so Mix cannot fetch them.
+  """
+  use Mix.Task.Compiler
+
+  @impl true
+  def run(_args) do
+    # Gleam needs a source directory, the project has no source of its own.
+    File.mkdir_p!("gleam/src")
+
+    case System.cmd("gleam", ["build", "--target", "erlang"], cd: "gleam", stderr_to_stdout: true) do
+      {_output, 0} ->
+        ebin = Mix.Project.compile_path()
+        File.mkdir_p!(ebin)
+
+        for beam <- Path.wildcard("gleam/build/dev/erlang/*/ebin/*.beam") do
+          File.cp!(beam, Path.join(ebin, Path.basename(beam)))
+        end
+
+        {:ok, []}
+
+      {output, _status} ->
+        Mix.shell().error(output)
+        {:error, []}
+    end
+  end
+end
+
 defmodule PhoenixCounters.MixProject do
   use Mix.Project
 
@@ -10,7 +42,7 @@ defmodule PhoenixCounters.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
-      compilers: [:phoenix_live_view] ++ Mix.compilers(),
+      compilers: [:gleam_libraries, :phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader]
     ]
   end
@@ -65,8 +97,7 @@ defmodule PhoenixCounters.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"},
-      {:eyg_beam, path: "../../packages/eyg_beam"}
+      {:bandit, "~> 1.5"}
     ]
   end
 

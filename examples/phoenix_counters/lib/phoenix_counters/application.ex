@@ -7,8 +7,6 @@ defmodule PhoenixCounters.Application do
 
   @impl true
   def start(_type, _args) do
-    PhoenixCounters.Counters.Eyg.load_packages()
-
     children =
       [
         PhoenixCountersWeb.Telemetry,
@@ -18,6 +16,7 @@ defmodule PhoenixCounters.Application do
       ] ++
         PhoenixCounters.Counters.child_specs() ++
         [
+          {PhoenixCounters.Scripts, name: PhoenixCounters.Scripts},
           # Start to serve requests, typically the last entry
           PhoenixCountersWeb.Endpoint
         ]

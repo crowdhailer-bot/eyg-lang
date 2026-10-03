@@ -7,15 +7,16 @@ defmodule PhoenixCounters.Counters.Effects do
 
   alias PhoenixCounters.Counters
 
+  @type_ :eyg@analysis@type_@isomorphic
   @unit {:record, :empty}
 
-  def effects do
-    reply = :eyg_beam.result_type(@unit, :string)
+  def types do
+    reply = @type_.result(@unit, :string)
 
     [
       {"StartCounter", {:string, reply}},
-      {"SetTickRate", {:eyg_beam.record_type([{"name", :string}, {"seconds", :integer}]), reply}},
-      {"GetValue", {:string, :eyg_beam.result_type(:integer, :string)}},
+      {"SetTickRate", {@type_.record([{"name", :string}, {"seconds", :integer}]), reply}},
+      {"GetValue", {:string, @type_.result(:integer, :string)}},
       {"Shutdown", {:string, reply}}
     ]
   end

@@ -1,7 +1,7 @@
 defmodule PhoenixCountersWeb.HomeLive do
   use PhoenixCountersWeb, :live_view
 
-  alias PhoenixCounters.Counters
+  alias PhoenixCounters.{Counters, Scripts}
   alias PhoenixCounters.Counters.Eyg
 
   @impl true
@@ -16,9 +16,9 @@ defmodule PhoenixCountersWeb.HomeLive do
   end
 
   def handle_event("run", %{"source" => source}, socket) do
-    case Eyg.run(source) do
+    case Scripts.run(source) do
       {:ok, value} ->
-        run = %{source: source, value: value}
+        run = %{source: source, value: Eyg.inspect_value(value)}
 
         socket
         |> assign(check: nil, runs: [run | socket.assigns.runs], counters: Counters.list())
@@ -38,7 +38,7 @@ defmodule PhoenixCountersWeb.HomeLive do
   # Only programs that parse are type checked, an unfinished program has no errors yet.
   defp check(source) do
     case Eyg.parse(source) do
-      :ok -> Eyg.check(source)
+      :ok -> Scripts.check(source)
       {:error, _} -> nil
     end
   end

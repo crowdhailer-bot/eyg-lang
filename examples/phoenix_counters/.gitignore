@@ -35,3 +35,6 @@ phoenix_counters-*.tar
 npm-debug.log
 /assets/node_modules/
 
+
+# Gleam builds the EYG libraries here.
+/gleam/build/

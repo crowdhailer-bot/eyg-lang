@@ -1,5 +1,5 @@
 defmodule PhoenixCounters.CountersTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case
 
   alias PhoenixCounters.Counters
 

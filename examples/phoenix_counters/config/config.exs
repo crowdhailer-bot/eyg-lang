@@ -8,8 +8,7 @@
 import Config
 
 config :phoenix_counters,
-  generators: [timestamp_type: :utc_datetime],
-  standard_library: Path.expand("../../../eyg_packages/standard/index.eyg.json", __DIR__)
+  generators: [timestamp_type: :utc_datetime]
 
 # Configure the endpoint
 config :phoenix_counters, PhoenixCountersWeb.Endpoint,

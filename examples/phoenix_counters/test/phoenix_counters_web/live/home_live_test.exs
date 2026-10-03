@@ -16,6 +16,10 @@ defmodule PhoenixCountersWeb.HomeLiveTest do
   end
 
   test "runs a script and lists the counters it started", %{conn: conn} do
+    PhoenixCounters.HubFixture.use_fetch(
+      PhoenixCounters.HubFixture.fetch([{"standard", PhoenixCounters.HubFixture.standard()}])
+    )
+
     {:ok, view, _html} = live(conn, ~p"/")
 
     html =
