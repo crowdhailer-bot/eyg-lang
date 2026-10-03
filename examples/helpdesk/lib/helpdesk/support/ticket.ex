@@ -56,6 +56,9 @@ defmodule Helpdesk.Support.Ticket do
 
       # We also don't want status to ever be `nil`
       allow_nil? false
+
+      # Public attributes are visible to EYG scripts
+      public? true
     end
   end
 
