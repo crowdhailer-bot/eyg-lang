@@ -16,8 +16,8 @@ The script box highlights EYG in the browser with [shiki](https://shiki.style) a
 Requires Elixir, Gleam, to build [`eyg_beam`](../../packages/eyg_beam), and a JavaScript package manager for shiki.
 
 ```sh
-mix setup
 (cd assets && bun install)
+mix setup
 mix phx.server
 ```
 
