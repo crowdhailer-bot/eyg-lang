@@ -1,5 +1,0 @@
-*.beam
-*.ez
-/build
-/ebin
-erl_crash.dump
