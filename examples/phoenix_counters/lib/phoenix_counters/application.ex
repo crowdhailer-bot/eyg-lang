@@ -7,15 +7,18 @@ defmodule PhoenixCounters.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      PhoenixCountersWeb.Telemetry,
-      {DNSCluster, query: Application.get_env(:phoenix_counters, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: PhoenixCounters.PubSub},
-      # Start a worker by calling: PhoenixCounters.Worker.start_link(arg)
-      # {PhoenixCounters.Worker, arg},
-      # Start to serve requests, typically the last entry
-      PhoenixCountersWeb.Endpoint
-    ]
+    children =
+      [
+        PhoenixCountersWeb.Telemetry,
+        {DNSCluster,
+         query: Application.get_env(:phoenix_counters, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: PhoenixCounters.PubSub}
+      ] ++
+        PhoenixCounters.Counters.child_specs() ++
+        [
+          # Start to serve requests, typically the last entry
+          PhoenixCountersWeb.Endpoint
+        ]
 
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
