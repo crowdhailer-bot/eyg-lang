@@ -9,6 +9,7 @@ import lustre/element/keyed
 import lustre/event
 import overlay/public/artifact_preview
 import overlay/web/artifact as art
+import overlay/web/puppet
 import overlay/web/state
 
 pub fn render(store: art.Store) -> element.Element(state.Message) {
@@ -74,21 +75,26 @@ fn panel(store: art.Store, placement: art.Placement) {
       ),
     ]),
     case item {
-      art.Artifact(name) -> preview(art.latest(store, name), art.title(item))
+      art.Artifact(name) -> preview(art.latest(store, name), item)
       art.Revision(name, version) ->
-        preview(art.revision(store, name, version), art.title(item))
+        preview(art.revision(store, name, version), item)
       art.History(name) -> history(store, name, origin, size)
       art.Diff(name, from, to) -> diff(store, name, from, to)
     },
   ])
 }
 
-fn preview(bundle, title) {
+fn preview(bundle, item) {
   case bundle {
     Error(reason) -> h.pre([], [h.text(reason)])
     // Preparing a bundle inlines every file, only repeat it for a new bundle.
     Ok(bundle) -> {
+      let title = art.title(item)
       use <- element.memo([element.ref(bundle), element.ref(title)])
+      let frame =
+        list.map(puppet.frame_attributes(item), fn(attribute) {
+          a.attribute(attribute.0, attribute.1)
+        })
       element.element(
         "iframe",
         [
@@ -101,6 +107,7 @@ fn preview(bundle, title) {
             "allow",
             "camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'",
           ),
+          ..frame
         ],
         [],
       )

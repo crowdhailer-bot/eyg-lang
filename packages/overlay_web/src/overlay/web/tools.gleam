@@ -16,6 +16,7 @@ import gleam/dict
 import gleam/dynamic/decode
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/string
 import multiformats/cid/v1
 import ogre/origin
@@ -27,6 +28,7 @@ import overlay/policy
 import overlay/tools/guide
 import overlay/tools/run
 import overlay/web/artifact
+import overlay/web/puppet
 import pal/platform/browser
 import pal/system
 import touch_grass as tg
@@ -61,7 +63,12 @@ pub type Call {
   Errored(List(#(Meta, error.Reason)))
   Exception(state.Reason(Meta))
   Aborted(String)
-  Handling(task_id: Int, env: state.Env(Meta), k: state.Stack(Meta))
+  Handling(
+    task_id: Int,
+    env: state.Env(Meta),
+    k: state.Stack(Meta),
+    screenshot: Bool,
+  )
   /// Waiting for a guide to be fetched by the harness.
   Reading(task_id: Int)
   Read(Result(String, String))
@@ -76,10 +83,10 @@ pub type Call {
   )
 }
 
-/// A tool call state and any output printed.
-/// Output is held most recent first.
+/// A tool call state and any output printed or screenshots taken.
+/// Output and images are held most recent first.
 pub type Progress {
-  Progress(id: String, output: List(String), call: Call)
+  Progress(id: String, output: List(String), images: List(BitArray), call: Call)
 }
 
 pub type Calls =
@@ -113,7 +120,7 @@ fn run_code(ctx: Context, id: String, code: String) -> #(Context, Progress) {
             source
             |> execute(ctx.context)
             |> loop(ctx, [])
-          #(ctx, Progress(id:, output:, call:))
+          #(ctx, Progress(id:, output:, images: [], call:))
         }
         errors -> {
           let references = missing_references(errors)
@@ -223,7 +230,7 @@ pub fn to_fetch(
 }
 
 fn failed(id, call) {
-  Progress(id:, output: [], call:)
+  Progress(id:, output: [], images: [], call:)
 }
 
 // context can include tasks
@@ -276,13 +283,51 @@ fn loop(
   }
 }
 
+/// Effects for the artifact workspace, in addition to the browser harness.
+type WorkspaceEffect {
+  ArtifactEffect(artifact.Effect)
+  PuppetEffect(puppet.Request)
+}
+
+fn workspace_effects() {
+  [
+    tg.map(puppet.effect(), PuppetEffect),
+    ..list.map(artifact.effects(), tg.map(_, ArtifactEffect))
+  ]
+}
+
 fn perform(label, lift, env, k, ctx: Context, output) {
-  case interface.cast(artifact.effects(), label, lift) {
-    Ok(effect) -> {
+  case interface.cast(workspace_effects(), label, lift) {
+    Ok(ArtifactEffect(effect)) -> {
       let #(artifacts, value) = artifact.perform(ctx.artifacts, effect)
       let ctx = Context(..ctx, artifacts:)
       loop(expression.resume(value, env, k), ctx, output)
     }
+    Ok(PuppetEffect(request)) ->
+      case puppet.frame_selector(ctx.artifacts, request.page) {
+        Ok(selector) -> {
+          let id = ctx.counter
+          let effect =
+            system.RequestFrame(
+              selector:,
+              message: puppet.to_json(request),
+              // Allow for loading the preview and rendering screenshots.
+              timeout: request.timeout + 5000,
+              resume: fn(reply) {
+                let reply = result.try(reply, puppet.reply)
+                system.Done(#(id, puppet.to_value(reply)))
+              },
+            )
+          let effects = [effect, ..ctx.effects]
+          let ctx = Context(..ctx, counter: id + 1, effects:)
+          let screenshot = request.action == puppet.Screenshot
+          #(ctx, output, Handling(id, env, k, screenshot))
+        }
+        Error(reason) -> {
+          let value = puppet.to_value(Error(reason))
+          loop(expression.resume(value, env, k), ctx, output)
+        }
+      }
     Error(break.UnhandledEffect(..)) ->
       browser_perform(label, lift, env, k, ctx, output)
     Error(reason) -> #(ctx, output, Exception(reason))
@@ -307,7 +352,7 @@ fn browser_perform(label, lift, env, k, ctx: Context, output) {
             let effect = system.map(effect, fn(v) { #(id, v) })
             let effects = [effect, ..ctx.effects]
             let ctx = Context(..ctx, counter: id + 1, effects:)
-            #(ctx, output, Handling(id, env, k))
+            #(ctx, output, Handling(id, env, k, False))
           }
           browser.Spotless(..) -> #(
             ctx,
@@ -350,7 +395,7 @@ fn do_all_returns(
 ) -> Result(List(chat.Message(a)), Nil) {
   case calls {
     [] -> Ok(list.reverse(acc))
-    [Progress(id:, output:, call:), ..calls] -> {
+    [Progress(id:, output:, images:, call:), ..calls] -> {
       let message = case call {
         UnknownTool(name:) -> Ok("unknown tool: " <> name)
         BadArguments(reasons) -> Ok(string.inspect(reasons))
@@ -377,7 +422,7 @@ fn do_all_returns(
             chat.ToolResultMessage(
               tool_call_id: id,
               text: run.report(output, text),
-              images: [],
+              images: attached(images),
             )
           do_all_returns(calls, [message, ..acc])
         }
@@ -385,6 +430,12 @@ fn do_all_returns(
       }
     }
   }
+}
+
+fn attached(images) {
+  list.take(images, 3)
+  |> list.reverse
+  |> list.map(bit_array.base64_encode(_, True))
 }
 
 /// Tool results are text for the model, not a binary transport.
@@ -431,7 +482,7 @@ fn summarize_binaries(value: v.Value(a, b)) -> v.Value(a, b) {
 }
 
 pub fn pulled(ctx: Context, progress: Progress) -> #(Context, Progress) {
-  let Progress(id:, output:, call:) = progress
+  let Progress(id:, output:, images:, call:) = progress
 
   case call {
     Pulling(source) -> {
@@ -444,7 +495,7 @@ pub fn pulled(ctx: Context, progress: Progress) -> #(Context, Progress) {
             // output should always be empty going into this loop.
             // Maybe output should move into a running state of call
             |> loop(ctx, output)
-          #(ctx, Progress(id:, output:, call:))
+          #(ctx, Progress(id:, output:, images:, call:))
         }
         errors -> {
           // Don't check for needs pull here as we've aready done that.
@@ -472,7 +523,7 @@ pub fn check_fetching(
   ctx: Context,
   progress: Progress,
 ) -> #(Context, Progress) {
-  let Progress(id:, output:, call:) = progress
+  let Progress(id:, output:, images:, call:) = progress
   case call {
     Fetching(cids:, source:) -> {
       let cids = list.filter(cids, still_fetching(_, ctx.cache))
@@ -486,7 +537,7 @@ pub fn check_fetching(
                 // output should always be empty going into this loop.
                 // Maybe output should move into a running state of call
                 |> loop(ctx, output)
-              #(ctx, Progress(id:, output:, call:))
+              #(ctx, Progress(id:, output:, images:, call:))
             }
             errors -> #(ctx, failed(id, Errored(errors)))
           }
@@ -526,12 +577,19 @@ fn apply_effect(
   finished_id: Int,
   value: state.Value(Meta),
 ) {
-  let Progress(id:, output:, call:) = progress
+  let Progress(id:, output:, images:, call:) = progress
   case call {
-    Handling(task_id:, env:, k:) if task_id == finished_id -> {
+    Handling(task_id:, env:, k:, screenshot:) if task_id == finished_id -> {
+      let images = case screenshot, value {
+        True, v.Tagged("Ok", v.Tagged("Image", v.Binary(image))) -> [
+          image,
+          ..images
+        ]
+        _, _ -> images
+      }
       let #(ctx, output, call) =
         loop(expression.resume(value, env, k), ctx, output)
-      #(ctx, Progress(id:, output:, call:))
+      #(ctx, Progress(id:, output:, images:, call:))
     }
     Approving(task_id:, label:, lift:, denied:, env:, k:)
       if task_id == finished_id
@@ -541,7 +599,7 @@ fn apply_effect(
           perform(label, lift, env, k, ctx, output)
         _ -> loop(expression.resume(denied, env, k), ctx, output)
       }
-      #(ctx, Progress(id:, output:, call:))
+      #(ctx, Progress(id:, output:, images:, call:))
     }
     Reading(task_id:) if task_id == finished_id -> {
       let result = case value {
@@ -549,7 +607,7 @@ fn apply_effect(
         v.Tagged("Error", v.String(reason)) -> Error(reason)
         _ -> Error("unexpected guide result")
       }
-      #(ctx, Progress(id:, output:, call: Read(result)))
+      #(ctx, Progress(id:, output:, images:, call: Read(result)))
     }
     _ -> #(ctx, progress)
   }
@@ -592,7 +650,7 @@ pub fn effects() {
     harness.effects()
     |> list.filter(fn(effect) { !list.contains(services, effect.name) })
     |> list.map(tg.map(_, fn(_) { Nil }))
-  list.append(browser, list.map(artifact.effects(), tg.map(_, fn(_) { Nil })))
+  list.append(browser, list.map(workspace_effects(), tg.map(_, fn(_) { Nil })))
 }
 
 type Outcome {
