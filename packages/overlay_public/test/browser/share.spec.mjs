@@ -19,6 +19,10 @@ test('a person shares the version of an artifact they are looking at', async ({ 
   await expect(link).toHaveAttribute('href', `/artifact/${ids[0]}`);
   expect(shared).toEqual([{ name: 'departures', files: [{ path: 'index.html', media_type: 'text/html', content: Buffer.from('<h1>Departures</h1>').toString('base64') }] }]);
 
+  await expect(page.locator('.artifact-storage')).toHaveText('Saved in this tab');
+  await page.reload();
+  await expect(link).toHaveAttribute('href', `/artifact/${ids[0]}`);
+
   // A new version has not been shared.
   await overlay.run(`perform Artifact({name: "departures", bundle: [${file('index.html', 'text/html', '<h1>Later</h1>')}]})`);
   await expect(page.getByRole('button', { name: 'share' })).toBeVisible();

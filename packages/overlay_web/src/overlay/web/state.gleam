@@ -30,6 +30,7 @@ import overlay/llm/provider/ollama
 import overlay/llm/tool
 import overlay/policy
 import overlay/web/artifact
+import overlay/web/artifact/session as artifact_session
 import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/puppet
@@ -62,6 +63,9 @@ pub type State {
     counter: Int,
     expanded: set.Set(Int),
     artifacts: artifact.Store,
+    artifact_storage: artifact_session.Status,
+    artifacts_dirty: Bool,
+    artifact_save_revision: Int,
     /// Rounds of tool calls since the last prompt.
     steps: Int,
     /// The policy as written by the user, applied with `UserAppliedPolicy`.
@@ -107,6 +111,9 @@ pub fn new(config: Config) -> State {
     counter: 0,
     expanded: set.new(),
     artifacts: artifact.new(),
+    artifact_storage: artifact_session.Saved,
+    artifacts_dirty: False,
+    artifact_save_revision: 0,
     steps: 0,
     policy_source: "",
     policy: None,
@@ -120,7 +127,25 @@ pub fn init(config) {
   let #(state, effects) = flush(state)
   let provider_effects =
     list.map(provider_effects, system.map(_, ProviderSetupMessage))
-  #(state, list.flatten([provider_effects, effects, [load_history()]]))
+  #(
+    state,
+    list.flatten([provider_effects, effects, [load_history(), load_artifacts()]]),
+  )
+}
+
+const artifacts_key = "overlay.artifacts"
+
+fn load_artifacts() {
+  use stored <- system.GetSessionStorageItem(artifacts_key)
+  system.Done(ArtifactsLoaded(stored))
+}
+
+fn save_artifacts(store, revision) {
+  use result <- system.SetSessionStorageItem(
+    artifacts_key,
+    artifact_session.encode(store),
+  )
+  system.Done(ArtifactsSaved(revision, result))
 }
 
 const history_key = "overlay.history"
@@ -175,6 +200,9 @@ pub type Message {
   UserClickedShrink(Int)
   UserClosedArtifact(artifact.Item)
   UserShowedArtifact(artifact.Placement)
+  ArtifactsLoaded(Result(Option(String), String))
+  ArtifactsSaved(revision: Int, result: Result(Nil, String))
+  UserRetriedArtifactSave
   UserClickedShare(artifact.Item)
   ArtifactShared(
     name: String,
@@ -202,6 +230,34 @@ pub fn update(
   message: Message,
 ) -> #(State, List(system.Effect(Message))) {
   let #(next, effects) = do_update(state, message)
+  let dirty = case message {
+    ArtifactsLoaded(_) -> next.artifacts_dirty
+    _ -> next.artifacts_dirty || next.artifacts != state.artifacts
+  }
+  let next = State(..next, artifacts_dirty: dirty)
+  // Save a completed turn once, rather than serializing every tool result.
+  // A returned share secret must survive a refresh even while the agent is busy.
+  let persist = case next.status, message {
+    Waiting, _ -> True
+    _, ArtifactShared(..) -> True
+    _, UserRetriedArtifactSave -> True
+    _, _ -> False
+  }
+  let #(next, effects) = case persist, dirty {
+    True, True -> {
+      let revision = next.artifact_save_revision + 1
+      #(
+        State(
+          ..next,
+          artifacts_dirty: False,
+          artifact_storage: artifact_session.Saving,
+          artifact_save_revision: revision,
+        ),
+        [save_artifacts(next.artifacts, revision), ..effects],
+      )
+    }
+    _, _ -> #(next, effects)
+  }
   case next.status, next.history != state.history {
     Waiting, True -> #(next, [save_history(next.history), ..effects])
     _, _ -> #(next, effects)
@@ -213,6 +269,43 @@ fn do_update(
   message: Message,
 ) -> #(State, List(system.Effect(Message))) {
   case message {
+    ArtifactsLoaded(stored) -> {
+      // A late storage read must not replace work already created this session.
+      case state.artifacts == artifact.new(), stored {
+        False, _ -> #(state, [])
+        True, Ok(Some(stored)) ->
+          case artifact_session.restore(stored) {
+            Ok(artifacts) -> #(State(..state, artifacts:), [])
+            Error(reason) -> #(
+              State(
+                ..state,
+                artifact_storage: artifact_session.RestoreFailed(reason),
+              ),
+              [],
+            )
+          }
+        True, Error(reason) -> #(
+          State(
+            ..state,
+            artifact_storage: artifact_session.RestoreFailed(reason),
+          ),
+          [],
+        )
+        True, Ok(None) -> #(state, [])
+      }
+    }
+    ArtifactsSaved(revision, result) ->
+      case revision == state.artifact_save_revision {
+        False -> #(state, [])
+        True -> {
+          let status = case result {
+            Ok(Nil) -> artifact_session.Saved
+            Error(reason) -> artifact_session.SaveFailed(reason)
+          }
+          #(State(..state, artifact_storage: status), [])
+        }
+      }
+    UserRetriedArtifactSave -> #(State(..state, artifacts_dirty: True), [])
     UserClosedArtifact(item) -> #(
       State(..state, artifacts: artifact.close(state.artifacts, item)),
       [],

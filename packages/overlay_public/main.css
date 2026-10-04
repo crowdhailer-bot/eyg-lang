@@ -67,10 +67,10 @@ pre {
   color: var(--color-base-content);
 }
 
-.artifact-workspace { position: sticky; top: 0; height: 100dvh; padding: 64px 12px 12px; background: #f1f1ef radial-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px) 0 0 / 16px 16px; }
+.artifact-workspace { display: flex; flex-direction: column; position: sticky; top: 0; height: 100dvh; padding: 64px 12px 12px; background: #f1f1ef radial-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px) 0 0 / 16px 16px; }
 .workspace-heading { font-size: 11px; letter-spacing: 2px; color: #555; margin-bottom: 8px; }
-.artifact-canvas { position: relative; height: calc(100% - 25px); }
-.artifact-empty { display: grid; place-content: center; gap: 4px; height: calc(100% - 25px); border: 1px dashed rgba(0, 0, 0, 0.18); color: #666; font-size: 13px; text-align: center; }
+.artifact-canvas { position: relative; flex: 1; min-height: 0; }
+.artifact-empty { display: grid; place-content: center; gap: 4px; flex: 1; min-height: 0; border: 1px dashed rgba(0, 0, 0, 0.18); color: #666; font-size: 13px; text-align: center; }
 .artifact-panel { position: absolute; display: flex; flex-direction: column; padding: 4px; min-width: 0; min-height: 0; transition: left 0.5s cubic-bezier(0.2, 0.7, 0.2, 1), top 0.5s cubic-bezier(0.2, 0.7, 0.2, 1), width 0.5s cubic-bezier(0.2, 0.7, 0.2, 1), height 0.5s cubic-bezier(0.2, 0.7, 0.2, 1); }
 .artifact-heading { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #000; color: white; font-size: 12px; }
 .artifact-heading span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -573,3 +573,7 @@ pre {
     height: 8rem;
   }
 }
+
+.artifact-storage { color: #555; font-size: 12px; margin-bottom: 8px; }
+.artifact-storage:empty { display: none; }
+.artifact-storage button { cursor: pointer; text-decoration: underline; background: none; border: 0; color: inherit; font: inherit; }

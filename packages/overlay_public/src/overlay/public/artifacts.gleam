@@ -10,18 +10,31 @@ import lustre/element/keyed
 import lustre/event
 import overlay/public/artifact_preview
 import overlay/web/artifact as art
+import overlay/web/artifact/session
 import overlay/web/puppet
 import overlay/web/state
 
-pub fn render(store: art.Store) -> element.Element(state.Message) {
+pub fn render(
+  store: art.Store,
+  status: session.Status,
+  dirty: Bool,
+) -> element.Element(state.Message) {
   h.section(
     [
       a.class("artifact-workspace"),
-      a.classes([#("empty", list.is_empty(store.panels))]),
+      a.classes([
+        #(
+          "empty",
+          list.is_empty(store.panels)
+            && dict.size(store.versions) == 0
+            && status == session.Saved,
+        ),
+      ]),
       a.attribute("aria-label", "Artifacts"),
     ],
     [
       h.div([a.class("workspace-heading")], [h.text("ARTIFACT WORKSPACE")]),
+      storage_status(store, status, dirty),
       case store.panels {
         [] ->
           h.div([a.class("artifact-empty")], [
@@ -38,6 +51,31 @@ pub fn render(store: art.Store) -> element.Element(state.Message) {
       },
     ],
   )
+}
+
+fn storage_status(store: art.Store, status, dirty) {
+  let content = case status {
+    session.SaveFailed(reason) -> [
+      h.text(
+        "Changes could not be saved in this tab. Keep it open to retain them. ",
+      ),
+      h.button(
+        [a.title(reason), event.on_click(state.UserRetriedArtifactSave)],
+        [h.text("Retry saving")],
+      ),
+    ]
+    session.RestoreFailed(reason) -> [
+      h.text("Saved artifacts could not be restored: " <> reason),
+    ]
+    _ ->
+      case dict.size(store.versions), dirty, status {
+        0, _, _ -> []
+        _, True, _ -> [h.text("Unsaved changes")]
+        _, _, session.Saving -> [h.text("Saving…")]
+        _, _, _ -> [h.text("Saved in this tab")]
+      }
+  }
+  h.div([a.class("artifact-storage"), a.attribute("role", "status")], content)
 }
 
 fn percent(n) {

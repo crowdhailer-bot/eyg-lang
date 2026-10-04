@@ -59,7 +59,16 @@ or resizes its existing panel. Different item kinds can coexist:
 History/diffs are rendered as escaped application UI, never as executable HTML.
 History entries can be opened as pinned previews. Closing a panel does not
 delete its artifact. State is retained across agent turns in this browser
-session; reload persistence is outside this first implementation.
+tab. Completed turns, revision history, panel placement and completed sharing
+links are saved in session storage and restored after a refresh. Closing the
+tab clears that storage. A running turn may still have unsaved changes.
+
+The workspace shows whether changes are saved. If the browser refuses a write
+(for example, because its storage quota is full), the live workspace remains
+available and offers **Retry saving**. Keep the tab open until saving succeeds
+to retain those changes. The browser quota can be smaller than the 16 MiB
+artifact history limit. Saved bundles are validated again before restoration;
+malformed snapshots are reported and do not replace work already in progress.
 
 ### Local srcdoc wrapper
 

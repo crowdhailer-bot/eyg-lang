@@ -27,3 +27,8 @@ Browser tests run against the development server, started on port 5173 unless
 bun x playwright install chromium
 bun run test:browser
 ```
+
+Completed artifact turns also save their revisions, panel layout and completed
+sharing links in session storage. Refresh restores them without publishing
+anything. The workspace reports storage failures and lets the user retry;
+closing the tab clears its session data. See the [artifact guide](../../guides/overlay_artifacts.md).

@@ -36,6 +36,7 @@ pub fn init_loads_provider_settings_test() {
     system.GetSessionStorageItem("overlay.llm.provider", _),
     _,
     system.GetSessionStorageItem("overlay.history", _),
+    system.GetSessionStorageItem("overlay.artifacts", _),
   ] = actions
   assert True == state.provider_setup.restoring
 }
@@ -784,8 +785,13 @@ pub fn reference_context_test() {
     )
   let #(state, actions) = state.init(config)
   assert context.Fetching([cid], ir.Content(cid)) == state.context
-  let assert [_settings, _pull, system.Fetch(request:, resume: _), _history] =
-    actions
+  let assert [
+    _settings,
+    _pull,
+    system.Fetch(request:, resume: _),
+    _history,
+    _artifacts,
+  ] = actions
   assert "/modules/" <> v1.to_string(cid) == request.path
 
   let message = state.CacheMessage(cache.FetchModuleCompleted(cid, Ok(source)))
