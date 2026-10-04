@@ -1,0 +1,2 @@
+# Preserve the raw terminal recording, including carriage returns and escapes.
+video/session.txt -text -diff -whitespace
