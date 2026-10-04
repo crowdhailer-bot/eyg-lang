@@ -12,7 +12,12 @@ import gleam/result
 import gleam/string
 import ogre/origin
 import overlay/llm/provider
+import overlay/llm/provider/bedrock
+import overlay/llm/provider/codex
+import overlay/llm/provider/mistral
 import overlay/llm/provider/ollama
+import overlay/llm/provider/openai
+import overlay/llm/sigv4
 import overlay/policy
 
 pub type Config(value) {
@@ -51,7 +56,7 @@ pub fn llm(value: v.Value(m, c), path: List(String)) {
   }
 }
 
-const providers = "Ollama({origin, api_key})"
+const providers = "Ollama({origin, api_key}), Mistral({api_key}), OpenAI({origin, api_key}), Codex({access_token, account_id}), Bedrock({region, access_key_id, secret_access_key, session_token})"
 
 fn provider(value: v.Value(m, c), path) {
   case value {
@@ -60,6 +65,66 @@ fn provider(value: v.Value(m, c), path) {
       use origin <- result.try(field(inner, path, "origin", origin))
       use api_key <- result.try(field(inner, path, "api_key", optional(string)))
       Ok(provider.Ollama(ollama.Config(origin:, api_key:)))
+    }
+    v.Tagged("OpenAI", inner) -> {
+      let path = ["OpenAI", ..path]
+      use origin <- result.try(field(inner, path, "origin", origin))
+      use api_key <- result.try(field(inner, path, "api_key", optional(string)))
+      use endpoint <- result.try(optional_field(
+        inner,
+        path,
+        "path",
+        string,
+        "/v1/chat/completions",
+      ))
+      use headers <- result.try(
+        optional_field(inner, path, "headers", headers, []),
+      )
+      Ok(
+        provider.OpenAI(openai.Config(
+          origin:,
+          path: endpoint,
+          api_key:,
+          headers:,
+        )),
+      )
+    }
+    v.Tagged("Codex", inner) -> {
+      let path = ["Codex", ..path]
+      use access_token <- result.try(field(inner, path, "access_token", string))
+      use account_id <- result.try(field(inner, path, "account_id", string))
+      Ok(provider.Codex(codex.Config(access_token:, account_id:)))
+    }
+    v.Tagged("Bedrock", inner) -> {
+      let path = ["Bedrock", ..path]
+      use region <- result.try(field(inner, path, "region", string))
+      use access_key_id <- result.try(field(
+        inner,
+        path,
+        "access_key_id",
+        string,
+      ))
+      use secret_access_key <- result.try(field(
+        inner,
+        path,
+        "secret_access_key",
+        string,
+      ))
+      use session_token <- result.try(optional_field(
+        inner,
+        path,
+        "session_token",
+        optional(string),
+        None,
+      ))
+      let credentials =
+        sigv4.Credentials(access_key_id:, secret_access_key:, session_token:)
+      Ok(provider.Bedrock(bedrock.Config(region:, credentials:)))
+    }
+    v.Tagged("Mistral", inner) -> {
+      let path = ["Mistral", ..path]
+      use api_key <- result.try(field(inner, path, "api_key", string))
+      Ok(provider.Mistral(mistral.Config(api_key:)))
     }
     v.Tagged(label, _) ->
       Error(
@@ -97,6 +162,31 @@ fn drop_scheme(raw) {
   case string.split_once(raw, "://") {
     Ok(#(_, rest)) -> rest
     Error(Nil) -> raw
+  }
+}
+
+/// Decode a field that may be left out, using the default.
+fn optional_field(value, path, key, inner, default) {
+  case value {
+    v.Record(fields) ->
+      case dict.get(fields, key) {
+        Ok(_) -> field(value, path, key, inner)
+        Error(Nil) -> Ok(default)
+      }
+    _ -> field(value, path, key, inner)
+  }
+}
+
+/// Headers are a list of `{key, value}` records.
+fn headers(value: v.Value(m, c), path) {
+  case value {
+    v.LinkedList(items) ->
+      list.try_map(items, fn(item) {
+        use key <- result.try(field(item, path, "key", string))
+        use value <- result.try(field(item, path, "value", string))
+        Ok(#(key, value))
+      })
+    _ -> expected(path, "a list of {key, value} headers", value)
   }
 }
 

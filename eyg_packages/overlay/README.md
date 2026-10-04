@@ -30,6 +30,24 @@ let relaxed = {write_file: policy.deny("read only"), ..policy.allow_all}
 Record update can only overwrite fields, to change a rule overwrite it `{write_file: policy.deny("no"), ..policy.allow_all}`.
 To add a rule to `read_only` build the record listing all the fields you need.
 
+## codex
+
+Use a ChatGPT subscription as the model, after logging in with `codex login`.
+
+```eyg
+let {codex} = import "<path to>/eyg_packages/overlay/index.eyg"
+let provider = match codex.read("/home/me/.codex/auth.json") {
+  Ok(provider) -> { provider }
+  Error(reason) -> { !never(perform Abort(reason)) }
+}
+// llm: {provider, model: "gpt-5.5"}
+```
+
+`codex.refresh(path)` exchanges the refresh token for new tokens, writes them back to the file, and returns the provider.
+Use it when `read` gives a provider that is rejected because its token expired.
+
+Deny the agent reading the auth file.
+
 ## skills
 
 The overlay harness has no concept of skills, they are loaded by the config.

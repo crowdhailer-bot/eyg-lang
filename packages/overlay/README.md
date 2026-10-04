@@ -24,8 +24,13 @@ eyg overlay path/to/.overlay.eyg
 The `.overlay.eyg` file returns a record with the following fields:
 
 - `llm` the model to use, `{provider, model}`.
-  The only provider in the CLI is `Ollama({origin: String, api_key: Option(String)})`,
-  use `origin: "https://ollama.com"` for Ollama cloud or `"http://localhost:11434"` for a local server.
+  The providers in the CLI are `Ollama({origin: String, api_key: Option(String)})`,
+  use `origin: "https://ollama.com"` for Ollama cloud or `"http://localhost:11434"` for a local server,
+  `Mistral({api_key: String})`,
+  and `OpenAI({origin: String, api_key: Option(String)})` for any OpenAI compatible API.
+  `OpenAI` also accepts `path`, default `"/v1/chat/completions"`, and `headers`, a list of `{key, value}` records.
+  `Bedrock({region: String, access_key_id: String, secret_access_key: String})` uses Amazon Bedrock, `session_token` can be given for temporary credentials.
+  `Codex({access_token: String, account_id: String})` uses a ChatGPT subscription, `codex.read` in the overlay EYG package reads them from `~/.codex/auth.json`.
   A bare provider, e.g. `llm: Ollama({...})`, uses the default model `glm-5.3:cloud`.
 - `policy` A record with a function for each effect the agent may perform, see [Policies](#policies).
 - `context` Any value. It is in scope as the `context` variable of every program the agent runs.
@@ -137,8 +142,6 @@ If possible this would be built in EYG and added to an `entry.eyg` file.
 This might require an effect, like EYGParse, but that takes a flat AST and checks it.
 A flat representation of types would also be needed.
 
-Add a bedrock client to `overlay_llm`.
-
 Create an `Overlay({llm, policy, context})` effect available in the CLI.
 This would allow users to define scripts and agents of a project in the same `entry.eyg` file.
 Benefits are less files, EYG tries to make structuring using the file system optional.
@@ -158,14 +161,6 @@ It would create `.overlay.eyg`, an `.env.eyg` and gitignore the env file.
 This requires the `overlay` EYG package to be published.
 
 Publish the `overlay` EYG package so configs can use `@overlay.policy` and `@overlay.skills` rather than importing by path.
-
-Add a `Codex({access_token, account_id})` provider to `overlay_llm` so users can use their ChatGPT subscription.
-Requests are `POST https://chatgpt.com/backend-api/codex/responses` with `Authorization: Bearer <access_token>` and `ChatGPT-Account-ID` headers.
-The body uses the Responses API, `{model, instructions, input, tools, store: false, stream: true}`, tools are flat `{type: "function", name, description, parameters}`.
-The response is always server sent events, `response.output_item.done` events hold `message`, `function_call` and `reasoning` items, tool calls round trip their `call_id`.
-Tokens are in `~/.codex/auth.json` and can be read by the config, refresh tokens rotate so refreshing must write the file back.
-
-Add an OpenAI compatible `/v1/chat/completions` provider, covering OpenAI, OpenRouter and local servers, and optional extra `headers` on every provider.
 
 Support a human in the loop. A policy could return `Ask(question)` and the harness asks the user before passing the effect.
 An `audit` function in the config could be called with every effect and decision, and be allowed to perform effects to write a log.
