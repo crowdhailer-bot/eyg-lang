@@ -147,7 +147,7 @@ async function tap(page, locator) {
 // Send a prompt and wait for the agent's turn to end.
 // `during` directs the scene while the agent works, it can wait for tool results.
 async function ask(page, prompt, { expected = [], during = async () => {} } = {}) {
-  const input = page.locator('textarea');
+  const input = page.getByPlaceholder('Ask anything...');
   await click(page, input);
   await input.pressSequentially(prompt, { delay: 32 });
   await pause(500);

@@ -39,8 +39,8 @@ export async function agent(page, { query = '' } = {}) {
     async run(code) {
       programs.push(code);
       const count = results.length;
-      await page.locator('textarea').fill('Run the program');
-      await page.locator('textarea').press('Enter');
+      await page.getByPlaceholder('Ask anything...').fill('Run the program');
+      await page.getByPlaceholder('Ask anything...').press('Enter');
       await expect.poll(() => results.length).toBe(count + 1);
       await expect(page.locator('.layout')).toHaveAttribute('data-agent-status', 'waiting');
       return results[count];

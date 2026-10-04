@@ -148,3 +148,16 @@ pub fn notes_are_written_in_a_workspace_session_test() {
   let assert Ok(_) = list.key_find(files, "notes/parsing-json.md")
   Nil
 }
+
+pub fn the_overlay_catalogue_example_runs_against_the_current_api_test() {
+  let #(_, _, context) = setup(librarian)
+  let assert Ok(entries) = cast.as_list(field(context, ["libraries", "all"]))
+  let assert Ok(entry) =
+    list.find(entries, fn(entry) {
+      cast.field("name", cast.as_string, entry) == Ok("overlay")
+    })
+  let assert Ok(code) = cast.field("example", cast.as_string, entry)
+  use #(outcome, _) <- promise.map(run(librarian, code, option.None))
+  let assert transcript.Computed(v.Record(_)) = outcome
+  Nil
+}

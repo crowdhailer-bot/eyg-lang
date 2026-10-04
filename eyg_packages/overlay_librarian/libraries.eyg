@@ -70,7 +70,7 @@ assert.equal(!int_add(1, 1), 2)"
     reference: "@overlay",
     summary: "Access policies that allow, mock or deny effects such as Fetch and WriteFile while a function runs.",
     keywords: "access policy permission allow deny mock sandbox effect restrict security",
-    example: "let access = @overlay.policy
-access.apply(access.deny_all, (_) -> { perform ReadDirectory(\".\") })"
+    example: "let policy = @overlay.policy
+{context: {}, policy: {fetch: policy.pass}}"
   }
 ]

@@ -36,6 +36,11 @@ pub fn system_prompt(
   <> "
 ALWAYS read the syntax guide, using the guide tool, before writing scripts.
 Other guides are builtins and http-fetch.
+When the user asks you to run or calculate something, execute a program with the
+run tool, even if you already know the answer. Do not substitute a mental answer.
+Return the requested value as the final expression. The run tool already shows
+that value; Print returns {} and is only needed for extra output.
+After a syntax error, reread the syntax guide before trying another program.
 
 This environment has the following effects
 

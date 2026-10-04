@@ -17,6 +17,7 @@ import overlay/llm/provider
 import overlay/llm/provider/mistral
 import overlay/llm/provider/ollama
 import pal/system
+import plinth/javascript/global
 
 pub type Model {
   // A provider, its requests are sent with the transport.
@@ -56,17 +57,27 @@ fn deadline(
   work: Promise(Result(a, fetch.FetchError)),
   seconds: Int,
 ) -> Promise(Result(a, fetch.FetchError)) {
-  deadline_ffi(
-    work,
-    seconds * 1000,
-    Error(fetch.NetworkError(
-      "no answer within " <> int.to_string(seconds) <> "s",
-    )),
-  )
+  case seconds <= 0 {
+    True -> work
+    False ->
+      promise.new(fn(resolve) {
+        let timer =
+          global.set_timeout(seconds * 1000, fn() {
+            resolve(
+              Error(fetch.NetworkError(
+                "no answer within " <> int.to_string(seconds) <> "s",
+              )),
+            )
+          })
+        let _ =
+          promise.map(work, fn(value) {
+            let _ = global.clear_timeout(timer)
+            resolve(value)
+          })
+        Nil
+      })
+  }
 }
-
-@external(javascript, "./model_ffi.mjs", "deadline")
-fn deadline_ffi(work: Promise(a), milliseconds: Int, timed_out: a) -> Promise(a)
 
 /// A model on Ollama Cloud.
 pub fn ollama_cloud(model: String, api_key: String) -> Model {

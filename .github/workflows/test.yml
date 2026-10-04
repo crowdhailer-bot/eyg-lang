@@ -10,7 +10,6 @@ permissions:
 env:
   POSTGRES_PASSWORD: banana-penguin-truck
   SECRET_KEY_BASE: word-button-noodle
-  EYG_CLI_VERSION: gleam_cli-v0.0.4
   HEXPM_READ_API_KEY: ${{ secrets.HEXPM_READ_API_KEY }}
 
 jobs:
@@ -160,25 +159,39 @@ jobs:
         if: matrix.package == 'overlay_eval'
         working-directory: packages/overlay_eval
         run: |
+          gleam run -m overlay/eval -- validate suites/programs.eyg
           gleam run -m overlay/eval -- validate suites/fibonacci.eyg
           gleam run -m overlay/eval -- validate suites/contexts.eyg
   test-eyg-packages:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install the eyg CLI
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28.4"
+          gleam-version: "1.18.1"
+      - name: Build the CLI under test
+        run: gleam build --target javascript --warnings-as-errors
+        working-directory: packages/gleam_cli
+      - name: Make the current CLI available to EYG and browser tests
         run: |
-          mkdir -p "$RUNNER_TEMP/bin"
-          curl -fsSL \
-            -o "$RUNNER_TEMP/bin/eyg-linux-x64" \
-            "https://github.com/CrowdHailer/eyg-lang/releases/download/${EYG_CLI_VERSION}/eyg-linux-x64"
-          curl -fsSL \
-            -o "$RUNNER_TEMP/SHA256SUMS" \
-            "https://github.com/CrowdHailer/eyg-lang/releases/download/${EYG_CLI_VERSION}/SHA256SUMS"
-          cd "$RUNNER_TEMP/bin"
-          sha256sum --check --ignore-missing "$RUNNER_TEMP/SHA256SUMS"
-          mv eyg-linux-x64 eyg
+          cat > eyg <<'EOF'
+          #!/usr/bin/env bun
+          import { main } from './packages/gleam_cli/build/dev/javascript/eyg_cli/eyg_cli.mjs';
+          main();
+          EOF
           chmod +x eyg
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE" >> "$GITHUB_PATH"
       - name: Run EYG package tests
         run: eyg script entry.eyg
+      - name: Install browser test dependencies
+        working-directory: packages/overlay_public
+        run: |
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
+      - name: Test browser artifacts and sessions
+        working-directory: packages/overlay_public
+        run: bun run test:browser
