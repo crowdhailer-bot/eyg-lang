@@ -183,15 +183,15 @@ pub fn input(
   prompt: String,
   placeholder: String,
 ) -> system.Effect(Result(String, Nil)) {
-  case terminal.is_tty() {
+  let text = case terminal.is_tty() {
     // The placeholder is overwritten as the user types.
     True -> {
       let prompt = ansi.bold(ansi.yellow(prompt))
-      io.print(prompt <> " " <> ansi.dim(placeholder) <> "\r" <> prompt <> " ")
+      prompt <> " " <> ansi.dim(placeholder) <> "\r" <> prompt <> " "
     }
-    False -> io.print(prompt <> " ")
+    False -> prompt <> " "
   }
-  use return <- system.map(system.prompt(""))
+  use return <- system.map(system.prompt(text))
   case return {
     Ok(line) -> Ok(string.trim_end(line))
     Error(reason) -> Error(reason)
