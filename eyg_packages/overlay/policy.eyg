@@ -173,8 +173,38 @@ let fetch_hosts = (hosts) -> {
   }
 }
 
+// A reference rule that loads only the named packages, at any version.
+let trust_packages = (names) -> {
+  (reference) -> {
+    let trusted = !list_fold(names, False({}), (name, found) -> {
+      match found {
+        True(_) -> { True({}) }
+        False(_) -> {
+          let package = append("@", name)
+          match !equal(reference, package) {
+            True(_) -> { True({}) }
+            False(_) -> { !string_starts_with(reference, append(package, ":")) }
+          }
+        }
+      }
+    })
+    match trusted {
+      True(_) -> { Pass(reference) }
+      False(_) -> { Mock(append("not a trusted package: ", reference)) }
+    }
+  }
+}
+
+// Ask the user before performing an effect, `describe` gives the question from the effect's value.
+// If the user declines the program resumes with `denied`.
+let ask = (describe, denied) -> {
+  (value) -> { Ask({question: describe(value), denied}) }
+}
+
 {
   pass,
+  trust_packages,
+  ask,
   deny,
   is_under,
   under,

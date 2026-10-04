@@ -7,11 +7,13 @@ import eyg/interpreter/value
 import gleam/dict
 import gleam/json
 import gleam/list
-import gleam/option.{Some}
+import gleam/option.{None, Some}
+import gleam/result
 import gleam/string
 import loam/execute
 import loam/platform/computer
 import loam/sandbox
+import loam/sandbox/fs
 import loam/source
 import overlay/llm/chat
 import overlay/llm/provider
@@ -43,7 +45,10 @@ fn run(code, stdout_policy) {
 }
 
 fn state() {
-  execute.State(helpers.config.client.origin, cache.empty())
+  overlay.Runtime(
+    execute.State(helpers.config.client.origin, cache.empty()),
+    policy_state: None,
+  )
 }
 
 fn call(code) {
@@ -119,9 +124,12 @@ fn policy_with(overrides) {
         }
       },
     )
+  let fields =
+    list.fold(overrides, dict.from_list(fields), fn(fields, override) {
+      dict.insert(fields, override.0, evaluate(override.1))
+    })
   let labels = list.map(computer.effects(), fn(effect) { effect.name })
-  let assert Ok(policy) =
-    policy.decode(value.Record(dict.from_list(fields)), labels)
+  let assert Ok(policy) = policy.decode(value.Record(fields), labels)
   policy
 }
 
@@ -149,7 +157,7 @@ pub fn failing_policy_is_reported_test() {
   let assert Error(reason) = result
   assert string.contains(
     reason,
-    "policy for Now failed: a policy function must return Pass(value) or Mock(value)",
+    "policy for Now failed: a policy function must return Pass(value), Mock(value) or Ask({question, denied})",
   )
 }
 
@@ -192,6 +200,8 @@ fn session(cwd, policy) {
     policy:,
     context: value.unit(),
     context_type: t.unit,
+    audit: None,
+    context_policy: None,
   )
 }
 
@@ -219,4 +229,144 @@ pub fn context_type_is_used_test() {
     overlay.execute_call(session, call("!int_add(context.count, 1)"), state())
     |> sandbox.run(sandbox.sandbox())
   assert result == Ok(tool.Return("3", []))
+}
+
+fn ask_session() {
+  session(
+    "/",
+    policy_with([
+      #(
+        "now",
+        "(_) -> { Ask({question: \"Can the agent read the time?\", denied: 0}) }",
+      ),
+    ]),
+  )
+}
+
+pub fn ask_allowed_test() {
+  let assert #(sandbox.Returned(#(result, _)), _) =
+    overlay.execute_call(ask_session(), call("perform Now({})"), state())
+    |> sandbox.run(
+      sandbox.sandbox()
+      |> sandbox.with_now(42)
+      |> sandbox.with_prompt_response(Ok("y")),
+    )
+  assert result == Ok(tool.Return("42", []))
+}
+
+pub fn ask_denied_test() {
+  let assert #(sandbox.Returned(#(result, _)), _) =
+    overlay.execute_call(ask_session(), call("perform Now({})"), state())
+    |> sandbox.run(
+      sandbox.sandbox()
+      |> sandbox.with_now(42)
+      |> sandbox.with_prompt_response(Ok("n")),
+    )
+  assert result == Ok(tool.Return("0", []))
+}
+
+pub fn audit_is_called_for_every_effect_test() {
+  let labels = list.map(computer.effects(), fn(effect) { effect.name })
+  let assert Ok(only_now) =
+    policy.decode(
+      value.Record(dict.from_list([#("now", evaluate("(x) -> { Pass(x) }"))])),
+      labels,
+    )
+  let session =
+    overlay.Session(
+      ..session("/", only_now),
+      audit: Some(evaluate(
+        "(entry) -> {
+          let line = !string_append(entry.effect, !string_append(\" \", entry.decision))
+          perform AppendFile({path: \"/audit.log\", contents: !string_to_binary(!string_append(line, \"\\n\"))})
+        }",
+      )),
+    )
+  let assert #(sandbox.Returned(#(Error(_), _)), sandbox) =
+    overlay.execute_call(
+      session,
+      call("let _ = perform Now({}) perform StandardIn({})"),
+      state(),
+    )
+    |> sandbox.run(sandbox.sandbox() |> sandbox.with_now(1))
+  let assert Ok(log) = fs.read(sandbox.file_system, "/audit.log")
+  assert log == "Now pass\nStandardIn refused\n"
+}
+
+pub fn context_policy_applies_to_context_code_test() {
+  let labels = list.map(computer.effects(), fn(effect) { effect.name })
+  let assert Ok(nothing) = policy.decode(value.Record(dict.new()), labels)
+  let assert Ok(only_now) =
+    policy.decode(
+      value.Record(dict.from_list([#("now", evaluate("(x) -> { Pass(x) }"))])),
+      labels,
+    )
+  let assert Ok(source) =
+    source.parse("(_) -> { perform Now({}) }", source.Disk("/project/time.eyg"))
+  let assert Ok(time) = block.execute(source, []) |> result.map(fn(r) { r.0 })
+  let assert Some(time) = time
+  let session =
+    overlay.Session(
+      ..session("/", nothing),
+      context: time,
+      context_type: t.Fun(
+        t.unit,
+        t.EffectExtend("Now", #(t.unit, t.Integer), t.Empty),
+        t.Integer,
+      ),
+      context_policy: Some(only_now),
+    )
+  let assert #(sandbox.Returned(#(result, _)), _) =
+    overlay.execute_call(session, call("context({})"), state())
+    |> sandbox.run(sandbox.sandbox() |> sandbox.with_now(7))
+  assert result == Ok(tool.Return("7", []))
+  let assert #(sandbox.Returned(#(Error(reason), _)), _) =
+    overlay.execute_call(session, call("perform Now({})"), state())
+    |> sandbox.run(sandbox.sandbox() |> sandbox.with_now(7))
+  assert string.contains(reason, "the Now effect is not permitted")
+}
+
+pub fn untrusted_reference_is_not_loaded_test() {
+  let session =
+    session(
+      "/",
+      policy_with([
+        #(
+          "reference",
+          "(ref) -> { match !equal(ref, \"@standard\") { True(_) -> { Pass(ref) } False(_) -> { Mock(\"untrusted\") } } }",
+        ),
+      ]),
+    )
+  let assert #(sandbox.Returned(#(Error(reason), _)), _) =
+    overlay.execute_call(session, call("@evil"), state())
+    |> sandbox.run(sandbox.sandbox())
+  assert string.contains(reason, "reference @evil denied by policy: untrusted")
+}
+
+pub fn stateful_policy_allows_once_test() {
+  let labels = list.map(computer.effects(), fn(effect) { effect.name })
+  let assert Ok(once) =
+    policy.decode(
+      value.Record(
+        dict.from_list([
+          #(
+            "now",
+            evaluate(
+              "(lift, used) -> { match used { True(_) -> { {decision: Mock(0), state: used} } False(_) -> { {decision: Pass(lift), state: True({})} } } }",
+            ),
+          ),
+        ]),
+      ),
+      labels,
+    )
+  let runtime = overlay.Runtime(..state(), policy_state: Some(value.false()))
+  let assert #(sandbox.Returned(#(result, runtime)), _) =
+    overlay.execute_call(session("/", once), call("perform Now({})"), runtime)
+    |> sandbox.run(sandbox.sandbox() |> sandbox.with_now(5))
+  assert result == Ok(tool.Return("5", []))
+  assert runtime.policy_state == Some(value.true())
+  let assert #(sandbox.Returned(#(result, _)), _) =
+    overlay.execute_call(session("/", once), call("perform Now({})"), runtime)
+    |> sandbox.run(sandbox.sandbox() |> sandbox.with_now(5))
+  assert result == Ok(tool.Return("0", []))
 }

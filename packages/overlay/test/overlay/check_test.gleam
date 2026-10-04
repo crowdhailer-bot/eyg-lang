@@ -99,3 +99,52 @@ pub fn agent_code_uses_context_type_test() {
     check.agent(effects(), context) |> infer.check(source)
   assert 1 == list.length(infer.all_errors(analysis))
 }
+
+pub fn ask_policy_test() {
+  let type_ =
+    infer(
+      "{llm: {}, policy: {now: (_) -> { Ask({question: \"time?\", denied: 0}) }}, context: {}}",
+    )
+  let assert Ok(_) = check.config(type_, effects())
+}
+
+pub fn audit_test() {
+  let type_ =
+    infer(
+      "{llm: {}, policy: {}, context: {}, audit: (entry) -> { let _ = perform Now({}) entry.effect }}",
+    )
+  let assert Ok(_) = check.config(type_, effects())
+  let type_ = infer("{llm: {}, policy: {}, context: {}, audit: 5}")
+  let assert Error([reason]) = check.config(type_, effects())
+  assert string.starts_with(reason, "audit should be a function")
+}
+
+pub fn context_policy_is_checked_test() {
+  let type_ =
+    infer(
+      "{llm: {}, policy: {}, context: {}, context_policy: {now: (_) -> { Mock(\"late\") }}}",
+    )
+  let assert Error([reason]) = check.config(type_, effects())
+  assert string.starts_with(reason, "policy `now` should be a pure function")
+}
+
+pub fn reference_rule_test() {
+  let type_ =
+    infer(
+      "{llm: {}, policy: {reference: (ref) -> { match !equal(ref, \"@standard\") { True(_) -> { Pass(ref) } False(_) -> { Mock(\"untrusted\") } } }}, context: {}}",
+    )
+  let assert Ok(_) = check.config(type_, effects())
+}
+
+pub fn stateful_policy_test() {
+  let type_ =
+    infer(
+      "{llm: {}, state: 0, policy: {now: (lift, count) -> { {decision: Pass(lift), state: !int_add(count, 1)} }}, context: {}}",
+    )
+  let assert Ok(_) = check.config(type_, effects())
+  let type_ =
+    infer(
+      "{llm: {}, state: 0, policy: {now: (lift) -> { Pass(lift) }}, context: {}}",
+    )
+  let assert Error([_]) = check.config(type_, effects())
+}

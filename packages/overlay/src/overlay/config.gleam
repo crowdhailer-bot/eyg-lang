@@ -7,7 +7,7 @@
 import eyg/interpreter/value as v
 import gleam/dict
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import ogre/origin
@@ -21,7 +21,17 @@ import overlay/llm/sigv4
 import overlay/policy
 
 pub type Config(value) {
-  Config(llm: provider.Llm, policy: policy.Policy(value), context: value)
+  Config(
+    llm: provider.Llm,
+    policy: policy.Policy(value),
+    context: value,
+    /// Called with every effect the agent performs and the decision made.
+    audit: Option(value),
+    /// The policy for effects performed by code from the config's files, i.e. context functions.
+    context_policy: Option(policy.Policy(value)),
+    /// The initial state given to policy rules, when there is state rules return the next state.
+    state: Option(value),
+  )
 }
 
 /// The model used when the config names only a provider.
@@ -39,7 +49,27 @@ pub fn decode(
   use context <- result.try(
     field(value, [], "context", fn(value, _) { Ok(value) }),
   )
-  Ok(Config(llm:, policy:, context:))
+  let audit = case value {
+    v.Record(fields) -> option.from_result(dict.get(fields, "audit"))
+    _ -> None
+  }
+  use context_policy <- result.try(case value {
+    v.Record(fields) ->
+      case dict.get(fields, "context_policy") {
+        Ok(_) ->
+          field(value, [], "context_policy", fn(value, _path) {
+            policy.decode(value, labels)
+          })
+          |> result.map(Some)
+        Error(Nil) -> Ok(None)
+      }
+    _ -> Ok(None)
+  })
+  let state = case value {
+    v.Record(fields) -> option.from_result(dict.get(fields, "state"))
+    _ -> None
+  }
+  Ok(Config(llm:, policy:, context:, audit:, context_policy:, state:))
 }
 
 /// The llm is either `{provider, model}` or a bare provider, which uses the default model.

@@ -175,6 +175,35 @@ pub fn codex_test() {
   assert llm.provider == provider.Codex(codex.Config("token", "account"))
 }
 
+pub fn audit_is_optional_test() {
+  let llm = ollama("http://localhost:11434", v.Tagged("None", record([])))
+  let assert Ok(config.Config(audit: None, ..)) = config.decode(config(llm), [])
+  let with_audit =
+    record([
+      #("llm", llm),
+      #("policy", record([])),
+      #("context", record([])),
+      #("audit", v.Integer(1)),
+    ])
+  let assert Ok(config.Config(audit: Some(v.Integer(1)), ..)) =
+    config.decode(with_audit, [])
+}
+
+pub fn context_policy_test() {
+  let llm = ollama("http://localhost:11434", v.Tagged("None", record([])))
+  let assert Ok(config.Config(context_policy: None, ..)) =
+    config.decode(config(llm), [])
+  let with_policy =
+    record([
+      #("llm", llm),
+      #("policy", record([])),
+      #("context", record([])),
+      #("context_policy", record([#("now", v.Integer(1))])),
+    ])
+  let assert Ok(config.Config(context_policy: Some(_), ..)) =
+    config.decode(with_policy, ["Now"])
+}
+
 pub fn bedrock_test() {
   let llm =
     record([

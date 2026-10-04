@@ -26,6 +26,8 @@ let relaxed = {write_file: policy.deny("read only"), ..policy.allow_all}
 - `hide_secrets(read_file)` deny reading `.env.eyg` files.
 - `with_header(host, key, value, otherwise)` add a header, i.e. an API token, to requests for a host.
 - `fetch_hosts(hosts)` allow https requests to the listed hosts.
+- `trust_packages(names)` a `reference` rule that loads only the named packages.
+- `ask(describe, denied)` ask the user before performing an effect, `describe` turns the effect's value into the question.
 
 Record update can only overwrite fields, to change a rule overwrite it `{write_file: policy.deny("no"), ..policy.allow_all}`.
 To add a rule to `read_only` build the record listing all the fields you need.

@@ -28,7 +28,7 @@ pub fn decode_known_fields_test() {
 pub fn decode_unknown_field_test() {
   assert policy.decode(record([#("read_files", v.unit())]), labels)
     == Error(
-      "unknown policy field `read_files`, expected one of: read_file, write_file, hash",
+      "unknown policy field `read_files`, expected one of: reference, read_file, write_file, hash",
     )
 }
 
@@ -43,4 +43,28 @@ pub fn decision_test() {
   assert policy.decision(value) == Ok(policy.Mock(v.Integer(2)))
   let value: v.Value(Nil, Nil) = v.Tagged("Allow", v.unit())
   let assert Error(_) = policy.decision(value)
+  let value: v.Value(Nil, Nil) =
+    v.Tagged(
+      "Ask",
+      v.Record(
+        dict.from_list([
+          #("question", v.String("ok?")),
+          #("denied", v.Integer(0)),
+        ]),
+      ),
+    )
+  assert policy.decision(value) == Ok(policy.Ask("ok?", v.Integer(0)))
+}
+
+pub fn stateful_decision_test() {
+  let value: v.Value(Nil, Nil) =
+    v.Record(
+      dict.from_list([
+        #("decision", v.Tagged("Pass", v.Integer(1))),
+        #("state", v.Integer(2)),
+      ]),
+    )
+  assert policy.stateful_decision(value)
+    == Ok(#(policy.Pass(v.Integer(1)), v.Integer(2)))
+  let assert Error(_) = policy.stateful_decision(v.Integer(1))
 }

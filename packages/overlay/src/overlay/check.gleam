@@ -9,6 +9,7 @@ import eyg/analysis/type_/binding/unify
 import eyg/analysis/type_/isomorphic as t
 import gleam/dict
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/result
 import overlay/policy
 import touch_grass/interface
@@ -43,7 +44,20 @@ pub fn config(
   let type_ = binding.resolve(type_, bindings)
   use policy <- result.try(field(type_, "policy"))
   use context <- result.try(field(type_, "context"))
-  use bindings <- result.try(check_policy(policy, effects, level, bindings))
+  let state = option.from_result(find_record_field(type_, "state"))
+  use bindings <- result.try(check_policy(
+    policy,
+    effects,
+    state,
+    level,
+    bindings,
+  ))
+  use bindings <- result.try(case find_record_field(type_, "context_policy") {
+    Ok(context_policy) ->
+      check_policy(context_policy, effects, state, level, bindings)
+    Error(Nil) -> Ok(bindings)
+  })
+  use bindings <- result.try(check_audit(type_, level, bindings))
   let context = binding.resolve(context, bindings)
   Ok(binding.gen(context, level - 1, bindings))
 }
@@ -75,33 +89,36 @@ fn fields(row, acc) {
   }
 }
 
-fn check_policy(policy, effects, level, bindings) {
+fn check_policy(policy, effects, state, level, bindings) {
   case policy {
     t.Record(row) -> {
       let #(bindings, errors) =
         list.fold(fields(row, []), #(bindings, []), fn(acc, field) {
           let #(bindings, errors) = acc
           let #(name, type_) = field
-          case find_effect(effects, name) {
-            Ok(interface.Interface(lift_type:, lower_type:, ..)) -> {
+          let found = case name {
+            "reference" -> Ok(#(t.String, t.String))
+            _ ->
+              find_effect(effects, name)
+              |> result.map(fn(effect: interface.Interface(a, b)) {
+                #(effect.lift_type, effect.lower_type)
+              })
+          }
+          case found {
+            Ok(#(lift_type, lower_type)) -> {
               let #(rest, bindings) = binding.mono(level, bindings)
-              let decision =
-                t.Union(t.RowExtend(
-                  "Pass",
-                  lift_type,
-                  t.RowExtend("Mock", lower_type, rest),
-                ))
-              let expected = t.Fun(lift_type, t.Empty, decision)
+              let expected = rule_type(lift_type, lower_type, rest, state)
               case unify.unify(expected, type_, level, bindings) {
                 Ok(bindings) -> #(bindings, errors)
                 Error(reason) -> #(bindings, [
                   "policy `"
                     <> name
                     <> "` should be a pure function "
-                    <> debug.mono(t.Fun(
+                    <> debug.mono(rule_type(
                     lift_type,
+                    lower_type,
                     t.Empty,
-                    t.union([#("Pass", lift_type), #("Mock", lower_type)]),
+                    state,
                   ))
                     <> ", "
                     <> debug.reason(reason),
@@ -131,4 +148,67 @@ fn find_effect(effects: List(interface.Interface(a, b)), name) {
   list.find(effects, fn(effect: interface.Interface(a, b)) {
     policy.field_name(effect.name) == name
   })
+}
+
+fn ask(lower) {
+  t.record([#("question", t.String), #("denied", lower)])
+}
+
+/// The record passed to the config's audit function for every effect.
+pub fn audit_entry() {
+  t.record([
+    #("effect", t.String),
+    #("input", t.String),
+    #("decision", t.String),
+  ])
+}
+
+fn check_audit(type_, level, bindings) {
+  case find_record_field(type_, "audit") {
+    Error(Nil) -> Ok(bindings)
+    Ok(audit) -> {
+      let #(eff, bindings) = binding.mono(level, bindings)
+      let #(ret, bindings) = binding.mono(level, bindings)
+      case unify.unify(t.Fun(audit_entry(), eff, ret), audit, level, bindings) {
+        Ok(bindings) -> Ok(bindings)
+        Error(reason) ->
+          Error([
+            "audit should be a function "
+            <> debug.mono(t.Fun(audit_entry(), t.Empty, t.unit))
+            <> ", "
+            <> debug.reason(reason),
+          ])
+      }
+    }
+  }
+}
+
+fn find_record_field(type_, label) {
+  case type_ {
+    t.Record(row) -> find(row, label)
+    _ -> Error(Nil)
+  }
+}
+
+/// The type of a policy rule, with state the rule is also given the state and returns the next state.
+fn rule_type(lift, lower, rest, state) {
+  let decision =
+    t.Union(t.RowExtend(
+      "Pass",
+      lift,
+      t.RowExtend("Mock", lower, t.RowExtend("Ask", ask(lower), rest)),
+    ))
+  case state {
+    None -> t.Fun(lift, t.Empty, decision)
+    Some(state) ->
+      t.Fun(
+        lift,
+        t.Empty,
+        t.Fun(
+          state,
+          t.Empty,
+          t.record([#("decision", decision), #("state", state)]),
+        ),
+      )
+  }
 }

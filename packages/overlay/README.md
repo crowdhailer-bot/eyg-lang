@@ -96,6 +96,12 @@ NOTE: Relative imports in the agent's code go through the same permission check 
 
 NOTE: in `overlay_web` the llm configuration is provided through the UI and there is no policy yet, every browser effect is allowed.
 
+### Exporting chats
+
+Type `/export [path]` at the prompt to save the chat as JSON in the opencode session export format.
+Tool results are recorded in the state of the tool parts of the assistant message that called them.
+Overlay does not record when each message was sent so all timestamps are the export time.
+
 ### Policies
 
 A policy field is named as the effect label in snake case, i.e. `read_file` for `ReadFile` and `cwd` for `CWD`.
@@ -103,6 +109,7 @@ The function receives the value the program performed the effect with and return
 
 - `Pass(value)` to perform the effect, the value can be modified, i.e. to add an authorization header.
 - `Mock(value)` to resume the program with `value` without performing the effect, i.e. `Mock(Error("denied"))`.
+- `Ask({question, denied})` to ask the user, if they answer `y` the effect is performed otherwise the program resumes with `denied`.
 
 File paths given to the policy, and the path of relative imports checked by `read_file`, are absolute.
 They are resolved from the directory of the code performing the effect, for the agent's code that is the working directory.
@@ -112,6 +119,34 @@ An effect without a policy field is refused, the program is aborted with an expl
 An unknown field is an error when the agent starts, the error lists the valid field names.
 
 Policy functions are pure, they cannot perform effects.
+
+An optional `audit` field in the config is called with `{effect, input, decision}` for every effect the agent performs.
+The decision is `pass`, `mock` or `refused`, and `input` is the effect's value as text.
+The audit function can perform effects, i.e. append to a log file, and is not checked by the policy.
+
+With a `state` field in the config every rule is also given the current state and returns `{decision, state}`.
+The state lasts for the whole session, i.e. to allow an effect only once:
+
+```eyg
+state: 0,
+policy: {
+  now: (lift, count) -> {
+    match !int_compare(count, 1) {
+      Lt(_) -> { {decision: Pass(lift), state: !int_add(count, 1)} }
+      | (_) -> { {decision: Mock(0), state: count} }
+    }
+  }
+}
+```
+
+A `reference` field limits which published modules the agent's code can load.
+It is given the reference as text, i.e. `@standard`, `@standard:1` or `#<cid>`, and returns `Pass(reference)` or `Mock(reason)`.
+References are checked before the code is type checked, so a denied module is never fetched.
+Without the field every reference is loaded, the dependencies of a loaded module are trusted.
+
+An optional `context_policy` applies to effects performed by code from the config's files, such as functions in the context.
+The agent can then be limited to the context's API, i.e. reading a file only through a context function.
+Code from published modules uses `policy`, even when called by a context function.
 
 Do not allow `standard_in`, it reads all remaining input which is the input for the chat.
 
@@ -153,21 +188,10 @@ This could be built in Gleam with existing TUI libraries but this might not give
 Another option would be to rebuild the the CLI on another technology, opentui is a prefered direction here.
 This would allow a rich Overlay agent UI in the terminal but would also allow reimplementing the structured editor as a TUI.
 
-Limit published reference loading to only trusted publisher, i.e. signatories or trusted content i.e. specific hashes for modules.
-This is potentially not an overlay specific capability
-
 Add a generator, `eyg @overlay.generate .`, that adds overlay configuration to a project.
 It would create `.overlay.eyg`, an `.env.eyg` and gitignore the env file.
 This requires the `overlay` EYG package to be published.
 
 Publish the `overlay` EYG package so configs can use `@overlay.policy` and `@overlay.skills` rather than importing by path.
 
-Support a human in the loop. A policy could return `Ask(question)` and the harness asks the user before passing the effect.
-An `audit` function in the config could be called with every effect and decision, and be allowed to perform effects to write a log.
-
-Give policies state, so an approval can be used once, by threading a value through policy calls `(state, lift) -> {decision, state}`.
-
-Let context functions run with their own policy.
-Effects performed inside the context module currently go through the same policy as the agent's code, so "only through context" cannot be enforced.
-
-Stream completions in the CLI so long responses show progress.
+Add an export button to the web overlay, downloading the chat with `overlay/export`.

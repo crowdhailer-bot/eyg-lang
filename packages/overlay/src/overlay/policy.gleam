@@ -70,7 +70,10 @@ pub fn decode(
 ) -> Result(Policy(v.Value(m, c)), String) {
   case value {
     v.Record(fields) -> {
-      let names = list.map(labels, fn(label) { #(field_name(label), label) })
+      let names =
+        list.map([reference, ..labels], fn(label) {
+          #(field_name(label), label)
+        })
       dict.to_list(fields)
       |> list.sort(fn(a, b) { string.compare(a.0, b.0) })
       |> list.try_map(fn(field) {
@@ -92,6 +95,12 @@ pub fn decode(
       Error("policy must be a record with a function for each allowed effect")
   }
 }
+
+/// The label of the rule for loading published references, the `reference` field.
+/// It is given the reference as text, i.e. `@standard:1` or `#<cid>`, and returns
+/// `Pass(reference)` to load it or `Mock(reason)` to deny it.
+/// Without the field every reference is loaded, references are pure code.
+pub const reference = "Reference"
 
 /// Effects that do no IO and so need no policy.
 pub const intrinsic = ["DecodeJSON", "EYGParse", "Hash"]
@@ -119,6 +128,24 @@ pub fn refused(label: String) -> String {
 pub type Decision(value) {
   Pass(value)
   Mock(value)
+  /// Ask the user, if they agree the effect is passed otherwise the program resumes with denied.
+  Ask(question: String, denied: value)
+}
+
+/// Interpret the value returned by a policy function given state, `{decision, state}`.
+pub fn stateful_decision(
+  value: v.Value(m, c),
+) -> Result(#(Decision(v.Value(m, c)), v.Value(m, c)), String) {
+  case value {
+    v.Record(fields) ->
+      case dict.get(fields, "decision"), dict.get(fields, "state") {
+        Ok(decision_value), Ok(state) ->
+          decision(decision_value) |> result.map(fn(d) { #(d, state) })
+        _, _ ->
+          Error("a policy function with state must return {decision, state}")
+      }
+    _ -> Error("a policy function with state must return {decision, state}")
+  }
 }
 
 /// Interpret the value returned by a policy function.
@@ -128,6 +155,15 @@ pub fn decision(
   case value {
     v.Tagged("Pass", inner) -> Ok(Pass(inner))
     v.Tagged("Mock", inner) -> Ok(Mock(inner))
-    _ -> Error("a policy function must return Pass(value) or Mock(value)")
+    v.Tagged("Ask", v.Record(fields)) ->
+      case dict.get(fields, "question"), dict.get(fields, "denied") {
+        Ok(v.String(question)), Ok(denied) -> Ok(Ask(question:, denied:))
+        _, _ ->
+          Error("Ask must be given a record with a question and denied value")
+      }
+    _ ->
+      Error(
+        "a policy function must return Pass(value), Mock(value) or Ask({question, denied})",
+      )
   }
 }

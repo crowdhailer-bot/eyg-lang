@@ -17,25 +17,29 @@ import eyg/interpreter/simple_debug
 import eyg/interpreter/state
 import eyg/interpreter/value
 import eyg/ir/tree as ir
+import gleam/bit_array
 import gleam/dict
+import gleam/http/request
 import gleam/http/response
 import gleam/int
 import gleam/io
+import gleam/json
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import gleam/uri
 import gleam_community/ansi
 import loam/execute
 import loam/platform/computer
 import loam/source
 import loam/system
-import midas/continuation.{type Continuation as K}
 import midas/effect
 import overlay/agent
 import overlay/check as overlay_check
 import overlay/config as overlay_config
 import overlay/context
+import overlay/export
 import overlay/llm/chat
 import overlay/llm/provider
 import overlay/llm/tool
@@ -52,6 +56,8 @@ pub type Session {
     policy: policy.Policy(execute.Value),
     context: execute.Value,
     context_type: binding.Poly,
+    audit: Option(execute.Value),
+    context_policy: Option(policy.Policy(execute.Value)),
   )
 }
 
@@ -99,8 +105,11 @@ pub fn execute(input, config: config.Config) {
               policy: user_config.policy,
               context: user_config.context,
               context_type:,
+              audit: user_config.audit,
+              context_policy: user_config.context_policy,
             )
-          use Nil <- system.then(outer_loop(session, state, []))
+          let runtime = Runtime(state:, policy_state: user_config.state)
+          use Nil <- system.then(outer_loop(session, runtime, []))
           Ok(0) |> system.Done
         }
         Error(reason) ->
@@ -129,6 +138,10 @@ fn outer_loop(session: Session, eyg_state, history) {
   use read <- system.then(input(">>>", "send a message"))
   case read {
     Ok("") -> system.Done(Nil)
+    Ok("/export" <> path) -> {
+      use Nil <- system.then(export(session, history, string.trim(path)))
+      outer_loop(session, eyg_state, history)
+    }
     Ok(text) -> {
       let message = chat.UserMessage(text, [])
       use #(result, eyg_state) <- system.then(
@@ -172,20 +185,15 @@ pub fn input(
 
 pub fn inner_loop(
   session: Session,
-  eyg_state: execute.State,
+  eyg_state: Runtime,
   history: List(chat.Message(tool.Call)),
-) -> system.Effect(
-  #(Result(List(chat.Message(tool.Call)), String), execute.State),
-) {
-  use completion <- system.then(provider.completion(
-    session.llm,
-    session.provider_context,
+) -> system.Effect(#(Result(List(chat.Message(tool.Call)), String), Runtime)) {
+  use completion <- system.then(stream_completion(
+    session,
     list.reverse(history),
-    fetch,
-  )(system.Done))
+  ))
   case completion {
     Ok(completion) -> {
-      io.println(completion.content)
       let history = [chat.from_completion(completion), ..history]
       case completion.tool_calls {
         [] -> system.Done(#(Ok(history), eyg_state))
@@ -228,17 +236,11 @@ pub fn result_to_message(
   }
 }
 
-fn fetch(
-  request,
-) -> K(system.Effect(_), Result(response.Response(BitArray), _)) {
-  system.Fetch(request, _)
-}
-
 pub fn execute_call(
   session: Session,
   call: tool.FunctionCall,
-  eyg_state: execute.State,
-) -> system.Effect(#(Result(tool.Return, String), execute.State)) {
+  eyg_state: Runtime,
+) -> system.Effect(#(Result(tool.Return, String), Runtime)) {
   let tool.FunctionCall(name, arguments) = call
   case agent.cast_tool_call(name, arguments) {
     Ok(call) -> {
@@ -262,7 +264,7 @@ pub fn execute_call(
           system.Done(#(result, eyg_state))
         }
         agent.Guide(name) -> {
-          use result <- system.map(read_guide(eyg_state.origin, name))
+          use result <- system.map(read_guide(eyg_state.state.origin, name))
           let result = result.map(result, tool.Return(_, []))
           io.println(log_result(result))
           #(result, eyg_state)
@@ -312,24 +314,31 @@ fn truncate(text) {
 pub fn run_do(
   session: Session,
   code: String,
-  eyg_state: execute.State,
-) -> system.Effect(#(Result(_, String), execute.State, List(String))) {
+  eyg_state: Runtime,
+) -> system.Effect(#(Result(_, String), Runtime, List(String))) {
   case source.parse_input(code, source.Stdin) {
     Ok(source) -> {
+      use #(trusted, eyg_state) <- system.then(check_references(
+        session,
+        source,
+        eyg_state,
+      ))
+      use <- untrusted(trusted, eyg_state)
       let inference =
         overlay_check.agent(computer.effects(), session.context_type)
-      use #(_type, errors, eyg_state) <- system.then(check.check_from(
+      use #(_type, errors, state) <- system.then(check.check_from(
         source,
         session.cwd,
         inference,
-        eyg_state,
+        eyg_state.state,
         check.AnyType,
       ))
+      let eyg_state = Runtime(..eyg_state, state:)
       case errors {
         [] -> {
           let scope = [#("context", session.context)]
           use #(result, state, output) <- system.map(
-            loop(block.execute(source, scope), eyg_state, session.policy, []),
+            loop(block.execute(source, scope), eyg_state, session, []),
           )
           let result = case result {
             Ok(value) -> Ok(value)
@@ -359,35 +368,54 @@ fn apply_policy(
   lift: execute.Value,
   meta: source.Location,
   policy: policy.Policy(execute.Value),
-  state: execute.State,
+  runtime: Runtime,
 ) -> system.Effect(
-  #(Result(policy.Decision(execute.Value), execute.Reason), execute.State),
+  #(Result(policy.Decision(execute.Value), execute.Reason), Runtime),
 ) {
   case policy.rule(policy, label) {
     policy.Apply(function) -> {
-      use #(result, state) <- system.map(execute.pure_loop(
-        expression.call(function, [#(lift, meta)]),
-        state,
-      ))
-      let result = case result {
-        Ok(returned) ->
-          policy.decision(returned)
-          |> result.map_error(fn(reason) {
-            abort("policy for " <> label <> " failed: " <> reason)
-          })
-        Error(#(reason, _, _, _)) ->
-          Error(abort(
-            "policy for "
-            <> label
-            <> " failed: "
-            <> simple_debug.describe(reason),
-          ))
+      // A policy with state is also given the state and returns the next state.
+      let arguments = case runtime.policy_state {
+        Some(policy_state) -> [#(lift, meta), #(policy_state, meta)]
+        None -> [#(lift, meta)]
       }
-      #(result, state)
+      use #(result, state) <- system.map(execute.pure_loop(
+        expression.call(function, arguments),
+        runtime.state,
+      ))
+      let runtime = Runtime(..runtime, state:)
+      let failed = fn(reason) {
+        abort("policy for " <> label <> " failed: " <> reason)
+      }
+      case result, runtime.policy_state {
+        Ok(returned), None -> #(
+          policy.decision(returned) |> result.map_error(failed),
+          runtime,
+        )
+        Ok(returned), Some(_) ->
+          case policy.stateful_decision(returned) {
+            Ok(#(decision, policy_state)) -> #(
+              Ok(decision),
+              Runtime(..runtime, policy_state: Some(policy_state)),
+            )
+            Error(reason) -> #(Error(failed(reason)), runtime)
+          }
+        Error(#(reason, _, _, _)), _ -> #(
+          Error(failed(simple_debug.describe(reason))),
+          runtime,
+        )
+      }
     }
-    policy.Unrestricted -> system.Done(#(Ok(policy.Pass(lift)), state))
-    policy.Refused -> system.Done(#(Error(abort(policy.refused(label))), state))
+    policy.Unrestricted -> system.Done(#(Ok(policy.Pass(lift)), runtime))
+    policy.Refused ->
+      system.Done(#(Error(abort(policy.refused(label))), runtime))
   }
+}
+
+/// State that changes as the session runs.
+/// The policy state is only used when the config has a `state` field.
+pub type Runtime {
+  Runtime(state: execute.State, policy_state: Option(execute.Value))
 }
 
 fn abort(reason: String) -> execute.Reason {
@@ -397,10 +425,10 @@ fn abort(reason: String) -> execute.Reason {
 // This is a replacement for execute.loop because of the policy
 pub fn loop(
   return: Result(_, execute.Debug),
-  state: execute.State,
-  policy: policy.Policy(execute.Value),
+  state: Runtime,
+  session: Session,
   output: List(String),
-) -> system.Effect(#(Result(_, execute.Debug), execute.State, List(String))) {
+) -> system.Effect(#(Result(_, execute.Debug), Runtime, List(String))) {
   case return {
     Ok(return) -> system.Done(#(Ok(return), state, output))
     Error(#(reason, meta, env, k)) ->
@@ -410,15 +438,15 @@ pub fn loop(
           system.Done(#(Error(#(reason, meta, env, k)), state, output))
         break.UnhandledEffect(label, lift) -> {
           use lift <- system.then(resolve_paths(label, lift, meta.origin))
-          use #(result, state) <- system.then(apply_policy(
+          use #(result, state) <- system.then(decide(
+            session,
             label,
             lift,
             meta,
-            policy,
             state,
           ))
           case result {
-            Ok(policy.Pass(modified)) ->
+            Ok(Perform(modified)) ->
               case computer.cast(label, modified) {
                 Ok(effect) -> {
                   let effect = computer.extrinsic(effect, meta.origin)
@@ -430,14 +458,14 @@ pub fn loop(
                     _ -> output
                   }
                   use value <- system.then(effect)
-                  loop(block.resume(value, env, k), state, policy, output)
+                  loop(block.resume(value, env, k), state, session, output)
                 }
 
                 Error(reason) ->
                   system.Done(#(Error(#(reason, meta, env, k)), state, output))
               }
-            Ok(policy.Mock(returned)) ->
-              loop(block.resume(returned, env, k), state, policy, output)
+            Ok(Resume(returned)) ->
+              loop(block.resume(returned, env, k), state, session, output)
             Error(reason) ->
               system.Done(#(Error(#(reason, meta, env, k)), state, output))
           }
@@ -453,19 +481,19 @@ pub fn loop(
                 #("limit", value.Integer(import_limit)),
               ]),
             )
-          use #(decision, state) <- system.then(apply_policy(
+          use #(decision, state) <- system.then(decide(
+            session,
             "ReadFile",
             request,
             meta,
-            policy,
             state,
           ))
           let path = case decision {
-            Ok(policy.Pass(modified)) ->
+            Ok(Perform(modified)) ->
               cast.field("path", cast.as_string, modified)
-            Ok(policy.Mock(value.Tagged("Error", reason))) ->
+            Ok(Resume(value.Tagged("Error", reason))) ->
               Error(import_denied(location, simple_debug.inspect(reason)))
-            Ok(policy.Mock(_)) ->
+            Ok(Resume(_)) ->
               Error(import_denied(
                 location,
                 "imports can only be passed or mocked with an error",
@@ -474,14 +502,15 @@ pub fn loop(
           }
           case path {
             Ok(path) -> {
-              use #(result, state) <- system.then(execute.lookup(
+              use #(result, looked_up) <- system.then(execute.lookup(
                 ir.Relative(path),
                 meta.origin,
-                state,
+                state.state,
               ))
+              let state = Runtime(..state, state: looked_up)
               case result {
                 Ok(value) ->
-                  loop(block.resume(value, env, k), state, policy, output)
+                  loop(block.resume(value, env, k), state, session, output)
                 Error(reason) ->
                   system.Done(#(Error(#(reason, meta, env, k)), state, output))
               }
@@ -491,14 +520,15 @@ pub fn loop(
           }
         }
         break.UndefinedReference(reference) -> {
-          use #(result, state) <- system.then(execute.lookup(
+          use #(result, looked_up) <- system.then(execute.lookup(
             reference,
             meta.origin,
-            state,
+            state.state,
           ))
+          let state = Runtime(..state, state: looked_up)
           case result {
             Ok(value) ->
-              loop(block.resume(value, env, k), state, policy, output)
+              loop(block.resume(value, env, k), state, session, output)
             Error(reason) ->
               system.Done(#(Error(#(reason, meta, env, k)), state, output))
           }
@@ -581,4 +611,245 @@ fn step(history: List(chat.Message(_))) -> Int {
     }
   })
   |> int.add(1)
+}
+
+/// What to do with an effect once the policy and user have decided.
+type Outcome {
+  Perform(execute.Value)
+  Resume(execute.Value)
+}
+
+/// Apply the policy, ask the user if the policy asks, then audit the decision.
+fn decide(
+  session: Session,
+  label: String,
+  lift: execute.Value,
+  meta: source.Location,
+  state: Runtime,
+) -> system.Effect(#(Result(Outcome, execute.Reason), Runtime)) {
+  use #(decision, state) <- system.then(apply_policy(
+    label,
+    lift,
+    meta,
+    policy_for(session, meta.origin),
+    state,
+  ))
+  use outcome <- system.then(case decision {
+    Ok(policy.Pass(value)) -> system.Done(Ok(Perform(value)))
+    Ok(policy.Mock(value)) -> system.Done(Ok(Resume(value)))
+    Ok(policy.Ask(question:, denied:)) -> {
+      use answer <- system.map(input(
+        terminal.style(ansi.yellow, question) <> " allow?",
+        "y/N",
+      ))
+      case answer {
+        Ok("y") | Ok("Y") | Ok("yes") -> Ok(Perform(lift))
+        _ -> Ok(Resume(denied))
+      }
+    }
+    Error(reason) -> system.Done(Error(reason))
+  })
+  use audited <- system.map(audit(session, label, lift, outcome, state.state))
+  #(outcome, Runtime(..state, state: audited))
+}
+
+/// Call the config's audit function, which may perform effects, with the effect and outcome.
+/// A failing audit is reported to the user but does not stop the agent.
+fn audit(session: Session, label, lift, outcome, state) {
+  case session.audit {
+    None -> system.Done(state)
+    Some(function) -> {
+      let decision = case outcome {
+        Ok(Perform(_)) -> "pass"
+        Ok(Resume(_)) -> "mock"
+        Error(_) -> "refused"
+      }
+      let entry =
+        value.Record(
+          dict.from_list([
+            #("effect", value.String(label)),
+            #("input", value.String(simple_debug.inspect(lift))),
+            #("decision", value.String(decision)),
+          ]),
+        )
+      let meta = source.Location(source.Inline, source.Json)
+      use #(result, state) <- system.then(execute.expression_loop(
+        expression.call(function, [#(entry, meta)]),
+        state,
+      ))
+      case result {
+        Ok(_) -> system.Done(state)
+        Error(#(reason, _, _, _)) -> {
+          io.println(terminal.style(
+            ansi.red,
+            "audit failed: " <> simple_debug.describe(reason),
+          ))
+          system.Done(state)
+        }
+      }
+    }
+  }
+}
+
+/// Write the chat in the opencode session export format.
+fn export(
+  session: Session,
+  history: List(chat.Message(tool.Call)),
+  path: String,
+) -> system.Effect(Nil) {
+  use time <- system.then(system.now())
+  let path = case path {
+    "" -> "overlay-session-" <> int.to_string(time) <> ".json"
+    path -> path
+  }
+  let exported =
+    export.encode(
+      export.Session(
+        id: "ses_" <> int.to_string(time),
+        directory: session.cwd,
+        provider_id: provider.id(session.llm.provider),
+        model_id: session.llm.model,
+        time:,
+      ),
+      list.reverse(history),
+    )
+    |> json.to_string
+  use path <- system.then(resolve_path(path, source.Pipe))
+  use result <- system.then(system.write_file(path, exported))
+  system.stdout(case result {
+    Ok(Nil) -> "exported session to " <> path
+    Error(reason) ->
+      terminal.style(
+        ansi.red,
+        "failed to export session: " <> string.inspect(reason),
+      )
+  })
+}
+
+/// Effects performed by code from the config's files, such as context functions,
+/// use the context policy when there is one.
+/// The agent's code, and modules from the hub, use the policy.
+fn policy_for(session: Session, origin: source.Origin) {
+  case origin, session.context_policy {
+    source.Disk(..), Some(context_policy) -> context_policy
+    _, _ -> session.policy
+  }
+}
+
+/// Published references are loaded unless the policy has a `reference` rule that denies them.
+fn check_reference(session: Session, reference, meta: source.Location, state) {
+  case policy.rule(policy_for(session, meta.origin), policy.reference) {
+    policy.Apply(_) -> {
+      let text = ir.reference_to_string(reference)
+      use #(outcome, state) <- system.map(decide(
+        session,
+        policy.reference,
+        value.String(text),
+        meta,
+        state,
+      ))
+      let result = case outcome {
+        Ok(Perform(_)) -> Ok(Nil)
+        Ok(Resume(value.String(reason))) ->
+          Error(abort("reference " <> text <> " denied by policy: " <> reason))
+        Ok(Resume(_)) ->
+          Error(abort("reference " <> text <> " denied by policy"))
+        Error(reason) -> Error(reason)
+      }
+      #(result, state)
+    }
+    policy.Unrestricted | policy.Refused -> system.Done(#(Ok(Nil), state))
+  }
+}
+
+/// Check every published reference in the agent's code before it is fetched.
+fn check_references(session, source: ir.Node(source.Location), state) {
+  let references =
+    ir.list_references(source)
+    |> list.filter(fn(reference) {
+      case reference {
+        ir.Relative(..) -> False
+        _ -> True
+      }
+    })
+  system.fold(references, #(Ok(Nil), state), fn(acc, reference) {
+    case acc {
+      #(Error(_), _) -> system.Done(acc)
+      #(Ok(Nil), state) -> check_reference(session, reference, source.1, state)
+    }
+  })
+}
+
+fn untrusted(trusted, eyg_state, then) {
+  case trusted {
+    Ok(Nil) -> then()
+    Error(reason) ->
+      system.Done(
+        #(Error("error: " <> simple_debug.describe(reason)), eyg_state, []),
+      )
+  }
+}
+
+/// Request a completion and print its content as it arrives.
+fn stream_completion(
+  session: Session,
+  history: List(chat.Message(tool.Call)),
+) -> system.Effect(Result(chat.Completion(tool.Call), String)) {
+  let request =
+    provider.stream_completion_request(
+      session.llm,
+      session.provider_context,
+      history,
+    )
+  use response <- system.then(system.fetch_stream(request))
+  case response {
+    Ok(response.Response(status: 200, body: reader, ..)) ->
+      read_stream(session.llm.provider, reader, <<>>, chat.fresh())
+    Ok(response.Response(status:, body: reader, ..)) -> {
+      use body <- system.map(read_all(reader, <<>>))
+      Error(
+        "unexpected status: "
+        <> int.to_string(status)
+        <> case bit_array.to_string(body) {
+          Ok("") | Error(Nil) -> ""
+          Ok(body) -> " " <> body
+        },
+      )
+    }
+    Error(reason) ->
+      system.Done(Error(
+        "request to "
+        <> uri.to_string(request.to_uri(request))
+        <> " failed: "
+        <> effect.describe_fetch_error(reason),
+      ))
+  }
+}
+
+fn read_stream(llm_provider, reader, remaining, completion) {
+  use chunk <- system.then(system.read_chunk(reader))
+  case chunk {
+    Ok(#(Some(bits), reader)) -> {
+      let #(completions, remaining) =
+        provider.completion_chunk_parse(llm_provider, remaining, bits)
+      list.each(completions, fn(delta: chat.Completion(tool.Call)) {
+        io.print(delta.content)
+      })
+      let completion = chat.append_chunks(completion, completions)
+      read_stream(llm_provider, reader, remaining, completion)
+    }
+    Ok(#(None, _)) -> {
+      io.println("")
+      system.Done(Ok(completion))
+    }
+    Error(reason) -> system.Done(Error(effect.describe_fetch_error(reason)))
+  }
+}
+
+fn read_all(reader, acc) {
+  use chunk <- system.then(system.read_chunk(reader))
+  case chunk {
+    Ok(#(Some(bits), reader)) -> read_all(reader, <<acc:bits, bits:bits>>)
+    _ -> system.Done(acc)
+  }
 }

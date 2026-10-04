@@ -8,7 +8,7 @@ import gleam/http/response.{type Response}
 import gleam/int
 import gleam/io
 import gleam/javascript/promise.{type Promise}
-import gleam/option.{type Option}
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/timestamp
 import kryptos/eddsa
@@ -23,6 +23,13 @@ pub type Metadata {
 }
 
 // This exists for testing as the runner can be defined straight away.
+/// The body of a streamed response, read with `read_chunk`.
+pub type Reader {
+  Body(fetch.BodyReader)
+  /// Chunks already in memory, i.e. from a sandbox.
+  Chunks(List(BitArray))
+}
+
 pub type Effect(a) {
   Done(a)
   AppendFileBits(
@@ -39,6 +46,14 @@ pub type Effect(a) {
   Fetch(
     Request(BitArray),
     fn(Result(Response(BitArray), effect.FetchError)) -> Effect(a),
+  )
+  FetchStream(
+    Request(BitArray),
+    fn(Result(Response(Reader), effect.FetchError)) -> Effect(a),
+  )
+  ReadChunk(
+    Reader,
+    fn(Result(#(Option(BitArray), Reader), effect.FetchError)) -> Effect(a),
   )
   GenerateKey(
     fn(keypair.Keypair(eddsa.PrivateKey, eddsa.PublicKey)) -> Effect(a),
@@ -216,6 +231,10 @@ pub fn then(effect: Effect(a), func: fn(a) -> Effect(b)) -> Effect(b) {
       GenerateKey(fn(keypair) { then(resume(keypair), func) })
     Fetch(request, resume) ->
       Fetch(request, fn(response) { then(resume(response), func) })
+    FetchStream(request, resume) ->
+      FetchStream(request, fn(response) { then(resume(response), func) })
+    ReadChunk(reader, resume) ->
+      ReadChunk(reader, fn(chunk) { then(resume(chunk), func) })
     CreateDirectory(path, resume) ->
       CreateDirectory(path, fn(response) { then(resume(response), func) })
     Cwd(resume) -> Cwd(fn(response) { then(resume(response), func) })
@@ -326,6 +345,29 @@ pub fn run(effect: Effect(a)) -> Promise(a) {
       use response <- promise.await(do_fetch(request))
       run(resume(response))
     }
+    FetchStream(request, resume) -> {
+      use response <- promise.await(fetch.send_bits(request))
+      let response =
+        result.try(response, fn(response) {
+          fetch.stream_body(response)
+          |> result.map(fn(reader) { response.set_body(response, Body(reader)) })
+        })
+        |> result.map_error(fetch_error)
+      run(resume(response))
+    }
+    ReadChunk(Chunks(chunks), resume) ->
+      case chunks {
+        [] -> run(resume(Ok(#(None, Chunks([])))))
+        [chunk, ..rest] -> run(resume(Ok(#(Some(chunk), Chunks(rest)))))
+      }
+    ReadChunk(Body(reader) as body, resume) -> {
+      use chunk <- promise.await(fetch.read_chunk(reader))
+      let chunk =
+        chunk
+        |> result.map(fn(chunk) { #(chunk, body) })
+        |> result.map_error(fetch_error)
+      run(resume(chunk))
+    }
     CreateDirectory(path, resume) -> run(resume(do_create_directory(path)))
     Cwd(resume) -> run(resume(do_cwd()))
     Hash(algorithm, bytes, resume) -> run(resume(do_hash(algorithm, bytes)))
@@ -367,12 +409,14 @@ pub fn do_hash(algorithm, bytes) {
 
 fn do_fetch(request) {
   use response <- promise.map(fetchx.send_bits(request))
-  result.map_error(response, fn(reason) {
-    case reason {
-      fetch.NetworkError(reason) -> effect.NetworkError(reason)
-      fetch.UnableToReadBody | fetch.InvalidJsonBody -> effect.UnableToReadBody
-    }
-  })
+  result.map_error(response, fetch_error)
+}
+
+fn fetch_error(reason) {
+  case reason {
+    fetch.NetworkError(reason) -> effect.NetworkError(reason)
+    fetch.UnableToReadBody | fetch.InvalidJsonBody -> effect.UnableToReadBody
+  }
 }
 
 fn do_write_file(path, contents) {
@@ -424,3 +468,17 @@ fn read_at_offset(
   offset: Int,
   limit: Int,
 ) -> Result(BitArray, simplifile.FileError)
+
+/// Send a request and stream the response body.
+pub fn fetch_stream(
+  request: Request(BitArray),
+) -> Effect(Result(Response(Reader), effect.FetchError)) {
+  FetchStream(request, Done)
+}
+
+/// Read the next chunk of a streamed body, `None` when the body is finished.
+pub fn read_chunk(
+  reader: Reader,
+) -> Effect(Result(#(Option(BitArray), Reader), effect.FetchError)) {
+  ReadChunk(reader, Done)
+}

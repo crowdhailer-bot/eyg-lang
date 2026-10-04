@@ -107,8 +107,27 @@ let test_fetch = (_) -> {
   {}
 }
 
+let test_trust_packages = (_) -> {
+  let rule = policy.trust_packages(["standard"])
+  let _ = expect_pass(rule("@standard"))
+  let _ = expect_pass(rule("@standard:1"))
+  let _ = assert.equal_string("not a trusted package: @standards", expect_mock(rule("@standards")))
+  let _ = expect_mock(rule("#baguqeera"))
+  {}
+}
+
+let test_ask = (_) -> {
+  let rule = policy.ask((request) -> { request.path }, Error("declined"))
+  match rule({path: "/a.txt"}) {
+    Ask({question}) -> { assert.equal_string("/a.txt", question) }
+    | (_) -> { perform Abort("expected Ask") }
+  }
+}
+
 [
   {name: "policy pass and deny", test: test_pass_and_deny},
+  {name: "policy trust packages", test: test_trust_packages},
+  {name: "policy ask", test: test_ask},
   {name: "policy is under", test: test_is_under},
   {name: "policy read only", test: test_read_only},
   {name: "policy read write", test: test_read_write},

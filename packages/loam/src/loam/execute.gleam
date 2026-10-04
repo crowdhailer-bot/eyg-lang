@@ -292,6 +292,38 @@ fn lookup_relative(
   }
 }
 
+/// Evaluate an expression, such as a function call, performing its effects with the computer platform.
+pub fn expression_loop(
+  return: Result(Value, Debug),
+  state: State,
+) -> system.Effect(#(Result(Value, Debug), State)) {
+  case return {
+    Ok(return) -> system.Done(#(Ok(return), state))
+    Error(#(reason, meta, env, k)) ->
+      case reason {
+        break.UnhandledEffect(label, lift) ->
+          case computer.cast(label, lift) {
+            Ok(effect) -> {
+              use value <- system.then(computer.extrinsic(effect, meta.origin))
+              expression_loop(expression.resume(value, env, k), state)
+            }
+            Error(reason) ->
+              system.Done(#(Error(#(reason, meta, env, k)), state))
+          }
+        break.UndefinedReference(reference) -> {
+          use value, state <- try_await(
+            lookup(reference, meta.origin, state),
+            meta,
+            env,
+            k,
+          )
+          expression_loop(expression.resume(value, env, k), state)
+        }
+        _ -> system.Done(#(Error(#(reason, meta, env, k)), state))
+      }
+  }
+}
+
 pub fn pure_loop(
   return: Result(Value, Debug),
   state: State,
