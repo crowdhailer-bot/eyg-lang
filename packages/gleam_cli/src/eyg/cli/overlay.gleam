@@ -696,10 +696,12 @@ fn audit(session: Session, label, lift, outcome, state) {
       case result {
         Ok(_) -> system.Done(state)
         Error(#(reason, _, _, _)) -> {
-          io.println(terminal.style(
-            ansi.red,
-            "audit failed: " <> simple_debug.describe(reason),
-          ))
+          use Nil <- system.then(
+            system.stdout(terminal.style(
+              ansi.red,
+              "audit failed: " <> simple_debug.describe(reason),
+            )),
+          )
           system.Done(state)
         }
       }
