@@ -58,7 +58,9 @@ or resizes its existing panel. Different item kinds can coexist:
 
 History/diffs are rendered as escaped application UI, never as executable HTML.
 History entries can be opened as pinned previews. Closing a panel does not
-delete its artifact. State is retained across agent turns in this browser
+delete its artifact. When all previews are closed, the workspace lists its
+artifacts with **Open** and **History** controls. These use local snapshots and
+do not call the model. State is retained across agent turns in this browser
 tab. Completed turns, revision history, panel placement and completed sharing
 links are saved in session storage and restored after a refresh. Closing the
 tab clears that storage. A running turn may still have unsaved changes.

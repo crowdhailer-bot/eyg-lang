@@ -50,3 +50,27 @@ test('a full tab store keeps the live workspace and offers a retry', async ({ pa
   await page.reload();
   await expect(page.frameLocator('iframe.artifact-preview').frameLocator('iframe').locator('h1')).toHaveText('Still here');
 });
+
+
+test('closed artifacts can be reopened without another model call', async ({ page }) => {
+  let calls = 0;
+  page.on('request', request => {
+    if (request.url().endsWith('/api/chat')) calls++;
+  });
+  const overlay = await agent(page);
+  await overlay.show(document('First version'), 'map');
+  await overlay.show(document('Latest version'), 'map');
+  await page.getByRole('button', { name: 'Close map', exact: true }).click();
+  const library = page.getByRole('list', { name: 'Saved artifacts' });
+  await expect(library).toContainText('2 versions');
+  await expect(page.locator('.artifact-storage')).toHaveText('Saved in this tab');
+  await page.reload();
+  await expect(library).toBeVisible();
+  const before = calls;
+  await page.getByRole('button', { name: 'History of map' }).click();
+  await expect(page.locator('.artifact-revision')).toHaveCount(2);
+  await page.locator('.artifact-heading button[aria-label^="Close"]').click();
+  await page.getByRole('button', { name: 'Open map', exact: true }).click();
+  await expect(page.frameLocator('iframe.artifact-preview').frameLocator('iframe').locator('h1')).toHaveText('Latest version');
+  expect(calls).toBe(before);
+});

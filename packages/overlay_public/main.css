@@ -577,3 +577,12 @@ pre {
 .artifact-storage { color: #555; font-size: 12px; margin-bottom: 8px; }
 .artifact-storage:empty { display: none; }
 .artifact-storage button { cursor: pointer; text-decoration: underline; background: none; border: 0; color: inherit; font: inherit; }
+
+.artifact-empty { overflow: auto; }
+.artifact-library { list-style: none; margin: 12px 0 0; padding: 0; min-width: 240px; max-width: 100%; text-align: left; }
+.artifact-library li { display: flex; align-items: center; gap: 16px; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: white; border: 1px solid rgba(0, 0, 0, 0.12); }
+.artifact-library strong { display: block; color: #111; overflow-wrap: anywhere; }
+.artifact-library span { font-size: 11px; }
+.artifact-library-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.artifact-library button { cursor: pointer; background: #111; color: white; border: 1px solid #111; padding: 5px 8px; font: inherit; }
+.artifact-library button:focus-visible { outline: 2px solid #4165dc; outline-offset: 3px; }

@@ -36,11 +36,7 @@ pub fn render(
       h.div([a.class("workspace-heading")], [h.text("ARTIFACT WORKSPACE")]),
       storage_status(store, status, dirty),
       case store.panels {
-        [] ->
-          h.div([a.class("artifact-empty")], [
-            h.p([], [h.text("Artifacts the agent shows appear here.")]),
-            h.p([], [h.text("Each runs sandboxed, without network or storage.")]),
-          ])
+        [] -> library(store)
         panels ->
           keyed.div(
             [a.class("artifact-canvas")],
@@ -50,6 +46,67 @@ pub fn render(
           )
       },
     ],
+  )
+}
+
+fn library(store: art.Store) {
+  case dict.to_list(store.versions) {
+    [] ->
+      h.div([a.class("artifact-empty")], [
+        h.p([], [h.text("Artifacts the agent shows appear here.")]),
+        h.p([], [h.text("Each runs sandboxed, without network or storage.")]),
+      ])
+    versions ->
+      h.div([a.class("artifact-empty")], [
+        h.p([], [h.text("Your artifacts are still here.")]),
+        h.p([], [h.text("Open a preview or revisit its history.")]),
+        h.ul(
+          [
+            a.class("artifact-library"),
+            a.attribute("aria-label", "Saved artifacts"),
+          ],
+          versions
+            |> list.sort(fn(a, b) { string.compare(a.0, b.0) })
+            |> list.map(fn(entry) {
+              let #(name, versions) = entry
+              let count = list.length(versions)
+              let label = case count {
+                1 -> "1 version"
+                _ -> int.to_string(count) <> " versions"
+              }
+              h.li([], [
+                h.div([], [
+                  h.strong([], [h.text(name)]),
+                  h.span([], [h.text(label)]),
+                ]),
+                h.div([a.class("artifact-library-actions")], [
+                  open_button("Open", "Open " <> name, art.Artifact(name)),
+                  open_button(
+                    "History",
+                    "History of " <> name,
+                    art.History(name),
+                  ),
+                ]),
+              ])
+            }),
+        ),
+      ])
+  }
+}
+
+fn open_button(label, accessible_label, item) {
+  h.button(
+    [
+      a.attribute("aria-label", accessible_label),
+      event.on_click(
+        state.UserShowedArtifact(art.Placement(
+          item,
+          art.Point(0, 0),
+          art.Point(1000, 1000),
+        )),
+      ),
+    ],
+    [h.text(label)],
   )
 }
 
