@@ -1,3 +1,4 @@
+import eyg/cli/effects
 import eyg/cli/internal/config
 import eyg/hub/cache
 import loam/execute
@@ -16,7 +17,10 @@ pub fn execute(
   use source <- system.try(source.parse_input(code, input))
 
   let state = execute.State(config.client.origin, cache.empty())
-  use #(result, _) <- system.map(execute.block(source, [], state))
+  use #(result, _) <- system.map(effects.handle(
+    execute.block(source, [], state),
+    cwd,
+  ))
   case result {
     Ok(_) -> Ok(0)
     Error(#(reason, location, _, k)) -> {

@@ -10,3 +10,14 @@ pub fn style(apply: fn(String) -> String, text: String) -> String {
     False -> text
   }
 }
+
+/// Catch Ctrl-C until `end_turn`, check it with `interrupted`.
+@external(javascript, "./terminal_ffi.mjs", "startTurn")
+pub fn start_turn() -> Nil
+
+@external(javascript, "./terminal_ffi.mjs", "endTurn")
+pub fn end_turn() -> Nil
+
+/// Has the user pressed Ctrl-C since the turn started.
+@external(javascript, "./terminal_ffi.mjs", "isInterrupted")
+pub fn interrupted() -> Bool

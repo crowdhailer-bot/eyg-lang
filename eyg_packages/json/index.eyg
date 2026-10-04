@@ -23,6 +23,7 @@ All decoders:
 - decode.list(item_decoder)
 - decode.field(label, value_decoder)
 - decode.object(decoder_fn)
+- decode.at(path, value_decoder), a value nested in objects such as `decode.at([\"owner\", \"login\"], decode.string)`
 
 use `parse(input, decoder)` for strings and `parse_bytes` for binary data.
 
@@ -164,6 +165,14 @@ let object = (decoder) -> {
   }
 }
 
+// Decode the value at a path of object fields, i.e. at(["owner", "login"], string).
+let at = !fix((self, path, decoder) -> {
+  match !list_pop(path) {
+    Ok({head, tail}) -> { object(field(head, self(tail, decoder))) }
+    Error(_) -> { decoder }
+  }
+})
+
 let parse_bytes = (json, decoder) -> {
   match perform DecodeJSON(json) {
     Ok(flat) -> { handle Abort(
@@ -184,7 +193,8 @@ let decode = {
   string,
   list,
   field,
-  object
+  object,
+  at
 }
 
 let encode = import "./encode.eyg"

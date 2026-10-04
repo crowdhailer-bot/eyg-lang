@@ -1,0 +1,28 @@
+let {assert} = import "../../aok/index.eyg"
+let env = import "../env.eyg"
+
+let fixture = (name) -> {
+  let cwd = match perform CWD({}) {
+    Ok(cwd) -> { cwd }
+    Error(_) -> { perform Abort("no cwd") }
+  }
+  !string_append(cwd, !string_append("/eyg_packages/overlay/fixtures/env/", name))
+}
+
+let test_same_type = (_) -> {
+  let type_ = assert.ok(env.check([fixture("personal.eyg"), fixture("work.eyg")]))
+  let _ = assert.equal_string("{api_key: String}", type_)
+  {}
+}
+
+let test_different_type = (_) -> {
+  let reason = assert.error(env.check([fixture("personal.eyg"), fixture("broken.eyg")]))
+  let _ = assert.ok(!string_split_once(reason, "broken.eyg has type {key: Integer}"))
+  let _ = assert.error(env.check([]))
+  {}
+}
+
+[
+  {name: "env files with the same type", test: test_same_type},
+  {name: "env files with different types", test: test_different_type}
+]

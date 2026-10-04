@@ -70,7 +70,10 @@ fn field(type_, label) {
         Error(Nil) -> Error(["the config has no `" <> label <> "` field"])
       }
     _ ->
-      Error(["the config should be a record but has type " <> debug.mono(type_)])
+      Error([
+        "the config should be a record but has type "
+        <> debug.render_type(type_),
+      ])
   }
 }
 
@@ -114,7 +117,7 @@ fn check_policy(policy, effects, state, level, bindings) {
                   "policy `"
                     <> name
                     <> "` should be a pure function "
-                    <> debug.mono(rule_type(
+                    <> debug.render_type(rule_type(
                     lift_type,
                     lower_type,
                     t.Empty,
@@ -139,7 +142,8 @@ fn check_policy(policy, effects, state, level, bindings) {
     }
     _ ->
       Error([
-        "the policy should be a record but has type " <> debug.mono(policy),
+        "the policy should be a record but has type "
+        <> debug.render_type(policy),
       ])
   }
 }
@@ -174,7 +178,7 @@ fn check_audit(type_, level, bindings) {
         Error(reason) ->
           Error([
             "audit should be a function "
-            <> debug.mono(t.Fun(audit_entry(), t.Empty, t.unit))
+            <> debug.render_type(t.Fun(audit_entry(), t.Empty, t.unit))
             <> ", "
             <> debug.reason(reason),
           ])
@@ -211,4 +215,16 @@ fn rule_type(lift, lower, rest, state) {
         ),
       )
   }
+}
+
+/// Check the type of a policy on its own, i.e. one entered in the browser.
+pub fn policy(
+  type_: binding.Poly,
+  effects: List(interface.Interface(a, b)),
+) -> Result(Nil, List(String)) {
+  let level = 1
+  let #(type_, bindings) = binding.instantiate(type_, level, dict.new())
+  let type_ = binding.resolve(type_, bindings)
+  check_policy(type_, effects, None, level, bindings)
+  |> result.replace(Nil)
 }

@@ -246,3 +246,11 @@ pub fn readme(status: Status) -> String {
   let cache.Module(value:, type_:) = module(status)
   overlay_context.readme(value, Some(type_))
 }
+
+/// The instructions given to the agent, a context without a readme is named.
+pub fn instructions(source: Source, status: Status) -> String {
+  case provided_readme(status) {
+    Some(readme) -> readme
+    None -> "The context is " <> describe(source) <> ".\n" <> readme(status)
+  }
+}

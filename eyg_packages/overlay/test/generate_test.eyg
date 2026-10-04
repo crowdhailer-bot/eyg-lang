@@ -1,0 +1,32 @@
+let {assert} = import "../../aok/index.eyg"
+let generate = import "../generate.eyg"
+
+let read = (path) -> {
+  let bytes = assert.ok(perform ReadFile({path, offset: 0, limit: 1000000}))
+  assert.ok(!string_from_binary(bytes))
+}
+
+let test_generate = (_) -> {
+  let cwd = match perform CWD({}) {
+    Ok(cwd) -> { cwd }
+    Error(_) -> { perform Abort("no cwd") }
+  }
+  let directory = !string_append(cwd, "/eyg_packages/overlay/fixtures/generated")
+  let _ = perform MakeDirectory(directory)
+  let _ = perform WriteFile({path: !string_append(directory, "/.gitignore"), contents: !string_to_binary("build")})
+  let _ = generate.generate(directory)
+  let _ = assert.equal_string(generate.config, read(!string_append(directory, "/.overlay.eyg")))
+  let _ = assert.equal_string(generate.env, read(!string_append(directory, "/.env.eyg")))
+  let _ = assert.equal_string("build\n.env.eyg\n", read(!string_append(directory, "/.gitignore")))
+  // Running again changes nothing
+  let _ = generate.generate(directory)
+  let _ = assert.equal_string("build\n.env.eyg\n", read(!string_append(directory, "/.gitignore")))
+  let _ = perform DeleteFile(!string_append(directory, "/.overlay.eyg"))
+  let _ = perform DeleteFile(!string_append(directory, "/.env.eyg"))
+  let _ = perform DeleteFile(!string_append(directory, "/.gitignore"))
+  {}
+}
+
+[
+  {name: "generate overlay configuration", test: test_generate}
+]

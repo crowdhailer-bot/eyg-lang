@@ -25,7 +25,7 @@ pub fn readme(context: v.Value(m, c), type_: Option(binding.Poly)) -> String {
     Some(readme), _ -> readme
     None, Some(type_) -> {
       let #(type_, _) = binding.instantiate(type_, 0, dict.new())
-      "The context has no readme, it has type:\n" <> debug.mono(type_)
+      "The context has no readme, it has type:\n" <> debug.render_type(type_)
     }
     None, None -> "The context has no readme."
   }

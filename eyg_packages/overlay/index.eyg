@@ -1,5 +1,7 @@
 {
   codex: import "./codex.eyg",
+  env: import "./env.eyg",
+  generate: import "./generate.eyg",
   policy: import "./policy.eyg",
   skills: import "./skills.eyg"
 }

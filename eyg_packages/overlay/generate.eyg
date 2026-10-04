@@ -1,0 +1,158 @@
+// Add overlay configuration to a project.
+//
+//   eyg @overlay.generate <directory>
+//
+// Creates `.overlay.eyg` and `.env.eyg`, and adds `.env.eyg` to `.gitignore`.
+// Existing files are not overwritten.
+
+let append = (a, b) -> {
+  !string_append(a, b)
+}
+
+let print = (text) -> {
+  perform StandardOut(append(text, "\n"))
+}
+
+let config = "let {api_key} = import \"./.env.eyg\"
+
+let read_text = (path) -> {
+  match perform ReadFile({path, offset: 0, limit: 1000000}) {
+    Ok(bytes) -> {
+      match !string_from_binary(bytes) {
+        Ok(text) -> { text }
+        Error(_) -> { \"\" }
+      }
+    }
+    Error(_) -> { \"\" }
+  }
+}
+
+let root = match perform CWD({}) {
+  Ok(cwd) -> { cwd }
+  Error(_) -> { \"/\" }
+}
+
+let pass = (value) -> { Pass(value) }
+
+// Paths given to the policy are absolute, deny anything outside the project and secrets.
+let denied = (path) -> {
+  match !string_starts_with(path, root) {
+    True(_) -> { !string_ends_with(path, \".env.eyg\") }
+    False(_) -> { True({}) }
+  }
+}
+
+// The agent can read the project, except secrets, and change nothing.
+let policy = {
+  read_file: (request) -> {
+    match denied(request.path) {
+      False(_) -> { Pass(request) }
+      True(_) -> { Mock(Error(!string_append(\"read_file denied by policy: \", request.path))) }
+    }
+  },
+  read_directory: pass,
+  cwd: pass,
+  now: pass,
+  random: pass,
+  standard_out: pass,
+  standard_error: pass
+}
+
+{
+  llm: {
+    provider: Ollama({origin: \"https://ollama.com\", api_key: Some(api_key)}),
+    model: \"glm-5.3:cloud\"
+  },
+  policy,
+  context: {readme: read_text(\"./README.md\")}
+}
+"
+
+let env = "// Secrets for .overlay.eyg, this file is gitignored.
+// Create an API key at https://ollama.com/settings/keys
+{api_key: \"\"}
+"
+
+let exists = (path) -> {
+  match perform ReadFile({path, offset: 0, limit: 1}) {
+    Ok(_) -> { True({}) }
+    Error(_) -> { False({}) }
+  }
+}
+
+let create = (path, contents) -> {
+  match exists(path) {
+    True(_) -> { print(append("exists ", path)) }
+    False(_) -> {
+      match perform WriteFile({path, contents: !string_to_binary(contents)}) {
+        Ok(_) -> { print(append("created ", path)) }
+        Error(reason) -> { print(append("failed to create ", append(path, append(": ", reason)))) }
+      }
+    }
+  }
+}
+
+let ignore = (path) -> {
+  let current = match perform ReadFile({path, offset: 0, limit: 10000000}) {
+    Ok(bytes) -> {
+      match !string_from_binary(bytes) {
+        Ok(text) -> { text }
+        Error(_) -> { "" }
+      }
+    }
+    Error(_) -> { "" }
+  }
+  match !string_split_once(append("\n", current), "\n.env.eyg\n") {
+    Ok(_) -> { print(append("ignored ", path)) }
+    Error(_) -> {
+      let line = match !equal(current, "") {
+        True(_) -> { ".env.eyg\n" }
+        False(_) -> {
+          match !string_ends_with(current, "\n") {
+            True(_) -> { ".env.eyg\n" }
+            False(_) -> { "\n.env.eyg\n" }
+          }
+        }
+      }
+      match perform AppendFile({path, contents: !string_to_binary(line)}) {
+        Ok(_) -> { print(append("updated ", path)) }
+        Error(reason) -> { print(append("failed to update ", append(path, append(": ", reason)))) }
+      }
+    }
+  }
+}
+
+// The directory is resolved from the working directory, a published script has no directory of its own.
+let directory = (arguments) -> {
+  let cwd = match perform CWD({}) {
+    Ok(cwd) -> { cwd }
+    Error(_) -> { "/" }
+  }
+  match !list_pop(arguments) {
+    Ok({head}) -> {
+      match !string_starts_with(head, "/") {
+        True(_) -> { head }
+        False(_) -> { append(cwd, append("/", head)) }
+      }
+    }
+    Error(_) -> { cwd }
+  }
+}
+
+let generate = (directory) -> {
+  let _ = create(append(directory, "/.overlay.eyg"), config)
+  let _ = create(append(directory, "/.env.eyg"), env)
+  let _ = ignore(append(directory, "/.gitignore"))
+  let _ = print("Add your Ollama API key to .env.eyg, then run `eyg overlay .overlay.eyg`")
+  {}
+}
+
+{
+  config,
+  env,
+  generate,
+  script: (arguments) -> {
+    let _ = generate(directory(arguments))
+    0
+  }
+}

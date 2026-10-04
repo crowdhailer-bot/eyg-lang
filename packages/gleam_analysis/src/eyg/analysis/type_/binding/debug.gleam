@@ -2,6 +2,7 @@ import eyg/analysis/type_/binding/error
 import eyg/analysis/type_/isomorphic as t
 import eyg/ir/tree as ir
 import glam/doc.{type Document}
+import gleam/dict
 import gleam/int
 import gleam/io
 import gleam/list
@@ -10,8 +11,9 @@ import multiformats/cid/v1
 
 const default_width: Int = 80
 
+/// Render a type with type variables numbered by their binding, for comparing types in tests.
 pub fn mono(type_) {
-  render_type(type_)
+  render_normalised(type_)
 }
 
 pub fn reason(r) {
@@ -19,10 +21,11 @@ pub fn reason(r) {
 }
 
 pub fn effect(e) {
-  render_effects(e)
+  effects_doc(e) |> doc.to_string(default_width)
 }
 
 pub fn render(typ, width: Int) -> String {
+  let assert [typ] = normalise([typ])
   typ
   |> to_doc
   |> doc.to_string(width)
@@ -34,7 +37,7 @@ pub fn render_type(typ) {
 
 fn to_doc(typ) -> Document {
   case typ {
-    t.Var(i) -> doc.from_string(int.to_string(i))
+    t.Var(i) -> doc.from_string(var_name(i))
     t.Integer -> doc.from_string("Integer")
     t.Binary -> doc.from_string("Binary")
     t.String -> doc.from_string("String")
@@ -87,17 +90,21 @@ pub fn render_reason(reason) {
     error.MissingReference(reference) ->
       "missing reference " <> render_reference(reference)
     error.MissingRow(label) -> "missing row '" <> label <> "'"
-    error.TypeMismatch(expected, given) ->
+    error.TypeMismatch(expected, given) -> {
+      let assert [expected, given] = normalise([expected, given])
       "type mismatch given: "
-      <> render_type(given)
+      <> render_normalised(given)
       <> " expected: "
-      <> render_type(expected)
+      <> render_normalised(expected)
+    }
     error.Recursive -> "Recursive"
-    error.SameTail(expected, given) ->
+    error.SameTail(expected, given) -> {
+      let assert [expected, given] = normalise([expected, given])
       "same tail given: "
-      <> render_type(given)
+      <> render_normalised(given)
       <> " expected: "
-      <> render_type(expected)
+      <> render_normalised(expected)
+    }
   }
 }
 
@@ -141,7 +148,7 @@ pub fn hint(reason) {
 fn row_docs(r) -> List(Document) {
   case r {
     t.Empty -> []
-    t.Var(i) -> [doc.from_string(string.append("..", int.to_string(i)))]
+    t.Var(i) -> [doc.from_string(string.append("..", var_name(i)))]
     t.RowExtend(label, value, tail) -> {
       let field =
         doc.from_string(label <> ": ")
@@ -156,13 +163,14 @@ fn row_docs(r) -> List(Document) {
 }
 
 pub fn render_effects(effects) {
+  let assert [effects] = normalise([effects])
   effects_doc(effects)
   |> doc.to_string(default_width)
 }
 
 fn effects_doc(effects) -> Document {
   case effects {
-    t.Var(i) -> doc.from_string(".." <> int.to_string(i))
+    t.Var(i) -> doc.from_string(".." <> var_name(i))
     t.Empty -> doc.from_string("")
     t.EffectExtend(label, #(lift, resume), tail) ->
       collect_effect(tail, [effect_doc(label, lift, resume)])
@@ -186,7 +194,7 @@ fn collect_effect(eff, acc: List(Document)) {
   case eff {
     t.EffectExtend(label, #(lift, resume), tail) ->
       collect_effect(tail, [effect_doc(label, lift, resume), ..acc])
-    t.Var(i) -> [doc.from_string(string.append("..", int.to_string(i))), ..acc]
+    t.Var(i) -> [doc.from_string(string.append("..", var_name(i))), ..acc]
     t.Empty -> acc
     _ -> {
       io.println("unexpected effect")
@@ -226,5 +234,83 @@ fn separated(items: List(Document), open: String, close: String) -> Document {
       ])
       |> doc.group
     }
+  }
+}
+
+fn render_normalised(typ) {
+  typ |> to_doc |> doc.to_string(default_width)
+}
+
+fn var_name(i: Int) -> String {
+  case i < 0 {
+    True -> letter(-1 - i)
+    False -> int.to_string(i)
+  }
+}
+
+/// Type variables are named by letter, `a` for the first variable to appear.
+fn letter(i: Int) -> String {
+  let assert Ok(char) =
+    string.to_graphemes("abcdefghijklmnopqrstuvwxyz")
+    |> list.drop(i % 26)
+    |> list.first
+  case i / 26 {
+    0 -> char
+    n -> char <> int.to_string(n)
+  }
+}
+
+/// Number the type variables in the order they first appear, shared across the types.
+fn normalise(types: List(t.Type(Int))) -> List(t.Type(Int)) {
+  let #(_, types) =
+    list.map_fold(types, dict.new(), fn(names, typ) { renumber(typ, names) })
+  types
+}
+
+fn renumber(typ, names) {
+  case typ {
+    t.Var(i) ->
+      case dict.get(names, i) {
+        Ok(n) -> #(names, t.Var(n))
+        Error(Nil) -> {
+          // Negative ids are named by letter.
+          let n = -1 - dict.size(names)
+          #(dict.insert(names, i, n), t.Var(n))
+        }
+      }
+    t.Fun(from, eff, to) -> {
+      let #(names, from) = renumber(from, names)
+      let #(names, eff) = renumber(eff, names)
+      let #(names, to) = renumber(to, names)
+      #(names, t.Fun(from, eff, to))
+    }
+    t.List(el) -> {
+      let #(names, el) = renumber(el, names)
+      #(names, t.List(el))
+    }
+    t.Record(row) -> {
+      let #(names, row) = renumber(row, names)
+      #(names, t.Record(row))
+    }
+    t.Union(row) -> {
+      let #(names, row) = renumber(row, names)
+      #(names, t.Union(row))
+    }
+    t.RowExtend(label, value, tail) -> {
+      let #(names, value) = renumber(value, names)
+      let #(names, tail) = renumber(tail, names)
+      #(names, t.RowExtend(label, value, tail))
+    }
+    t.EffectExtend(label, #(lift, lower), tail) -> {
+      let #(names, lift) = renumber(lift, names)
+      let #(names, lower) = renumber(lower, names)
+      let #(names, tail) = renumber(tail, names)
+      #(names, t.EffectExtend(label, #(lift, lower), tail))
+    }
+    t.Promise(inner) -> {
+      let #(names, inner) = renumber(inner, names)
+      #(names, t.Promise(inner))
+    }
+    t.Integer | t.Binary | t.String | t.Empty | t.Never -> #(names, typ)
   }
 }

@@ -32,6 +32,23 @@ let relaxed = {write_file: policy.deny("read only"), ..policy.allow_all}
 Record update can only overwrite fields, to change a rule overwrite it `{write_file: policy.deny("no"), ..policy.allow_all}`.
 To add a rule to `read_only` build the record listing all the fields you need.
 
+## env
+
+Check that env files, such as `.env.eyg` and `.env.work.eyg`, have the same type so a config works with any of them.
+It uses the `TypeCheck` effect.
+
+```sh
+eyg script eyg_packages/overlay/env.eyg .env.eyg .env.work.eyg
+```
+
+## generate
+
+A script that adds `.overlay.eyg`, `.env.eyg` and a `.gitignore` entry to a directory, existing files are kept.
+
+```sh
+eyg script eyg_packages/overlay/generate.eyg path/to/project
+```
+
 ## codex
 
 Use a ChatGPT subscription as the model, after logging in with `codex login`.

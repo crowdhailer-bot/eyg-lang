@@ -1,5 +1,6 @@
 import birdie
 import eyg/analysis/type_/binding/debug
+import eyg/analysis/type_/binding/error
 import eyg/analysis/type_/isomorphic as t
 import gleeunit/should
 
@@ -128,4 +129,16 @@ pub fn long_effectful_function_breaks_test() {
     t.Promise(t.List(t.record([#("key", t.String), #("value", t.ast())]))),
   )
   |> snapshot(40, "large effectful function breaks across lines")
+}
+
+pub fn type_variables_are_letters_test() {
+  t.Fun(t.Var(620), t.Var(622), t.Var(620))
+  |> debug.render_type()
+  |> should.equal("(a <..b>) -> a")
+}
+
+pub fn mismatch_shares_variable_names_test() {
+  error.TypeMismatch(t.List(t.Var(9)), t.Fun(t.Var(9), t.Empty, t.Var(3)))
+  |> debug.render_reason()
+  |> should.equal("type mismatch given: (a) -> b expected: List(a)")
 }

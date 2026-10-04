@@ -90,36 +90,49 @@ pub fn execute(input, config: config.Config) {
 
   use #(result, state) <- system.then(execute.block(source, [], state))
   case result {
-    Ok(#(Some(user_config), _)) ->
-      case overlay_config.decode(user_config, labels()) {
-        Ok(user_config) -> {
-          let readme = context.readme(user_config.context, Some(context_type))
-          let session =
-            Session(
-              llm: user_config.llm,
-              provider_context: agent.provider_context(
-                computer.effects(),
-                readme,
-              ),
-              cwd:,
-              policy: user_config.policy,
-              context: user_config.context,
-              context_type:,
-              audit: user_config.audit,
-              context_policy: user_config.context_policy,
-            )
-          let runtime = Runtime(state:, policy_state: user_config.state)
-          use Nil <- system.then(outer_loop(session, runtime, []))
-          Ok(0) |> system.Done
-        }
-        Error(reason) ->
-          Error("error: invalid overlay config: " <> reason) |> system.Done
-      }
+    Ok(#(Some(user_config), _)) -> {
+      use result <- system.map(start(user_config, context_type, cwd, state))
+      result.replace(result, 0)
+    }
     Ok(#(None, _)) ->
       Error(execute.render_error(break.Vacant, source.1, state.Empty, cwd))
       |> system.Done
     Error(#(reason, location, _, k)) ->
       Error(execute.render_error(reason, location, k, cwd)) |> system.Done
+  }
+}
+
+/// Run a session from an evaluated config until the user ends it.
+pub fn start(
+  user_config: execute.Value,
+  context_type: binding.Poly,
+  cwd: String,
+  state: execute.State,
+) -> system.Effect(Result(Nil, String)) {
+  case overlay_config.decode(user_config, labels()) {
+    Ok(user_config) -> {
+      let readme = context.readme(user_config.context, Some(context_type))
+      let session =
+        Session(
+          llm: user_config.llm,
+          provider_context: agent.provider_context(
+            computer.effects(),
+            readme,
+            True,
+          ),
+          cwd:,
+          policy: user_config.policy,
+          context: user_config.context,
+          context_type:,
+          audit: user_config.audit,
+          context_policy: user_config.context_policy,
+        )
+      let runtime = Runtime(state:, policy_state: user_config.state)
+      use Nil <- system.map(outer_loop(session, runtime, []))
+      Ok(Nil)
+    }
+    Error(reason) ->
+      system.Done(Error("error: invalid overlay config: " <> reason))
   }
 }
 
@@ -144,9 +157,11 @@ fn outer_loop(session: Session, eyg_state, history) {
     }
     Ok(text) -> {
       let message = chat.UserMessage(text, [])
+      terminal.start_turn()
       use #(result, eyg_state) <- system.then(
         inner_loop(session, eyg_state, [message, ..history]),
       )
+      terminal.end_turn()
       // A failed completion is reported and the session continues from the
       // history before the failed message, so the user can try again.
       use history <- system.then(case result {
@@ -188,6 +203,7 @@ pub fn inner_loop(
   eyg_state: Runtime,
   history: List(chat.Message(tool.Call)),
 ) -> system.Effect(#(Result(List(chat.Message(tool.Call)), String), Runtime)) {
+  use <- stopped(eyg_state)
   use completion <- system.then(stream_completion(
     session,
     list.reverse(history),
@@ -828,8 +844,12 @@ fn stream_completion(
 
 fn read_stream(llm_provider, reader, remaining, completion) {
   use chunk <- system.then(system.read_chunk(reader))
-  case chunk {
-    Ok(#(Some(bits), reader)) -> {
+  case chunk, terminal.interrupted() {
+    _, True -> {
+      io.println("")
+      system.Done(Error(stopped_message))
+    }
+    Ok(#(Some(bits), reader)), False -> {
       let #(completions, remaining) =
         provider.completion_chunk_parse(llm_provider, remaining, bits)
       list.each(completions, fn(delta: chat.Completion(tool.Call)) {
@@ -838,11 +858,22 @@ fn read_stream(llm_provider, reader, remaining, completion) {
       let completion = chat.append_chunks(completion, completions)
       read_stream(llm_provider, reader, remaining, completion)
     }
-    Ok(#(None, _)) -> {
+    Ok(#(None, _)), False -> {
       io.println("")
       system.Done(Ok(completion))
     }
-    Error(reason) -> system.Done(Error(effect.describe_fetch_error(reason)))
+    Error(reason), False ->
+      system.Done(Error(effect.describe_fetch_error(reason)))
+  }
+}
+
+const stopped_message = "Stopped, send a message to continue."
+
+/// Stop the turn if the user pressed Ctrl-C.
+fn stopped(runtime, then) {
+  case terminal.interrupted() {
+    True -> system.Done(#(Error(stopped_message), runtime))
+    False -> then()
   }
 }
 

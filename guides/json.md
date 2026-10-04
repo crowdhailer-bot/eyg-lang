@@ -46,6 +46,16 @@ parse("{\"foo\": 3}", decoder)
 // will return Ok({foo: 3})
 ```
 
+## Values at a path
+
+`decode.at` decodes a value nested in objects.
+
+```eyg
+let {parse: parse, decode: decode} = @json
+parse("{\"owner\": {\"login\": \"ada\"}}", decode.at(["owner", "login"], decode.string))
+// will return Ok("ada")
+```
+
 ## Handling errors
 
 The json library returns string errors.

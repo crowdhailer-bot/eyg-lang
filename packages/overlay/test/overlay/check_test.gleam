@@ -148,3 +148,10 @@ pub fn stateful_policy_test() {
     )
   let assert Error([_]) = check.config(type_, effects())
 }
+
+pub fn standalone_policy_test() {
+  let assert Ok(Nil) =
+    check.policy(infer("{now: (x) -> { Pass(x) }}"), effects())
+  let assert Error(_) =
+    check.policy(infer("{now: (x) -> { Mock(\"no\") }}"), effects())
+}

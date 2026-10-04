@@ -10,10 +10,10 @@ import eyg/interpreter/value as v
 import eyg/ir/tree as ir
 import eyg/ir/utils.{push_new} as _
 import eyg/parser
-import eyg/parser/debug
 import eyg/parser/parser.{type Reason} as _
 import gleam/dynamic/decode
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/string
 import multiformats/cid/v1
 import ogre/origin
@@ -21,11 +21,13 @@ import overlay/agent
 import overlay/check as overlay_check
 import overlay/llm/chat
 import overlay/llm/tool
+import overlay/policy
 import overlay/tools/guide
 import overlay/tools/run
 import pal/platform/browser
 import pal/system
 import touch_grass/harness/browser as harness
+import touch_grass/prompt
 
 pub type Context {
   Context(
@@ -34,6 +36,8 @@ pub type Context {
     effects: List(system.Effect(#(Int, state.Value(Meta)))),
     context: cache.Module(Meta),
     origin: origin.Origin,
+    /// Without a policy every effect is performed.
+    policy: Option(policy.Policy(state.Value(Meta))),
   )
 }
 
@@ -44,7 +48,7 @@ pub type Meta =
 pub type Call {
   UnknownTool(name: String)
   BadArguments(List(decode.DecodeError))
-  InvalidCode(Reason)
+  InvalidCode(reason: Reason, code: String)
   Pulling(ir.Node(Meta))
   Fetching(cids: List(v1.Cid), source: ir.Node(Meta))
   Successful(state.Value(Meta))
@@ -55,6 +59,15 @@ pub type Call {
   /// Waiting for a guide to be fetched by the harness.
   Reading(task_id: Int)
   Read(Result(String, String))
+  /// Waiting for the user to answer a question asked by the policy.
+  Approving(
+    task_id: Int,
+    label: String,
+    lift: state.Value(Meta),
+    denied: state.Value(Meta),
+    env: state.Env(Meta),
+    k: state.Stack(Meta),
+  )
 }
 
 /// A tool call state and any output printed.
@@ -118,7 +131,7 @@ fn run_code(ctx: Context, id: String, code: String) -> #(Context, Progress) {
         }
       }
     }
-    Error(reason) -> #(ctx, failed(id, InvalidCode(reason)))
+    Error(reason) -> #(ctx, failed(id, InvalidCode(reason, code)))
   }
 }
 
@@ -128,7 +141,7 @@ fn check_single(
   context: cache.Module(_),
 ) -> List(#(a, error.Reason)) {
   let analysis =
-    overlay_check.agent(harness.effects(), context.type_)
+    overlay_check.agent(effects(), context.type_)
     |> infer.check(source)
     |> cache.infer_sync(cache)
   infer.all_errors(analysis)
@@ -236,37 +249,56 @@ fn loop(
           }
       }
     }
-    Error(#(break.UnhandledEffect(label, lift), _, env, k)) -> {
-      case browser.cast(label, lift) {
-        // Printing belongs to the result the agent reads, not only the browser
-        // console. Keeping it here also preserves output across suspension.
-        Ok(harness.Print(message)) ->
-          loop(expression.resume(v.unit(), env, k), ctx, [message, ..output])
-        Ok(effect) -> {
-          case browser.extrinsic(effect) {
-            browser.Abort(reason) -> #(ctx, output, Aborted(reason))
-            browser.Work(system.Done(value)) ->
-              loop(expression.resume(value, env, k), ctx, output)
-            browser.Work(effect) -> {
-              let id = ctx.counter
-
-              let effect = system.map(effect, fn(v) { #(id, v) })
-              let effects = [effect, ..ctx.effects]
-              let ctx = Context(..ctx, counter: id + 1, effects:)
-              #(ctx, output, Handling(id, env, k))
-            }
-            browser.Spotless(..) -> #(
-              ctx,
-              output,
-              Aborted("Spotless integration not supported in harness"),
-            )
-          }
+    Error(#(break.UnhandledEffect(label, lift), _, env, k)) ->
+      case decide(ctx, label, lift) {
+        Perform(lift) -> perform(label, lift, env, k, ctx, output)
+        Resume(value) -> loop(expression.resume(value, env, k), ctx, output)
+        Refuse(reason) -> #(ctx, output, Aborted(reason))
+        Approve(question:, denied:) -> {
+          let id = ctx.counter
+          let effect =
+            system.Prompt(question <> " allow? y/N", fn(answer) {
+              system.Done(#(id, prompt.encode(answer)))
+            })
+          let effects = [effect, ..ctx.effects]
+          let ctx = Context(..ctx, counter: id + 1, effects:)
+          #(ctx, output, Approving(id, label, lift, denied, env, k))
         }
-        Error(reason) -> #(ctx, output, Exception(reason))
       }
-    }
     Error(#(reason, _, _, _)) -> #(ctx, output, Exception(reason))
     Ok(value) -> #(ctx, output, Successful(value))
+  }
+}
+
+fn perform(label, lift, env, k, ctx: Context, output) {
+  {
+    case browser.cast(label, lift) {
+      // Printing belongs to the result the agent reads, not only the browser
+      // console. Keeping it here also preserves output across suspension.
+      Ok(harness.Print(message)) ->
+        loop(expression.resume(v.unit(), env, k), ctx, [message, ..output])
+      Ok(effect) -> {
+        case browser.extrinsic(effect) {
+          browser.Abort(reason) -> #(ctx, output, Aborted(reason))
+          browser.Work(system.Done(value)) ->
+            loop(expression.resume(value, env, k), ctx, output)
+          browser.Work(effect) -> {
+            let id = ctx.counter
+
+            let effect = system.map(effect, fn(v) { #(id, v) })
+            let effects = [effect, ..ctx.effects]
+            let ctx = Context(..ctx, counter: id + 1, effects:)
+            #(ctx, output, Handling(id, env, k))
+          }
+          browser.Spotless(..) -> #(
+            ctx,
+            output,
+            Aborted("Spotless integration not supported in harness"),
+          )
+        }
+      }
+      Error(reason) -> #(ctx, output, Exception(reason))
+    }
   }
 }
 
@@ -280,7 +312,8 @@ fn is_running(call: Call) {
     | Exception(..)
     | Aborted(..)
     | Read(..) -> False
-    Handling(..) | Pulling(..) | Fetching(..) | Reading(..) -> True
+    Handling(..) | Pulling(..) | Fetching(..) | Reading(..) | Approving(..) ->
+      True
   }
 }
 
@@ -302,7 +335,7 @@ fn do_all_returns(
       let message = case call {
         UnknownTool(name:) -> Ok("unknown tool: " <> name)
         BadArguments(reasons) -> Ok(string.inspect(reasons))
-        InvalidCode(reason) -> Ok(debug.describe(reason))
+        InvalidCode(reason, code) -> Ok(parser.format_error(reason, code))
         Successful(value) -> Ok(simple_debug.inspect(value))
         Errored(errors) -> {
           list.map(errors, fn(error) { analysis_debug.reason(error.1) })
@@ -313,7 +346,11 @@ fn do_all_returns(
         Aborted(reason) -> Ok(reason)
         Read(Ok(text)) -> Ok(text)
         Read(Error(reason)) -> Ok(reason)
-        Handling(..) | Pulling(..) | Fetching(..) | Reading(..) -> Error(Nil)
+        Handling(..)
+        | Pulling(..)
+        | Fetching(..)
+        | Reading(..)
+        | Approving(..) -> Error(Nil)
       }
       case message {
         Ok(text) -> {
@@ -434,6 +471,16 @@ fn apply_effect(
         loop(expression.resume(value, env, k), ctx, output)
       #(ctx, Progress(id:, output:, call:))
     }
+    Approving(task_id:, label:, lift:, denied:, env:, k:)
+      if task_id == finished_id
+    -> {
+      let #(ctx, output, call) = case value {
+        v.Tagged("Ok", v.String(answer)) if answer == "y" || answer == "Y" ->
+          perform(label, lift, env, k, ctx, output)
+        _ -> loop(expression.resume(denied, env, k), ctx, output)
+      }
+      #(ctx, Progress(id:, output:, call:))
+    }
     Reading(task_id:) if task_id == finished_id -> {
       let result = case value {
         v.Tagged("Ok", v.String(text)) -> Ok(text)
@@ -468,5 +515,61 @@ fn read_guide(ctx: Context, id: String, name: String) -> #(Context, Progress) {
       #(ctx, failed(id, Reading(task_id)))
     }
     Error(reason) -> #(ctx, failed(id, Read(Error(reason))))
+  }
+}
+
+/// The effects available to the agent.
+/// Service effects need a Spotless integration which this harness does not have.
+pub fn effects() {
+  let services =
+    list.map(
+      [harness.DNSimple, harness.GitHub, harness.Vimeo],
+      harness.effect_label,
+    )
+  harness.effects()
+  |> list.filter(fn(effect) { !list.contains(services, effect.name) })
+}
+
+type Outcome {
+  Perform(state.Value(Meta))
+  Resume(state.Value(Meta))
+  Refuse(String)
+  Approve(question: String, denied: state.Value(Meta))
+}
+
+/// Ask the policy, if there is one, what to do with an effect.
+fn decide(ctx: Context, label, lift) -> Outcome {
+  case ctx.policy, label {
+    None, _ -> Perform(lift)
+    // Aborting ends the program, it needs no permission.
+    Some(_), "Abort" -> Perform(lift)
+    Some(rules), _ ->
+      case policy.rule(rules, label) {
+        policy.Apply(function) -> {
+          let return =
+            expression.call(function, [#(lift, [])])
+            |> cache.static_loop(ctx.cache, expression.resume)
+          case return {
+            Ok(returned) ->
+              case policy.decision(returned) {
+                Ok(policy.Pass(lift)) -> Perform(lift)
+                Ok(policy.Mock(value)) -> Resume(value)
+                Ok(policy.Ask(question:, denied:)) ->
+                  Approve(question:, denied:)
+                Error(reason) ->
+                  Refuse("policy for " <> label <> " failed: " <> reason)
+              }
+            Error(#(reason, _, _, _)) ->
+              Refuse(
+                "policy for "
+                <> label
+                <> " failed: "
+                <> simple_debug.describe(reason),
+              )
+          }
+        }
+        policy.Unrestricted -> Perform(lift)
+        policy.Refused -> Refuse(policy.refused(label))
+      }
   }
 }

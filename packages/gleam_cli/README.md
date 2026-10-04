@@ -66,6 +66,8 @@ eyg overlay .overlay.eyg
 The config file sets the model, policy and context, see the [overlay README](../overlay/README.md).
 Prompts are read a line at a time, an empty line or end of input ends the session.
 `/export [path]` saves the chat in the opencode session export format.
+At a terminal prompts can be edited with the arrow keys and earlier prompts recalled with up and down.
+Ctrl-C stops the agent's turn, at the prompt it ends the session.
 
 ### Start the REPL
 

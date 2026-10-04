@@ -16,15 +16,18 @@ import overlay/tools/run
 import touch_grass/interface
 
 /// Construct the system prompt for an agent
+/// `policed` is true when the effects are checked by a policy.
 pub fn system_prompt(
   effects: List(interface.Interface(a, b)),
   readme: String,
+  policed: Bool,
 ) -> String {
   "You are an expert automation assistant.
 You help users by executing EYG scripts to interact with the users system.
 DO NOT guess any function of effects. Only use what you have seen explained and use the guide tool to learn more about writing EYG code.
 
 ALWAYS use djot syntax for your responses.
+If none of the programs you ran produced an answer, say so, DO NOT estimate or invent results.
 DO NOT write code blocks in your responses unless explicitly asked.
 All code execution uses the 'run' tool.
 Every program has the variable context in scope, it is the module described in the Context section at the end of this prompt.
@@ -43,8 +46,15 @@ This environment has the following effects
   <> "
 
 Remember to always use perform to call an effect.
-Effects are checked by a policy set by the user. If an effect is denied report it to the user, DO NOT try to work around the policy.
-
+`perform Abort(reason)` stops the program, it returns Never so where a value is expected write `!never(perform Abort(reason))`.
+"
+  <> case policed {
+    True ->
+      "Effects are checked by a policy set by the user. If an effect is denied report it to the user, DO NOT try to work around the policy.
+"
+    False -> ""
+  }
+  <> "
 # Context
 
 "
@@ -58,9 +68,9 @@ pub fn describe_effect(effect: interface.Interface(a, b)) -> String {
   "- "
   <> name
   <> "("
-  <> debug.mono(lift_type)
+  <> debug.render_type(lift_type)
   <> ") -> "
-  <> debug.mono(lower_type)
+  <> debug.render_type(lower_type)
 }
 
 pub type ToolCall {
@@ -119,9 +129,10 @@ pub fn tools() -> List(tool.Tool) {
 pub fn provider_context(
   effects: List(interface.Interface(a, b)),
   readme: String,
+  policed: Bool,
 ) -> provider.Context {
   provider.Context(
-    system_prompt: system_prompt(effects, readme),
+    system_prompt: system_prompt(effects, readme, policed),
     tools: tools(),
   )
 }

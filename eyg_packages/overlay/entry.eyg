@@ -3,7 +3,9 @@ let list = @standard.list
 let tests = list.flatten([
   import "./test/policy_test.eyg",
   import "./test/skills_test.eyg",
-  import "./test/codex_test.eyg"
+  import "./test/codex_test.eyg",
+  import "./test/generate_test.eyg",
+  import "./test/env_test.eyg"
 ])
 
 {

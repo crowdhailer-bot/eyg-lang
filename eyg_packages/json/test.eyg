@@ -80,6 +80,16 @@ let nested_score_decoder = json.decode.object(
      Ok([1, 2])
    ) }},
 
+  {name: "json decodes a value at a path",
+   test: (_) -> { assert.equal(
+     json.parse("{\"player\":{\"name\":\"Ada\",\"score\":99}}", json.decode.at(["player", "score"], json.decode.integer)),
+     Ok(99)
+   ) }},
+  {name: "json decodes a value at an empty path",
+   test: (_) -> { assert.equal(json.parse("5", json.decode.at([], json.decode.integer)), Ok(5)) }},
+  {name: "json fails for a missing path",
+   test: (_) -> { assert.error(json.parse("{\"player\":{}}", json.decode.at(["player", "score"], json.decode.integer))) }},
+
   {name: "json returns Error for invalid input",
    test: (_) -> { assert.error(json.parse("not json", json.decode.boolean)) }},
 ]

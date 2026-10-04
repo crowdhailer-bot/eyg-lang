@@ -94,11 +94,19 @@ It is not yet published so import it by path.
 
 NOTE: Relative imports in the agent's code go through the same permission check as `ReadFile`
 
-NOTE: in `overlay_web` the llm configuration is provided through the UI and there is no policy yet, every browser effect is allowed.
+NOTE: in `overlay_web` the llm configuration and the policy are provided through the UI.
+The policy is written in EYG, it is type checked against the browser effects when applied, without a policy every effect is allowed.
+
+### From a script
+
+Scripts can start an agent with the `Overlay` effect, see the [CLI effects reference](../../guides/cli_effects_reference.md#overlay).
+This keeps a project's scripts and agents in one `entry.eyg`.
+An agent implemented purely in EYG is blocked by EYG not having an `Eval` capability.
 
 ### Exporting chats
 
 Type `/export [path]` at the prompt to save the chat as JSON in the opencode session export format.
+In the web overlay use the Export button.
 Tool results are recorded in the state of the tool parts of the assistant message that called them.
 Overlay does not record when each message was sent so all timestamps are the export time.
 
@@ -163,6 +171,18 @@ or `overlay.search.eyg` that can read README files from any directory.
 Secrets can be kept from the agent by adding them to requests in the policy functions.
 A fetch policy can check the request origin and if known add an authorization token.
 If keeping secrets on the file system the should still be structured, so convention is a `.env.eyg` file that is gitignored.
+Check that several env files share a type with the `env` script in the [overlay EYG package](../../eyg_packages/overlay/).
+
+## Generators
+
+Add overlay configuration to a project, this creates `.overlay.eyg`, an `.env.eyg` for the API key and gitignores the env file.
+The generated policy can read the project, except `.env.eyg`, and change nothing.
+
+```sh
+eyg script <path to>/eyg_packages/overlay/generate.eyg .
+```
+
+Once the overlay package is published this will be `eyg @overlay.generate .`.
 
 ## Development
 
@@ -172,26 +192,13 @@ gleam test
 
 ## Plans
 
-Add a helper that would check that all env files have the same type.
-If possible this would be built in EYG and added to an `entry.eyg` file.
-This might require an effect, like EYGParse, but that takes a flat AST and checks it.
-A flat representation of types would also be needed.
+Build a full screen terminal UI for overlay. Prompts can be edited with history and Ctrl-C stops a turn,
+but output is a scrolling transcript with no panels for code, results or approvals.
+Rebuilding the CLI on another technology, opentui is a prefered direction, would allow a rich Overlay agent UI in the terminal
+and reimplementing the structured editor as a TUI.
 
-Create an `Overlay({llm, policy, context})` effect available in the CLI.
-This would allow users to define scripts and agents of a project in the same `entry.eyg` file.
-Benefits are less files, EYG tries to make structuring using the file system optional.
-It is potentially not necessary as an Overlay agent could be implemented purely in EYG in the future.
-Implementing a pure EYG agent is blocked by their not being `Eval` capabilities.
+Publish the `overlay` EYG package so configs can use `@overlay.policy` and `@overlay.skills` rather than importing by path,
+and release `json` with `decode.at`. This needs a signatory with the package names.
 
-Replace the non interactive terminal implementation with an interactive one.
-This could be built in Gleam with existing TUI libraries but this might not give the control performance required.
-Another option would be to rebuild the the CLI on another technology, opentui is a prefered direction here.
-This would allow a rich Overlay agent UI in the terminal but would also allow reimplementing the structured editor as a TUI.
-
-Add a generator, `eyg @overlay.generate .`, that adds overlay configuration to a project.
-It would create `.overlay.eyg`, an `.env.eyg` and gitignore the env file.
-This requires the `overlay` EYG package to be published.
-
-Publish the `overlay` EYG package so configs can use `@overlay.policy` and `@overlay.skills` rather than importing by path.
-
-Add an export button to the web overlay, downloading the chat with `overlay/export`.
+Release `eyg_parser` and `eyg_analysis` and update the CLI and web overlay to use them.
+They hold parse error and type variable naming improvements from this review.
