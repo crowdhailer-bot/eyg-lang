@@ -9,6 +9,7 @@
 //// The other tools could use the same effect logic, this is probably a good idea once we start applying policies for which files can be read.
 
 import eyg/cli/internal/config
+import eyg/cli/internal/terminal
 import eyg/hub/cache
 import eyg/interpreter/block
 import eyg/interpreter/break
@@ -28,12 +29,12 @@ import loam/platform/computer
 import loam/source
 import loam/system
 import midas/continuation.{type Continuation as K}
-import ogre/origin
+import midas/effect
 import overlay/agent
 import overlay/config as overlay_config
 import overlay/llm/provider
 import overlay/policy
-import overlay/tools/run
+import overlay/tools/guide
 
 // I don't need to implement streaming but if so that goes at the loam level
 // the tools module in overlay web should be reusable
@@ -61,7 +62,7 @@ pub fn execute(input, config: config.Config) {
           use Nil <- system.then(
             outer_loop(
               user_config.llm,
-              provider_context(config.client.origin, readme),
+              provider_context(readme),
               cwd,
               state,
               user_config.policy,
@@ -109,7 +110,9 @@ fn outer_loop(
       use history <- system.then(case result {
         Ok(history) -> system.Done(history)
         Error(reason) -> {
-          use Nil <- system.then(system.stdout(ansi.red(reason) <> "\n"))
+          use Nil <- system.then(system.stdout(
+            terminal.style(ansi.red, reason) <> "\n",
+          ))
           system.Done(history)
         }
       })
@@ -135,13 +138,14 @@ pub fn input(
   prompt: String,
   placeholder: String,
 ) -> system.Effect(Result(String, Nil)) {
-  let prompt = ansi.bold(ansi.yellow(prompt))
-  io.print(prompt)
-  io.print(" ")
-  io.print(ansi.dim(placeholder))
-  io.print("\r")
-  io.print(prompt)
-  io.print(" ")
+  case terminal.is_tty() {
+    // The placeholder is overwritten as the user types.
+    True -> {
+      let prompt = ansi.bold(ansi.yellow(prompt))
+      io.print(prompt <> " " <> ansi.dim(placeholder) <> "\r" <> prompt <> " ")
+    }
+    False -> io.print(prompt <> " ")
+  }
   use return <- system.map(system.prompt(""))
   case return {
     Ok(line) -> Ok(string.trim_end(line))
@@ -149,12 +153,10 @@ pub fn input(
   }
 }
 
-fn provider_context(origin: origin.Origin, readme: String) -> provider.Context {
+fn provider_context(readme: String) -> provider.Context {
   provider.Context(
-    system_prompt: agent.system_prompt(origin, computer.effects(), readme),
-    tools: [
-      run.spec(),
-    ],
+    system_prompt: agent.system_prompt(computer.effects(), readme),
+    tools: agent.tools(),
   )
 }
 
@@ -246,7 +248,7 @@ pub fn execute_call(
   let tool.FunctionCall(name, arguments) = call
   case agent.cast_tool_call(name, arguments) {
     Ok(call) -> {
-      io.println(ansi.bg_bright_green(log_line(call)))
+      io.println(log_line(call))
       case call {
         agent.Run(code) -> {
           use #(result, eyg_state, output) <- system.then(run_do(
@@ -266,7 +268,14 @@ pub fn execute_call(
               Error(report(output, reason))
             }
           }
+          io.println(log_result(result))
           system.Done(#(result, eyg_state))
+        }
+        agent.Guide(name) -> {
+          use result <- system.map(read_guide(eyg_state.origin, name))
+          let result = result.map(result, tool.Return(_, []))
+          io.println(log_result(result))
+          #(result, eyg_state)
         }
       }
     }
@@ -280,7 +289,31 @@ pub fn execute_call(
 
 pub fn log_line(call) {
   case call {
-    agent.Run(_code) -> "Executing EYG code."
+    agent.Run(code) ->
+      terminal.style(ansi.bg_bright_green, "Executing EYG code.")
+      <> "\n"
+      <> terminal.style(ansi.dim, code)
+    agent.Guide(name) ->
+      terminal.style(ansi.bg_bright_green, "Reading guide " <> name <> ".")
+  }
+}
+
+/// Summarise a tool call result so the user can see what the agent saw.
+fn log_result(result: Result(tool.Return, String)) -> String {
+  case result {
+    Ok(tool.Return(text:, ..)) ->
+      terminal.style(ansi.green, "ok ")
+      <> terminal.style(ansi.dim, truncate(text))
+    Error(reason) ->
+      terminal.style(ansi.red, "error ")
+      <> terminal.style(ansi.dim, truncate(reason))
+  }
+}
+
+fn truncate(text) {
+  case string.length(text) > 500 {
+    True -> string.slice(text, 0, 500) <> "..."
+    False -> text
   }
 }
 
@@ -375,6 +408,7 @@ pub fn loop(
     Error(#(reason, meta, env, k)) ->
       case reason {
         break.UnhandledEffect(label, lift) -> {
+          use lift <- system.then(resolve_paths(label, lift, meta.origin))
           use #(result, state) <- system.then(apply_policy(
             label,
             lift,
@@ -409,6 +443,7 @@ pub fn loop(
         }
         // Relative imports read the file system so are checked by the read_file policy.
         break.UndefinedReference(ir.Relative(location:)) -> {
+          use location <- system.then(resolve_path(location, meta.origin))
           let request =
             value.Record(
               dict.from_list([
@@ -482,4 +517,50 @@ fn import_denied(location, reason) {
 /// The effects available to agent code.
 fn labels() {
   list.map(computer.effects(), fn(effect) { effect.name })
+}
+
+/// Guides are fetched by the harness so are not subject to the policy.
+fn read_guide(origin, name) -> system.Effect(Result(String, String)) {
+  case guide.request(origin, name) {
+    Ok(request) -> {
+      use response <- system.map(system.fetch(request))
+      case response {
+        Ok(response) -> guide.response(response)
+        Error(reason) -> Error(effect.describe_fetch_error(reason))
+      }
+    }
+    Error(reason) -> system.Done(Error(reason))
+  }
+}
+
+/// Policies see file paths resolved to absolute paths, as the effect will use them.
+fn resolve_paths(
+  label: String,
+  lift: execute.Value,
+  origin: source.Origin,
+) -> system.Effect(execute.Value) {
+  case label, lift {
+    "ReadFile", value.Record(fields)
+    | "WriteFile", value.Record(fields)
+    | "AppendFile", value.Record(fields)
+    ->
+      case dict.get(fields, "path") {
+        Ok(value.String(path)) -> {
+          use path <- system.map(resolve_path(path, origin))
+          value.Record(dict.insert(fields, "path", value.String(path)))
+        }
+        _ -> system.Done(lift)
+      }
+    "DeleteFile", value.String(path)
+    | "MakeDirectory", value.String(path)
+    | "ReadDirectory", value.String(path)
+    -> system.map(resolve_path(path, origin), value.String)
+    _, _ -> system.Done(lift)
+  }
+}
+
+/// A path that can't be resolved is left for the effect to report.
+fn resolve_path(path, origin) {
+  use resolved <- system.map(source.resolve_filepath(origin, path))
+  result.unwrap(resolved, path)
 }

@@ -31,6 +31,15 @@ This behaviour is so imports and effects have matching behaviour.
 
 **Only modules on the file system have a source directory, all imports and relative file system operations fail for published modules.**
 
+A function defined in a library resolves relative paths from the library's directory, not the caller's.
+Pass absolute paths, built from `CWD`, to library functions that read or write files.
+
+## Modules are pure
+
+Importing a module evaluates it without effects.
+A module that performs an effect at the top level fails with `unhandled effect` at the import.
+Export a function that performs the effect instead, e.g. `{read: (_) -> { perform ReadFile(...) }}`.
+
 ## Current working directory.
 
 For many applications, CLI tools in particular, relative paths should be resolved relative to the invocation directory.

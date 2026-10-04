@@ -42,6 +42,13 @@ compile first and copy by hand:
 cp dist/eyg "$HOME/.local/bin/eyg"   # or anywhere on your $PATH
 ```
 
+`./bin/compile` takes an optional bun compile target and output path,
+so a build can be written elsewhere without replacing an installed binary.
+
+```sh
+./bin/compile "" /path/to/eyg
+```
+
 ## Verify
 
 To verify inline source execution, run:

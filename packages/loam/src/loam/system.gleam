@@ -11,7 +11,6 @@ import gleam/javascript/promise.{type Promise}
 import gleam/option.{type Option}
 import gleam/result
 import gleam/time/timestamp
-import input
 import kryptos/eddsa
 import loam/internal/crypto
 import midas/effect
@@ -337,7 +336,7 @@ pub fn run(effect: Effect(a)) -> Promise(a) {
     SetPermissions(path, permissions, resume) ->
       run(resume(do_set_permissions(path, permissions)))
     Stdin(resume) -> run(resume(read_stdin()))
-    Prompt(text, resume) -> run(resume(input.input(text)))
+    Prompt(text, resume) -> run(resume(read_line(text)))
     Stdout(text, resume) -> run(resume(io.println(text)))
     Wait(duration, resume) -> {
       use response <- promise.await(promise.wait(duration))
@@ -415,6 +414,9 @@ fn do_read_file(file) {
 
 @external(javascript, "./system_ffi.mjs", "readStdin")
 pub fn read_stdin() -> Result(String, String)
+
+@external(javascript, "./system_ffi.mjs", "readLine")
+fn read_line(prompt: String) -> Result(String, Nil)
 
 @external(javascript, "./internal/file_ffi.mjs", "readAtOffset")
 fn read_at_offset(

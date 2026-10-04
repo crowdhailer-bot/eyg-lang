@@ -1,7 +1,6 @@
 import eyg/analysis/type_/isomorphic as t
 import eyg/interpreter/cast
 import gleam/string
-import ogre/origin
 import overlay/agent
 import touch_grass/interface
 
@@ -24,8 +23,7 @@ pub fn system_prompt_lists_effects_test() {
       lower_type: t.Integer,
       decode: cast.as_unit(_, Nil),
     )
-  let origin = origin.https("eyg.run")
-  let prompt = agent.system_prompt(origin, [now], "the readme")
+  let prompt = agent.system_prompt([now], "the readme")
   assert string.contains(prompt, "\n- Now({}) -> Integer\n")
   assert string.ends_with(prompt, "the readme")
 }

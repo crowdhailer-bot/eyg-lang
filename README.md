@@ -104,6 +104,9 @@ Another reason could be to imagine your own syntax, or even visual editor, and r
 - [gleam_parser](./packages/gleam_parser/) Parser for a curly braces syntax for EYG IR.
 - [hub](./packages/hub/) Backend application for [eyg.run](https://eyg.run). Stores modules, packages and signatories.
 - [morph](./packages/morph/) Higher level AST and transformation functions for structural edits. (Unpublished)
+- [overlay](./packages/overlay/) An agent that does all its work by running EYG code, each effect is checked by a policy. Start one with `eyg overlay .overlay.eyg`.
+- [overlay_llm](./packages/overlay_llm/) A unified API for LLM chat completion across providers.
+- [overlay_web](./packages/overlay_web/) The overlay agent in the browser, deployed by [overlay_public](./packages/overlay_public/).
 - [touch_grass](./packages/touch_grass/) Common effect definitions (types, decoders and encoders) for your Eat Your Greens (EYG) runtime.
 - [untethered](./packages/untethered/) Location independent datastructures to immutably record decisions. Foundation of EYG hub package signing. (Unpublished)
 - [vscode-eyg](./packages/vscode-eyg/) VS Code extension and canonical TextMate grammar, also used by the web guides.

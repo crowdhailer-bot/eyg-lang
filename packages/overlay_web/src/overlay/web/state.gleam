@@ -14,7 +14,6 @@ import overlay/llm/chat
 import overlay/llm/provider
 import overlay/llm/provider/ollama
 import overlay/llm/tool
-import overlay/tools/run
 import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/tools
@@ -311,7 +310,13 @@ pub fn can_save_provider(state: State) {
 
 fn current_context(state: State) {
   let State(cache:, counter:, context:, ..) = state
-  tools.Context(cache:, counter:, effects: [], context: context.module(context))
+  tools.Context(
+    cache:,
+    counter:,
+    effects: [],
+    context: context.module(context),
+    origin: state.origin,
+  )
 }
 
 /// If a stream message is completed, and effect is handled or a cache message received then resolve calls sees what stage tool calls are in.
@@ -319,7 +324,7 @@ fn current_context(state: State) {
 fn run_effects_if_any_remain_to_do(return, state: State) {
   let #(ctx, calls) = return
 
-  let tools.Context(cache:, counter:, effects: inner, context: _) = ctx
+  let tools.Context(cache:, counter:, effects: inner, ..) = ctx
   let effects =
     list.map(
       inner,
@@ -376,11 +381,10 @@ fn stream_next_chunk(provider, reader, remaining) {
 }
 
 fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
-  let tools = [run.spec()]
+  let tools = agent.tools()
   let context =
     provider.Context(
       system_prompt: agent.system_prompt(
-        state.origin,
         harness.effects(),
         context.readme(state.context),
       ),

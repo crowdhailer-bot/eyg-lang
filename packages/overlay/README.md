@@ -21,31 +21,52 @@ For example starting the overlay agent in the CLI works as follows
 eyg overlay path/to/.overlay.eyg
 ```
 
-The `.policy.eyg` file returns a record with the following fields:
+The `.overlay.eyg` file returns a record with the following fields:
 
-- `llm` a record `{provider, model}` matching the `Llm` type in gleam module `overlay/llm/provider`.
-  A bare provider, e.g. `Ollama({...})`, uses the default model `glm-5.3:cloud`.
+- `llm` the model to use, `{provider, model}`.
+  The only provider in the CLI is `Ollama({origin: String, api_key: Option(String)})`,
+  use `origin: "https://ollama.com"` for Ollama cloud or `"http://localhost:11434"` for a local server.
+  A bare provider, e.g. `llm: Ollama({...})`, uses the default model `glm-5.3:cloud`.
 - `policy` A record with a function for each effect the agent may perform, see [Policies](#policies).
-- `context` A record with at least the field `readme`. The readme content is added as context to the agent. The agent is able to access the context by the `context` variable in any programs it runs.
+- `context` Any value. It is in scope as the `context` variable of every program the agent runs.
+  If it is a record with a string `readme` field the readme is added to the system prompt.
 
-Starting the agent type checks the configuration.
-The type of the policy field is dependent on the platform the agent is running on.
+The config is evaluated once when the session starts, it can perform effects such as reading files.
+Configuration errors name the field at fault but do not print values, as they often contain secrets.
 
 An example configuration
 
 ```eyg
-let {string} = @standard
-let {api_key} = import ".env.eyg"
+let {api_key} = import "./.env.eyg"
 
-let policy = {
-  standard_out: (log) -> { Pass(!string_uppercase(log)) },
-  write_file: (_) -> { Mock(Error("Read only access to file system")) },
-  ..@overlay.computer.allow_all
+let read_text = (path) -> {
+  match perform ReadFile({path, offset: 0, limit: 1000000}) {
+    Ok(bytes) -> {
+      match !string_from_binary(bytes) {
+        Ok(text) -> { text }
+        Error(_) -> { "" }
+      }
+    }
+    Error(_) -> { "" }
+  }
 }
 
-let skills = @overlay.read_skills(perform CWD({}))
-let readme = perform ReadFile("./README.md")
-let readme = string.append(readme, @overlay.print_skills(skills))
+let pass = (lift) -> { Pass(lift) }
+
+let policy = {
+  read_file: (request) -> {
+    match !string_ends_with(request.path, ".env.eyg") {
+      True(_) -> { Mock(Error("secrets are not readable")) }
+      False(_) -> { Pass(request) }
+    }
+  },
+  read_directory: pass,
+  cwd: pass,
+  now: pass,
+  standard_out: pass,
+  fetch: pass,
+  write_file: (_) -> { Mock(Error("read only access to the file system")) }
+}
 
 {
   llm: {
@@ -53,17 +74,18 @@ let readme = string.append(readme, @overlay.print_skills(skills))
     model: "glm-5.3:cloud"
   },
   policy: policy,
-  context: {readme}
+  context: {readme: read_text("./README.md")}
 }
 ```
+
+Always deny reading `.env.eyg` files, otherwise the agent can read the secrets they hold.
 
 The overlay harness has no concept of skills or AGENT.md.
 Instead because the configuration is fully scriptable it is expected to be implemented as EYG libraries.
 
-NOTE: Loading relative references goes through the same permission check as `ReadFile`
+NOTE: Relative imports in the agent's code go through the same permission check as `ReadFile`
 
-NOTE: in `overlay_web` The llm configuration is provided through the UI.
-The policy is provided through the UI but is still an textarea input that accepts a program
+NOTE: in `overlay_web` the llm configuration is provided through the UI and there is no policy yet, every browser effect is allowed.
 
 ### Policies
 
@@ -73,11 +95,19 @@ The function receives the value the program performed the effect with and return
 - `Pass(value)` to perform the effect, the value can be modified, i.e. to add an authorization header.
 - `Mock(value)` to resume the program with `value` without performing the effect, i.e. `Mock(Error("denied"))`.
 
+File paths given to the policy, and the path of relative imports checked by `read_file`, are absolute.
+They are resolved from the directory of the code performing the effect, for the agent's code that is the working directory.
+
 An effect without a policy field is refused, the program is aborted with an explanation.
 `DecodeJSON`, `EYGParse` and `Hash` do no IO and are always allowed.
 An unknown field is an error when the agent starts, the error lists the valid field names.
 
 Policy functions are pure, they cannot perform effects.
+
+Do not allow `standard_in`, it reads all remaining input which is the input for the chat.
+
+Write policies in a module of their own that takes values, such as the project root, as arguments.
+The module is pure so can be tested with `eyg eval` or a test suite, the config performs the effects and passes in the values.
 
 ### Conventions
 
@@ -89,15 +119,6 @@ or `overlay.search.eyg` that can read README files from any directory.
 Secrets can be kept from the agent by adding them to requests in the policy functions.
 A fetch policy can check the request origin and if known add an authorization token.
 If keeping secrets on the file system the should still be structured, so convention is a `.env.eyg` file that is gitignored.
-
-## Generators
-
-Add overlay agent configuration to your project.
-This creates configuration and env files.
-
-```sh
-eyg @overlay.generate .
-```
 
 ## Development
 
@@ -127,3 +148,10 @@ This would allow a rich Overlay agent UI in the terminal but would also allow re
 
 Limit published reference loading to only trusted publisher, i.e. signatories or trusted content i.e. specific hashes for modules.
 This is potentially not an overlay specific capability
+Add a generator, `eyg @overlay.generate .`, that adds overlay configuration to a project.
+It would create `.overlay.eyg`, an `.env.eyg` and gitignore the env file.
+This requires the `overlay` EYG package to be published.
+
+Type check the configuration when the agent starts.
+The policy type is derived from the platform effects, each field `(lift) -> Pass(lift) | Mock(lower)` and the policy must be pure.
+The type of `context` can then be given to the agent and used to type check the agent's code before running it, as the web harness does.

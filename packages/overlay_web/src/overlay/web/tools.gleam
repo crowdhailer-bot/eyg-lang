@@ -17,8 +17,10 @@ import gleam/dynamic/decode
 import gleam/list
 import gleam/string
 import multiformats/cid/v1
+import ogre/origin
 import overlay/llm/chat
 import overlay/llm/tool
+import overlay/tools/guide
 import overlay/tools/run
 import pal/platform/browser
 import pal/system
@@ -31,6 +33,7 @@ pub type Context {
     counter: Int,
     effects: List(system.Effect(#(Int, state.Value(Meta)))),
     context: cache.Module(Meta),
+    origin: origin.Origin,
   )
 }
 
@@ -49,6 +52,9 @@ pub type Call {
   Exception(state.Reason(Meta))
   Aborted(String)
   Handling(task_id: Int, env: state.Env(Meta), k: state.Stack(Meta))
+  /// Waiting for a guide to be fetched by the harness.
+  Reading(task_id: Int)
+  Read(Result(String, String))
 }
 
 /// A tool call state and any output printed.
@@ -109,6 +115,11 @@ fn execute_single(ctx: Context, call: tool.Call) -> #(Context, Progress) {
             }
             Error(reason) -> #(ctx, failed(id, InvalidCode(reason)))
           }
+        Error(reason) -> #(ctx, failed(id, BadArguments(reason)))
+      }
+    "guide" ->
+      case guide.cast(arguments) {
+        Ok(name) -> read_guide(ctx, id, name)
         Error(reason) -> #(ctx, failed(id, BadArguments(reason)))
       }
     _ -> #(ctx, failed(id, UnknownTool(name)))
@@ -282,8 +293,9 @@ fn is_running(call: Call) {
     | Successful(..)
     | Errored(..)
     | Exception(..)
-    | Aborted(..) -> False
-    Handling(..) | Pulling(..) | Fetching(..) -> True
+    | Aborted(..)
+    | Read(..) -> False
+    Handling(..) | Pulling(..) | Fetching(..) | Reading(..) -> True
   }
 }
 
@@ -314,7 +326,9 @@ fn do_all_returns(
         }
         Exception(reason) -> Ok(simple_debug.describe(reason))
         Aborted(reason) -> Ok(reason)
-        Handling(..) | Pulling(..) | Fetching(..) -> Error(Nil)
+        Read(Ok(text)) -> Ok(text)
+        Read(Error(reason)) -> Ok(reason)
+        Handling(..) | Pulling(..) | Fetching(..) | Reading(..) -> Error(Nil)
       }
       case message {
         Ok(text) -> {
@@ -443,6 +457,39 @@ fn apply_effect(
         loop(expression.resume(value, env, k), ctx, output)
       #(ctx, Progress(id:, output:, call:))
     }
+    Reading(task_id:) if task_id == finished_id -> {
+      let result = case value {
+        v.Tagged("Ok", v.String(text)) -> Ok(text)
+        v.Tagged("Error", v.String(reason)) -> Error(reason)
+        _ -> Error("unexpected guide result")
+      }
+      #(ctx, Progress(id:, output:, call: Read(result)))
+    }
     _ -> #(ctx, progress)
+  }
+}
+
+/// Guides are fetched by the harness so are not subject to agent permissions.
+fn read_guide(ctx: Context, id: String, name: String) -> #(Context, Progress) {
+  case guide.request(ctx.origin, name) {
+    Ok(request) -> {
+      let task_id = ctx.counter
+      let effect = {
+        use response <- system.Fetch(request)
+        let result = case response {
+          Ok(response) -> guide.response(response)
+          Error(reason) -> Error(string.inspect(reason))
+        }
+        let value = case result {
+          Ok(text) -> v.ok(v.String(text))
+          Error(reason) -> v.error(v.String(reason))
+        }
+        system.Done(#(task_id, value))
+      }
+      let ctx =
+        Context(..ctx, counter: task_id + 1, effects: [effect, ..ctx.effects])
+      #(ctx, failed(id, Reading(task_id)))
+    }
+    Error(reason) -> #(ctx, failed(id, Read(Error(reason))))
   }
 }

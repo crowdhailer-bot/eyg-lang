@@ -164,3 +164,19 @@ pub fn failing_policy_is_reported_test() {
     "policy for Now failed: a policy function must return Pass(value) or Mock(value)",
   )
 }
+
+pub fn policy_sees_absolute_paths_test() {
+  let sandbox = sandbox.sandbox() |> sandbox.with_cwd("/project")
+  let assert #(sandbox.Returned(#(result, _)), _) =
+    overlay.execute_call(
+      call(
+        "perform ReadFile({path: \"./docs/../a.txt\", offset: 0, limit: 10})",
+      ),
+      "/project",
+      state(),
+      policy_with([#("read_file", "(request) -> { Mock(Error(request.path)) }")]),
+      value.unit(),
+    )
+    |> sandbox.run(sandbox)
+  assert result == Ok(tool.Return("Error(\"/project/a.txt\")", []))
+}

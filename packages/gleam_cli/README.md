@@ -47,6 +47,17 @@ eyg script #baguqee...
 eyg script @myscript
 ```
 
+### Start an overlay agent
+
+Run an LLM agent that acts only by running EYG code, every effect it performs is checked by your policy.
+
+```sh
+eyg overlay .overlay.eyg
+```
+
+The config file sets the model, policy and context, see the [overlay README](../overlay/README.md).
+Prompts are read a line at a time, an empty line or end of input ends the session.
+
 ### Start the REPL
 
 Starting the REPL is the default command for the CLI, so run as follows.

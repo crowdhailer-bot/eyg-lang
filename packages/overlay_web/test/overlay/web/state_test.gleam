@@ -89,10 +89,11 @@ pub fn submit_prompt_test() {
   let assert Ok([_system, message]) =
     json.parse_bits(request.body, helpers.ollama_messages_decoder())
   assert #("user", "hello") == message
-  let assert Ok([tool]) =
+  let assert Ok([tool, guide]) =
     json.parse_bits(request.body, helpers.ollama_tools_decoder())
   assert "run" == tool.name
   let assert [#("code", _, _)] = tool.parameters
+  assert "guide" == guide.name
 
   let assert system.Done(message) =
     resume(
@@ -728,4 +729,27 @@ pub fn package_context_test() {
   let assert state.Asking([chat.ToolResultMessage("abc", response, [])]) =
     state.status
   assert "\"hi\"" == response
+}
+
+pub fn guide_is_read_by_the_harness_test() {
+  let call =
+    tool.Call(
+      id: "g",
+      function: tool.FunctionCall(
+        name: "guide",
+        arguments: dict.from_list([#("name", utils.String("syntax"))]),
+      ),
+    )
+  let status = chat_completion("") |> with_call(call) |> streaming
+  let state = State(..init_default(), status:)
+  let #(state, actions) = state.update(state, state.LlmStreamFinished(Ok(Nil)))
+  let assert state.Executing([progress]) = state.status
+  let assert tools.Reading(..) = progress.call
+  let assert [system.Fetch(request:, resume:)] = actions
+  assert "/guides/eyg-syntax-guide.md" == request.path
+  let assert system.Done(message) =
+    resume(Ok(response.new(200) |> response.set_body(<<"# Syntax":utf8>>)))
+  let #(state, _actions) = state.update(state, message)
+  assert state.Asking([chat.ToolResultMessage("g", "# Syntax", [])])
+    == state.status
 }

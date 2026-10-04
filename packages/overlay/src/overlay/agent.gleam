@@ -3,66 +3,33 @@
 //// User input is not the responsibility of this module and it handles the inner loop only.
 
 import eyg/analysis/type_/binding/debug
-import eyg/interpreter/simple_debug
-import eyg/interpreter/value as v
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/json
 import gleam/list
 import gleam/string
 import oas/generator/utils
-import ogre/origin.{type Origin}
+import overlay/llm/tool
+import overlay/tools/guide
 import overlay/tools/run
-import touch_grass/http
 import touch_grass/interface
 
 /// Construct the system prompt for an agent
 pub fn system_prompt(
-  origin: Origin,
   effects: List(interface.Interface(a, b)),
   readme: String,
 ) -> String {
-  let scheme = http.scheme_to_eyg(origin.scheme)
-  let host = v.String(origin.host)
-  let port = v.option(origin.port, v.Integer)
-
   "You are an expert automation assistant.
 You help users by executing EYG scripts to interact with the users system.
-DO NOT guess any function of effects. Only use what you have seen explained and use guide to learn more about writing EYG code.
+DO NOT guess any function of effects. Only use what you have seen explained and use the guide tool to learn more about writing EYG code.
 
 ALWAYS use djot syntax for your responses.
 DO NOT write code blocks in your responses unless explicitly asked.
 All code execution uses the 'run' tool.
 Every program has the variable context in scope, it is the module described in the Context section at the end of this prompt.
 
-To fetch a guide run the following script.
-ALWAYS fetch the EYG syntax guide before writing scripts
-
-```eyg
-let request = {
-  method: GET({}),
-  scheme: " <> simple_debug.inspect(scheme) <> ",
-  host: " <> simple_debug.inspect(host) <> ",
-  port: " <> simple_debug.inspect(port) <> ",
-  path: \"/guides/eyg-syntax-guide.md\",
-  query: None({}),
-  headers: [],
-  body: !string_to_binary(\"\")
-}
-match perform Fetch(request) {
-  Ok({body}) -> {
-    match !string_from_binary(body) {
-      Ok(text) -> { text }
-      Error(_) -> { \"Not a utf-8 response.\" }
-    }
-  }
-  Error(reason) -> { !string_append(\"fetch guide \", reason) }
-}
-```
-
-Other guides are
-- /guides/builtins-reference.md
-- /guides/http-fetch.md
+ALWAYS read the syntax guide, using the guide tool, before writing scripts.
+Other guides are builtins and http-fetch.
 
 This environment has the following effects
 
@@ -71,16 +38,16 @@ This environment has the following effects
     effects
     |> list.map(describe_effect)
     |> string.join("\n"),
-  ) <> "
+  )
+  <> "
 
 Remember to always use perform to call an effect.
-
-Use the service effects, such as DNSimple, to call service API's these do not require the scheme, host or port to be set.
-They do not require an API token this will be added by the platform.
+Effects are checked by a policy set by the user. If an effect is denied report it to the user, DO NOT try to work around the policy.
 
 # Context
 
-" <> readme
+"
+  <> readme
 }
 
 /// A single line in the system prompt describing an effect, e.g.
@@ -97,6 +64,7 @@ pub fn describe_effect(effect: interface.Interface(a, b)) -> String {
 
 pub type ToolCall {
   Run(String)
+  Guide(String)
 }
 
 pub type CastFailure {
@@ -129,6 +97,7 @@ pub fn cast_tool_call(
 ) -> Result(ToolCall, CastFailure) {
   case name {
     "run" -> run.cast(arguments) |> to(Run)
+    "guide" -> guide.cast(arguments) |> to(Guide)
     _ -> Error(UnknownTool)
   }
 }
@@ -138,4 +107,9 @@ fn to(result, call) {
     Ok(arguments) -> Ok(call(arguments))
     Error(reason) -> Error(DecodeError(reason))
   }
+}
+
+/// The tools available to every overlay agent.
+pub fn tools() -> List(tool.Tool) {
+  [run.spec(), guide.spec()]
 }
