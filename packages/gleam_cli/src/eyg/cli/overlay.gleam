@@ -30,7 +30,7 @@ import gleam/http/response
 import gleam/int
 import gleam/json
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import gleam/uri
@@ -73,6 +73,17 @@ pub type Session {
 }
 
 pub fn execute(input, config: config.Config) {
+  use initial <- system.then(initialize(input, config))
+  use #(session, state) <- system.try(initial)
+  use Nil <- system.then(outer_loop(session, state, []))
+  system.Done(Ok(0))
+}
+
+/// Load and validate a session without owning its terminal or conversation loop.
+pub fn initialize(
+  input,
+  config: config.Config,
+) -> system.Effect(Result(#(Session, execute.State), String)) {
   use cwd <- system.then(system.cwd())
   use cwd <- system.try(cwd)
   use input <- system.try(source.normalize_input(cwd, input))
@@ -106,28 +117,8 @@ pub fn execute(input, config: config.Config) {
   case result {
     Ok(#(Some(user_config), _)) ->
       case overlay_config.cast(user_config, rules) {
-        Ok(user_config) -> {
-          let session =
-            Session(
-              llm: user_config.llm,
-              provider_context: provider.Context(
-                system_prompt: agent.system_prompt(
-                  config.client.origin,
-                  policy.harness(user_config.policy),
-                  user_config.readme,
-                  True,
-                ),
-                tools: agent.tools(),
-              ),
-              cwd:,
-              policy: user_config.policy,
-              context: user_config.context,
-              context_type:,
-              interrupt: terminal.interrupt(),
-            )
-          use Nil <- system.then(outer_loop(session, state, []))
-          Ok(0) |> system.Done
-        }
+        Ok(user_config) ->
+          system.Done(Ok(prepare(user_config, context_type, cwd, state)))
         Error(reason) ->
           Error(execute.render_error(reason, source.1, state.Empty, cwd))
           |> system.Done
@@ -138,6 +129,34 @@ pub fn execute(input, config: config.Config) {
     Error(#(reason, location, _, k)) ->
       Error(execute.render_error(reason, location, k, cwd)) |> system.Done
   }
+}
+
+/// The session for a decoded config and the state to start it with.
+fn prepare(
+  user_config: overlay_config.Config(_, _),
+  context_type,
+  cwd,
+  state: execute.State,
+) -> #(Session, execute.State) {
+  let session =
+    Session(
+      llm: user_config.llm,
+      provider_context: provider.Context(
+        system_prompt: agent.system_prompt(
+          state.origin,
+          policy.harness(user_config.policy),
+          user_config.readme,
+          True,
+        ),
+        tools: agent.tools(),
+      ),
+      cwd:,
+      policy: user_config.policy,
+      context: user_config.context,
+      context_type:,
+      interrupt: terminal.interrupt(),
+    )
+  #(session, state)
 }
 
 fn outer_loop(
@@ -262,16 +281,35 @@ pub fn execute_call(
   call: tool.FunctionCall,
   eyg_state: execute.State,
 ) -> system.Effect(#(Result(tool.Return, String), execute.State)) {
+  use Nil <- system.then(case agent.cast_tool_call(call.name, call.arguments) {
+    Ok(decoded) -> system.stdout(log_line(decoded))
+    Error(_) -> system.Done(Nil)
+  })
+  use #(result, state) <- system.then(
+    call_observed(session, call, eyg_state, fn(_, _, _, _) { Nil }),
+  )
+  use Nil <- system.then(system.stdout(log_result(result)))
+  system.Done(#(result, state))
+}
+
+/// Execute a tool using the same policy and type checks as the line CLI.
+/// An observation records the label, input, policy outcome and returned value.
+pub fn call_observed(
+  session: Session,
+  call: tool.FunctionCall,
+  eyg_state: execute.State,
+  observe: fn(String, String, String, String) -> Nil,
+) -> system.Effect(#(Result(tool.Return, String), execute.State)) {
   let tool.FunctionCall(name, arguments) = call
   case agent.cast_tool_call(name, arguments) {
     Ok(call) -> {
-      use Nil <- system.then(system.stdout(log_line(call)))
       case call {
         agent.Run(code) -> {
-          use #(result, eyg_state, output) <- system.then(run_do(
+          use #(result, eyg_state, output) <- system.then(run_do_observed(
             session,
             code,
             eyg_state,
+            observe,
           ))
           let result = case result {
             // current state is not used by the CLI implementation, this will need to change.
@@ -283,7 +321,6 @@ pub fn execute_call(
             Ok(#(None, _)) -> Ok(tool.Return(run.report(output, ""), []))
             Error(reason) -> Error(run.report(output, reason))
           }
-          use Nil <- system.then(system.stdout(log_result(result)))
           system.Done(#(result, eyg_state))
         }
       }
@@ -331,9 +368,16 @@ pub fn run_do(
   code: String,
   eyg_state: execute.State,
 ) -> system.Effect(#(Result(_, String), execute.State, List(String))) {
-  let input = source.Stdin
+  run_do_observed(session, code, eyg_state, fn(_, _, _, _) { Nil })
+}
 
-  case source.parse_input(code, input) {
+pub fn run_do_observed(
+  session: Session,
+  code: String,
+  eyg_state: execute.State,
+  observe: fn(String, String, String, String) -> Nil,
+) -> system.Effect(#(Result(_, String), execute.State, List(String))) {
+  case source.parse_input(code, source.Stdin) {
     Ok(source) -> {
       let inference =
         overlay_check.agent(
@@ -350,9 +394,13 @@ pub fn run_do(
       case errors {
         [] -> {
           let scope = [#("context", session.context)]
-          use #(result, state, output) <- system.map(
-            loop(block.execute(source, scope), eyg_state, session.policy, []),
-          )
+          use #(result, state, output) <- system.map(loop_observed(
+            block.execute(source, scope),
+            eyg_state,
+            session.policy,
+            [],
+            observe,
+          ))
           let result = case result {
             Ok(value) -> Ok(value)
             Error(#(reason, location, _env, k)) ->
@@ -381,6 +429,19 @@ pub fn loop(
   policy: policy.Policy(_, _),
   output: List(String),
 ) -> system.Effect(#(Result(_, execute.Debug), execute.State, List(String))) {
+  loop_observed(return, state, policy, output, fn(_, _, _, _) { Nil })
+}
+
+fn loop_observed(
+  return: Result(#(Option(execute.Value), execute.Scope), execute.Debug),
+  state: execute.State,
+  policy: policy.Policy(_, _),
+  output: List(String),
+  observe: fn(String, String, String, String) -> Nil,
+) -> system.Effect(#(Result(_, execute.Debug), execute.State, List(String))) {
+  let continue = fn(return, state, output) {
+    loop_observed(return, state, policy, output, observe)
+  }
   case return {
     Ok(return) -> system.Done(#(Ok(return), state, output))
     Error(#(reason, meta, env, k)) ->
@@ -406,16 +467,51 @@ pub fn loop(
                     _ -> output
                   }
                   use value <- system.then(effect)
-                  loop(block.resume(value, env, k), state, policy, output)
+                  observe(
+                    label,
+                    simple_debug.inspect(modified),
+                    "pass",
+                    simple_debug.inspect(value),
+                  )
+                  continue(block.resume(value, env, k), state, output)
                 }
-                Error(reason) ->
+                Error(reason) -> {
+                  observe(
+                    label,
+                    simple_debug.inspect(lift),
+                    "error",
+                    simple_debug.describe(reason),
+                  )
                   system.Done(#(Error(#(reason, meta, env, k)), state, output))
+                }
               }
-            Resume(returned) ->
-              loop(block.resume(returned, env, k), state, policy, output)
-            Failed(debug) -> system.Done(#(Error(debug), state, output))
-            Unavailable ->
+            Resume(returned) -> {
+              observe(
+                label,
+                simple_debug.inspect(lift),
+                "mock",
+                simple_debug.inspect(returned),
+              )
+              continue(block.resume(returned, env, k), state, output)
+            }
+            Failed(#(failure, _, _, _) as debug) -> {
+              observe(
+                label,
+                simple_debug.inspect(lift),
+                "refused",
+                simple_debug.describe(failure),
+              )
+              system.Done(#(Error(debug), state, output))
+            }
+            Unavailable -> {
+              // Aborting ends the program, it is not an effect of the platform.
+              let decision = case label {
+                "Abort" -> "abort"
+                _ -> "refused"
+              }
+              observe(label, simple_debug.inspect(lift), decision, "")
               system.Done(#(Error(#(reason, meta, env, k)), state, output))
+            }
           }
         }
         break.UndefinedReference(reference) -> {
@@ -424,10 +520,10 @@ pub fn loop(
             meta,
             state,
             policy,
+            observe,
           ))
           case result {
-            Ok(value) ->
-              loop(block.resume(value, env, k), state, policy, output)
+            Ok(value) -> continue(block.resume(value, env, k), state, output)
             Error(reason) ->
               system.Done(#(Error(#(reason, meta, env, k)), state, output))
           }
@@ -524,7 +620,7 @@ fn import_gate(
 }
 
 // Relative imports read files, so ask the ReadFile gate before resolving them.
-fn lookup_reference(reference, meta, state, policy) {
+fn lookup_reference(reference, meta: source.Location, state, policy, observe) {
   case reference {
     ir.Relative(path) -> {
       let request = import_request(path)
@@ -535,7 +631,7 @@ fn lookup_reference(reference, meta, state, policy) {
         meta,
         state,
       ))
-      case decided {
+      use #(result, state) <- system.then(case decided {
         Perform(_, modified) ->
           case cast.field("path", cast.as_string, modified) {
             Ok(path) -> execute.lookup(ir.Relative(path), meta.origin, state)
@@ -568,7 +664,14 @@ fn lookup_reference(reference, meta, state, policy) {
             Error(break.UnhandledEffect("ReadFile", request)),
             state,
           ))
+      })
+      let input = simple_debug.inspect(request)
+      case result {
+        Ok(_) -> observe("ReadFile", input, "import", path)
+        Error(reason) ->
+          observe("ReadFile", input, "refused", simple_debug.describe(reason))
       }
+      system.Done(#(result, state))
     }
     _ -> execute.lookup(reference, meta.origin, state)
   }
@@ -606,6 +709,17 @@ fn stream_completion(
   session: Session,
   history: List(chat.Message(tool.Call)),
 ) -> system.Effect(Result(chat.Completion(tool.Call), String)) {
+  use result <- system.then(completion(session, history, system.write_stdout))
+  use Nil <- system.then(system.stdout(""))
+  system.Done(result)
+}
+
+/// Stream a completion, each part of its content is passed to `on_delta` as it arrives.
+pub fn completion(
+  session: Session,
+  history: List(chat.Message(tool.Call)),
+  on_delta: fn(String) -> system.Effect(Nil),
+) -> system.Effect(Result(chat.Completion(tool.Call), String)) {
   let request =
     provider.stream_completion_request(
       session.llm,
@@ -621,6 +735,7 @@ fn stream_completion(
         reader,
         <<>>,
         chat.fresh(),
+        on_delta,
       )
     Ok(response.Response(status:, body: reader, ..)) -> {
       use body <- system.map(read_all(reader, <<>>))
@@ -643,13 +758,17 @@ fn stream_completion(
   }
 }
 
-fn read_stream(llm_provider, interrupt, reader, remaining, completion) {
+fn read_stream(
+  llm_provider,
+  interrupt,
+  reader,
+  remaining,
+  completion,
+  on_delta,
+) {
   use chunk <- system.then(system.read_chunk(reader))
   case chunk, terminal.interrupted(interrupt) {
-    _, True -> {
-      use Nil <- system.then(system.stdout(""))
-      system.Done(Error(stopped_message))
-    }
+    _, True -> system.Done(Error(stopped_message))
     Ok(#(Some(bits), reader)), False -> {
       let #(completions, remaining) =
         provider.completion_chunk_parse(llm_provider, remaining, bits)
@@ -658,14 +777,18 @@ fn read_stream(llm_provider, interrupt, reader, remaining, completion) {
           delta.content
         })
         |> string.concat
-      use Nil <- system.then(system.write_stdout(text))
+      use Nil <- system.then(on_delta(text))
       let completion = chat.append_chunks(completion, completions)
-      read_stream(llm_provider, interrupt, reader, remaining, completion)
+      read_stream(
+        llm_provider,
+        interrupt,
+        reader,
+        remaining,
+        completion,
+        on_delta,
+      )
     }
-    Ok(#(None, _)), False -> {
-      use Nil <- system.then(system.stdout(""))
-      system.Done(Ok(completion))
-    }
+    Ok(#(None, _)), False -> system.Done(Ok(completion))
     Error(reason), False ->
       system.Done(Error(effect.describe_fetch_error(reason)))
   }
@@ -690,7 +813,7 @@ fn read_all(reader, acc) {
 }
 
 /// Write the chat in the opencode session export format.
-fn export(
+pub fn export(
   session: Session,
   history: List(chat.Message(tool.Call)),
   path: String,
