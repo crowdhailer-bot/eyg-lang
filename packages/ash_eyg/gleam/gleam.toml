@@ -1,0 +1,15 @@
+# Gleam builds the EYG libraries for Erlang, mix.exs copies their modules into ash_eyg.
+# It is in its own directory as Gleam would also compile the Elixir files in the test directory.
+name = "ash_eyg_libraries"
+version = "0.1.0"
+target = "erlang"
+
+[dependencies]
+eyg_analysis = { path = "../../../packages/gleam_analysis" }
+eyg_hub = { path = "../../../packages/gleam_hub" }
+eyg_interpreter = { path = "../../../packages/gleam_interpreter" }
+eyg_ir = { path = "../../../packages/gleam_ir" }
+eyg_parser = { path = "../../../packages/gleam_parser" }
+gleam_crypto = ">= 1.6.0 and < 2.0.0"
+gleam_httpc = ">= 5.0.0 and < 6.0.0"
+ogre = ">= 1.1.0 and < 2.0.0"
