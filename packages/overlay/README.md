@@ -82,6 +82,8 @@ Always deny reading `.env.eyg` files, otherwise the agent can read the secrets t
 
 The overlay harness has no concept of skills or AGENT.md.
 Instead because the configuration is fully scriptable it is expected to be implemented as EYG libraries.
+The [overlay EYG package](../../eyg_packages/overlay/) has `policy` helpers, i.e. `read_only(roots)` and `allow_all`, and `skills` helpers to load `.agents/skills/*/SKILL.md` files.
+It is not yet published so import it by path.
 
 NOTE: Relative imports in the agent's code go through the same permission check as `ReadFile`
 
@@ -148,6 +150,7 @@ This would allow a rich Overlay agent UI in the terminal but would also allow re
 
 Limit published reference loading to only trusted publisher, i.e. signatories or trusted content i.e. specific hashes for modules.
 This is potentially not an overlay specific capability
+
 Add a generator, `eyg @overlay.generate .`, that adds overlay configuration to a project.
 It would create `.overlay.eyg`, an `.env.eyg` and gitignore the env file.
 This requires the `overlay` EYG package to be published.
@@ -155,3 +158,23 @@ This requires the `overlay` EYG package to be published.
 Type check the configuration when the agent starts.
 The policy type is derived from the platform effects, each field `(lift) -> Pass(lift) | Mock(lower)` and the policy must be pure.
 The type of `context` can then be given to the agent and used to type check the agent's code before running it, as the web harness does.
+
+Publish the `overlay` EYG package so configs can use `@overlay.policy` and `@overlay.skills` rather than importing by path.
+
+Add a `Codex({access_token, account_id})` provider to `overlay_llm` so users can use their ChatGPT subscription.
+Requests are `POST https://chatgpt.com/backend-api/codex/responses` with `Authorization: Bearer <access_token>` and `ChatGPT-Account-ID` headers.
+The body uses the Responses API, `{model, instructions, input, tools, store: false, stream: true}`, tools are flat `{type: "function", name, description, parameters}`.
+The response is always server sent events, `response.output_item.done` events hold `message`, `function_call` and `reasoning` items, tool calls round trip their `call_id`.
+Tokens are in `~/.codex/auth.json` and can be read by the config, refresh tokens rotate so refreshing must write the file back.
+
+Add an OpenAI compatible `/v1/chat/completions` provider, covering OpenAI, OpenRouter and local servers, and optional extra `headers` on every provider.
+
+Support a human in the loop. A policy could return `Ask(question)` and the harness asks the user before passing the effect.
+An `audit` function in the config could be called with every effect and decision, and be allowed to perform effects to write a log.
+
+Give policies state, so an approval can be used once, by threading a value through policy calls `(state, lift) -> {decision, state}`.
+
+Let context functions run with their own policy.
+Effects performed inside the context module currently go through the same policy as the agent's code, so "only through context" cannot be enforced.
+
+Stream completions in the CLI so long responses show progress.

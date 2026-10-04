@@ -47,6 +47,14 @@ eyg script #baguqee...
 eyg script @myscript
 ```
 
+### List published packages
+
+```sh
+eyg packages
+```
+
+Prints every package on the hub with its latest version, inspect one with `eyg eval -c '@standard'`.
+
 ### Start an overlay agent
 
 Run an LLM agent that acts only by running EYG code, every effect it performs is checked by your policy.

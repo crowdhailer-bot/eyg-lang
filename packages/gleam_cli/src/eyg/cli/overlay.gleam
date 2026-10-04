@@ -21,6 +21,7 @@ import eyg/interpreter/value
 import eyg/ir/tree as ir
 import gleam/dict
 import gleam/http/response
+import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
@@ -186,6 +187,10 @@ pub fn inner_loop(
             system.fold(calls, #(history, eyg_state), fn(acc, call) {
               let #(history, eyg_state) = acc
               let tool.Call(id:, function:) = call
+              io.print(terminal.style(
+                ansi.dim,
+                "[step " <> int.to_string(step(history)) <> "] ",
+              ))
               use #(result, _) <- system.then(execute_call(
                 function,
                 cwd,
@@ -563,4 +568,21 @@ fn resolve_paths(
 fn resolve_path(path, origin) {
   use resolved <- system.map(source.resolve_filepath(origin, path))
   result.unwrap(resolved, path)
+}
+
+/// The number of the next tool call since the user's last message.
+fn step(history: List(chat.Message(_))) -> Int {
+  list.take_while(history, fn(message) {
+    case message {
+      chat.UserMessage(..) -> False
+      _ -> True
+    }
+  })
+  |> list.count(fn(message) {
+    case message {
+      chat.ToolResultMessage(..) -> True
+      _ -> False
+    }
+  })
+  |> int.add(1)
 }

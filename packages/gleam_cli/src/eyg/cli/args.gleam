@@ -16,6 +16,7 @@ pub type Args {
   SignatoryShow(alias: String)
   Publish(package: String, file: String)
   Overlay(input: source.Input)
+  Packages
   InvalidArguments(message: String)
   Help
   Version
@@ -73,6 +74,7 @@ pub fn parse(args) {
     ["share", file] -> Share(source.File(file))
     ["fetch", cid] -> Fetch(cid:)
     ["publish", package, file] -> Publish(package:, file:)
+    ["packages"] -> Packages
     ["signatory", "initial", name] -> SignatoryInitial(name:)
     ["signatory", "list"] -> SignatoryList
     ["signatory", "show", alias] -> SignatoryShow(alias:)
@@ -139,6 +141,7 @@ commands:
   share -c, --code <code>share inline EYG source
   fetch <cid>            fetch a module by content id
   publish <pkg> <file>   publish a module under a package name
+  packages               list the packages published on the hub
   signatory initial <n>  create a signatory principal called <n>
   signatory list         list local signatory metadata and current hub status
   signatory show <name>  show signatory metadata and complete hub event history

@@ -95,3 +95,8 @@ pub fn overlay_without_file_shows_usage_test() {
     == "usage: eyg overlay <file> | eyg overlay -c <code> | eyg overlay -"
   let assert args.InvalidArguments(_) = args.parse(["overlay", "--help"])
 }
+
+pub fn packages_command_test() {
+  assert args.parse(["packages"]) == args.Packages
+  assert string.contains(args.help_text, "packages")
+}

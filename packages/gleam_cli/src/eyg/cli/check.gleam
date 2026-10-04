@@ -3,16 +3,18 @@ import eyg/analysis/type_/binding
 import eyg/analysis/type_/binding/debug
 import eyg/analysis/type_/binding/error
 import eyg/cli/internal/config
+import eyg/hub/cache
 import eyg/ir/tree as ir
 import eyg/parser
 import filepath
 import gleam/list
+import loam/execute
 import loam/source
 import loam/system
 
 pub fn execute(
   input: source.Input,
-  _config: config.Config,
+  config: config.Config,
 ) -> system.Effect(Result(Int, String)) {
   use cwd <- system.then(system.cwd())
   use cwd <- system.try(cwd)
@@ -23,7 +25,13 @@ pub fn execute(
 
   let context = infer.unpure()
 
-  use #(_poly, type_, errors) <- system.then(check_from(source, cwd, context))
+  let state = execute.State(config.client.origin, cache.empty())
+  use #(_poly, type_, errors) <- system.then(check_from(
+    source,
+    cwd,
+    context,
+    state,
+  ))
 
   use Nil <- system.then(
     system.each(
@@ -59,6 +67,7 @@ pub fn check_from(
   source: ir.Node(source.Location),
   cwd: String,
   context: infer.Context,
+  state: execute.State,
 ) -> system.Effect(
   #(binding.Poly, binding.Mono, List(#(source.Location, error.Reason))),
 ) {
@@ -72,50 +81,75 @@ pub fn check_from(
     source.Release(..) -> #(cwd, "")
   }
 
-  do_check_all(context, dir, source, [], [path])
+  use #(poly, type_, errors, _state) <- system.map(do_check_all(
+    context,
+    dir,
+    source,
+    [],
+    [path],
+    state,
+  ))
+  #(poly, type_, errors)
 }
+
+type Errors =
+  List(#(source.Location, error.Reason))
 
 fn do_check_all(
   context: infer.Context,
   directory: String,
   source: #(ir.Expression(source.Location), source.Location),
-  errors: List(#(source.Location, error.Reason)),
+  errors: Errors,
   visited: List(String),
-) -> system.Effect(
-  #(binding.Poly, binding.Mono, List(#(source.Location, error.Reason))),
-) {
-  check_loop(infer.check(context, source), context, directory, errors, visited)
+  state: execute.State,
+) -> system.Effect(#(binding.Poly, binding.Mono, Errors, execute.State)) {
+  check_loop(
+    infer.check(context, source),
+    context,
+    directory,
+    errors,
+    visited,
+    state,
+  )
 }
 
 fn check_loop(
   step: infer.Step(infer.Analysis(source.Location)),
   context: infer.Context,
   directory: String,
-  errors: List(#(source.Location, error.Reason)),
+  errors: Errors,
   visited: List(String),
-) -> system.Effect(#(binding.Poly, binding.Mono, _)) {
+  state: execute.State,
+) -> system.Effect(#(binding.Poly, binding.Mono, Errors, execute.State)) {
   case step {
     infer.Done(analysis) ->
       system.Done(#(
         infer.poly_type(analysis),
         infer.type_(analysis),
         list.append(errors, infer.all_errors(analysis)),
+        state,
       ))
     infer.Lookup(reference:, resume:) -> {
       case reference {
-        ir.Content(cid: _) ->
-          resume(Error(Nil))
-          |> check_loop(context, directory, errors, visited)
-        ir.Package(package: _) ->
-          resume(Error(Nil))
-          |> check_loop(context, directory, errors, visited)
-        ir.Version(package: _, version: _) ->
-          resume(Error(Nil))
-          |> check_loop(context, directory, errors, visited)
-        ir.Pinned(release: _) ->
-          resume(Error(Nil))
-          |> check_loop(context, directory, errors, visited)
+        ir.Content(..) | ir.Package(..) | ir.Version(..) | ir.Pinned(..) -> {
+          // Load the module from the hub, the cache records its type.
+          use #(_, state) <- system.then(execute.lookup(
+            reference,
+            source.Inline,
+            state,
+          ))
+          let type_ = case cache.get_reference(state.cache, reference) {
+            Ok(cache.Module(type_:, ..)) -> Ok(type_)
+            Error(Nil) -> Error(Nil)
+          }
+          resume(type_)
+          |> check_loop(context, directory, errors, visited, state)
+        }
         ir.Relative(location:) -> {
+          let next = fn(type_, errors, state) {
+            resume(type_)
+            |> check_loop(context, directory, errors, visited, state)
+          }
           case system.resolve_relative(directory, location) {
             Ok(path) -> {
               case cycle_check(visited, path) {
@@ -132,29 +166,22 @@ fn check_loop(
                               dependency,
                               errors,
                               [path, ..visited],
+                              state,
                             )
-                          use #(poly, _type_, errors) <- system.then(check)
-                          resume(Ok(poly))
-                          |> check_loop(context, directory, errors, visited)
+                          use #(poly, _type_, errors, state) <- system.then(
+                            check,
+                          )
+                          next(Ok(poly), errors, state)
                         }
-                        Error(_reason) ->
-                          resume(Error(Nil))
-                          |> check_loop(context, directory, errors, visited)
+                        Error(_reason) -> next(Error(Nil), errors, state)
                       }
-                    Error(_reason) -> {
-                      resume(Error(Nil))
-                      |> check_loop(context, directory, errors, visited)
-                    }
+                    Error(_reason) -> next(Error(Nil), errors, state)
                   }
                 }
-                Error(_cycle) ->
-                  resume(Error(Nil))
-                  |> check_loop(context, directory, errors, visited)
+                Error(_cycle) -> next(Error(Nil), errors, state)
               }
             }
-            Error(_reason) ->
-              resume(Error(Nil))
-              |> check_loop(context, directory, errors, visited)
+            Error(_reason) -> next(Error(Nil), errors, state)
           }
         }
       }

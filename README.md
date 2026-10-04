@@ -117,7 +117,7 @@ Another reason could be to imagine your own syntax, or even visual editor, and r
 
 The source for packages maintained as a standard library i.e. `standard` and `json`.
 Other packages in this collection are for demo purposes i.e. `catfact`
-The [`overlay`](./eyg_packages/overlay/) package contains access policy helpers for CLI effects.
+The [`overlay`](./eyg_packages/overlay/) package contains policy and skills helpers for overlay agents.
 
 ## Philosophy
 

@@ -6,6 +6,7 @@ import eyg/cli/eval
 import eyg/cli/fetch
 import eyg/cli/internal/config
 import eyg/cli/overlay
+import eyg/cli/packages
 import eyg/cli/parse
 import eyg/cli/publish
 import eyg/cli/run
@@ -76,5 +77,6 @@ fn with_config(parsed) {
     args.SignatoryList -> signatory.list(config)
     args.SignatoryShow(alias:) -> signatory.show(alias, config)
     args.Overlay(input:) -> overlay.execute(input, config)
+    args.Packages -> packages.execute(config)
   }
 }
