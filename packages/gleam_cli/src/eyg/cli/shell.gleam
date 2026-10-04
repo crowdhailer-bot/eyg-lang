@@ -19,8 +19,17 @@ import loam/source
 import loam/system
 
 pub fn execute(input, config: config.Config) {
+  use initial <- system.then(initialize(input, config))
+  use #(scope, state) <- system.try(initial)
+  use Nil <- system.then(system.stdout("type /help for shell commands"))
+  loop("", scope, [], state)
+}
+
+/// Prepare a shell without taking ownership of terminal input or output.
+/// Frontends can then call `handle` while retaining the returned scope and cache.
+pub fn initialize(input, config: config.Config) {
   let state = execute.State(config.client.origin, cache.empty())
-  use initial <- system.then(case input {
+  case input {
     Some(input) -> {
       use cwd <- system.then(system.cwd())
       use cwd <- system.try(cwd)
@@ -40,10 +49,7 @@ pub fn execute(input, config: config.Config) {
       }
     }
     None -> system.Done(Ok(#([], state)))
-  })
-  use #(scope, state) <- system.try(initial)
-  use Nil <- system.then(system.stdout("type /help for shell commands"))
-  loop("", scope, [], state)
+  }
 }
 
 // `defs` is the assignments entered so far, kept so `/type` can type
@@ -81,6 +87,10 @@ fn loop(buffer, scope, defs, state: execute.State) -> system.Effect(_) {
 }
 
 pub fn handle(code, scope, defs, state) {
+  handle_observed(code, scope, defs, state, fn(_, _, _) { Nil })
+}
+
+pub fn handle_observed(code, scope, defs, state, observe) {
   case code {
     "/" <> command -> handle_meta(command, scope, defs, state)
     _ -> {
@@ -96,29 +106,7 @@ pub fn handle(code, scope, defs, state) {
             tree.map_annotation(source, fn(span) {
               source.Location(source.Repl, source.Text(code, span))
             })
-          use cwd <- system.then(system.cwd())
-          let cwd = result.unwrap(cwd, "")
-          use #(result, state) <- system.map(execute.block(
-            located,
-            scope,
-            state,
-          ))
-          case result {
-            Ok(#(Some(value), scope)) -> #(
-              [Ok(simple_debug.inspect(value))],
-              #("", scope, list.append(defs, assignments), state),
-            )
-            Ok(#(None, scope)) -> #(
-              [],
-              #("", scope, list.append(defs, assignments), state),
-            )
-            Error(#(reason, location, _env, k)) -> #(
-              [
-                Error(execute.render_error(reason, location, k, cwd)),
-              ],
-              #("", scope, defs, state),
-            )
-          }
+          evaluate(located, assignments, scope, defs, state, observe)
         }
         Error(UnexpectEnd) -> system.Done(#([], #(code, scope, defs, state)))
         Error(reason) ->
@@ -128,6 +116,48 @@ pub fn handle(code, scope, defs, state) {
           ))
       }
     }
+  }
+}
+
+/// Execute structural IR directly, preserving binary values and vacant nodes.
+/// Structural definitions participate in subsequent text `/type` queries too.
+pub fn handle_source_observed(code, scope, defs, state, observe) {
+  let assignments = definitions(tree.map_annotation(code, fn(_) { #(0, 0) }))
+  evaluate(code, assignments, scope, defs, state, observe)
+}
+
+fn definitions(code) {
+  case code {
+    #(tree.Let(label, value, rest), at) -> [
+      #(label, value, at),
+      ..definitions(rest)
+    ]
+    _ -> []
+  }
+}
+
+fn evaluate(code, assignments, scope, defs, state, observe) {
+  use cwd <- system.then(system.cwd())
+  let cwd = result.unwrap(cwd, "")
+  use #(result, state) <- system.map(execute.block_observed(
+    code,
+    scope,
+    state,
+    observe,
+  ))
+  case result {
+    Ok(#(Some(value), scope)) -> #(
+      [Ok(simple_debug.inspect(value))],
+      #("", scope, list.append(defs, assignments), state),
+    )
+    Ok(#(None, scope)) -> #(
+      [],
+      #("", scope, list.append(defs, assignments), state),
+    )
+    Error(#(reason, location, _env, k)) -> #(
+      [Error(execute.render_error(reason, location, k, cwd))],
+      #("", scope, defs, state),
+    )
   }
 }
 
