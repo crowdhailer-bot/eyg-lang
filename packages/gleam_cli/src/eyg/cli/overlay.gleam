@@ -62,6 +62,14 @@ pub type Session {
 }
 
 pub fn execute(input, config: config.Config) {
+  use initial <- system.then(initialize(input, config))
+  use #(session, runtime) <- system.try(initial)
+  use Nil <- system.then(outer_loop(session, runtime, []))
+  system.Done(Ok(0))
+}
+
+/// Load and validate a session without owning its terminal or conversation loop.
+pub fn initialize(input, config: config.Config) {
   use cwd <- system.then(system.cwd())
   use cwd <- system.try(cwd)
   use input <- system.try(source.normalize_input(cwd, input))
@@ -90,10 +98,8 @@ pub fn execute(input, config: config.Config) {
 
   use #(result, state) <- system.then(execute.block(source, [], state))
   case result {
-    Ok(#(Some(user_config), _)) -> {
-      use result <- system.map(start(user_config, context_type, cwd, state))
-      result.replace(result, 0)
-    }
+    Ok(#(Some(user_config), _)) ->
+      system.Done(prepare(user_config, context_type, cwd, state))
     Ok(#(None, _)) ->
       Error(execute.render_error(break.Vacant, source.1, state.Empty, cwd))
       |> system.Done
@@ -109,6 +115,17 @@ pub fn start(
   cwd: String,
   state: execute.State,
 ) -> system.Effect(Result(Nil, String)) {
+  use #(session, runtime) <- system.try(prepare(
+    user_config,
+    context_type,
+    cwd,
+    state,
+  ))
+  use Nil <- system.map(outer_loop(session, runtime, []))
+  Ok(Nil)
+}
+
+fn prepare(user_config, context_type, cwd, state) {
   case overlay_config.decode(user_config, labels()) {
     Ok(user_config) -> {
       let readme = context.readme(user_config.context, Some(context_type))
@@ -128,11 +145,9 @@ pub fn start(
           context_policy: user_config.context_policy,
         )
       let runtime = Runtime(state:, policy_state: user_config.state)
-      use Nil <- system.map(outer_loop(session, runtime, []))
-      Ok(Nil)
+      Ok(#(session, runtime))
     }
-    Error(reason) ->
-      system.Done(Error("error: invalid overlay config: " <> reason))
+    Error(reason) -> Error("error: invalid overlay config: " <> reason)
   }
 }
 
@@ -257,16 +272,30 @@ pub fn execute_call(
   call: tool.FunctionCall,
   eyg_state: Runtime,
 ) -> system.Effect(#(Result(tool.Return, String), Runtime)) {
+  case agent.cast_tool_call(call.name, call.arguments) {
+    Ok(decoded) -> io.println(log_line(decoded))
+    Error(_) -> Nil
+  }
+  use #(result, runtime) <- system.map(
+    call_observed(session, call, eyg_state, fn(_, _, _, _) { Nil }),
+  )
+  io.println(log_result(result))
+  #(result, runtime)
+}
+
+/// Execute a tool using the same policy and type checks as the line CLI.
+/// An observation records the label, input, policy outcome and returned value.
+pub fn call_observed(session, call, eyg_state, observe) {
   let tool.FunctionCall(name, arguments) = call
   case agent.cast_tool_call(name, arguments) {
     Ok(call) -> {
-      io.println(log_line(call))
       case call {
         agent.Run(code) -> {
-          use #(result, eyg_state, output) <- system.then(run_do(
+          use #(result, eyg_state, output) <- system.then(run_do_observed(
             session,
             code,
             eyg_state,
+            observe,
           ))
           let result = case result {
             Ok(#(Some(value), _)) ->
@@ -276,13 +305,11 @@ pub fn execute_call(
             Ok(#(None, _)) -> Ok(tool.Return(run.report(output, ""), []))
             Error(reason) -> Error(run.report(output, reason))
           }
-          io.println(log_result(result))
           system.Done(#(result, eyg_state))
         }
         agent.Guide(name) -> {
           use result <- system.map(read_guide(eyg_state.state.origin, name))
           let result = result.map(result, tool.Return(_, []))
-          io.println(log_result(result))
           #(result, eyg_state)
         }
       }
@@ -332,6 +359,10 @@ pub fn run_do(
   code: String,
   eyg_state: Runtime,
 ) -> system.Effect(#(Result(_, String), Runtime, List(String))) {
+  run_do_observed(session, code, eyg_state, fn(_, _, _, _) { Nil })
+}
+
+pub fn run_do_observed(session, code, eyg_state, observe) {
   case source.parse_input(code, source.Stdin) {
     Ok(source) -> {
       use #(trusted, eyg_state) <- system.then(check_references(
@@ -353,9 +384,13 @@ pub fn run_do(
       case errors {
         [] -> {
           let scope = [#("context", session.context)]
-          use #(result, state, output) <- system.map(
-            loop(block.execute(source, scope), eyg_state, session, []),
-          )
+          use #(result, state, output) <- system.map(loop_observed(
+            block.execute(source, scope),
+            eyg_state,
+            session,
+            [],
+            observe,
+          ))
           let result = case result {
             Ok(value) -> Ok(value)
             Error(#(reason, location, _env, k)) ->
@@ -445,13 +480,25 @@ pub fn loop(
   session: Session,
   output: List(String),
 ) -> system.Effect(#(Result(_, execute.Debug), Runtime, List(String))) {
+  loop_observed(return, state, session, output, fn(_, _, _, _) { Nil })
+}
+
+fn loop_observed(
+  return: Result(#(Option(execute.Value), execute.Scope), execute.Debug),
+  state: Runtime,
+  session: Session,
+  output: List(String),
+  observe: fn(String, String, String, String) -> Nil,
+) -> system.Effect(#(Result(_, execute.Debug), Runtime, List(String))) {
   case return {
     Ok(return) -> system.Done(#(Ok(return), state, output))
     Error(#(reason, meta, env, k)) ->
       case reason {
         // Aborting ends the program, it does no IO so needs no policy.
-        break.UnhandledEffect("Abort", _) ->
+        break.UnhandledEffect("Abort", lift) -> {
+          observe("Abort", simple_debug.inspect(lift), "abort", "")
           system.Done(#(Error(#(reason, meta, env, k)), state, output))
+        }
         break.UnhandledEffect(label, lift) -> {
           use lift <- system.then(resolve_paths(label, lift, meta.origin))
           use #(result, state) <- system.then(decide(
@@ -474,16 +521,55 @@ pub fn loop(
                     _ -> output
                   }
                   use value <- system.then(effect)
-                  loop(block.resume(value, env, k), state, session, output)
+                  observe(
+                    label,
+                    simple_debug.inspect(modified),
+                    "pass",
+                    simple_debug.inspect(value),
+                  )
+                  loop_observed(
+                    block.resume(value, env, k),
+                    state,
+                    session,
+                    output,
+                    observe,
+                  )
                 }
 
-                Error(reason) ->
+                Error(reason) -> {
+                  observe(
+                    label,
+                    simple_debug.inspect(lift),
+                    "error",
+                    simple_debug.describe(reason),
+                  )
                   system.Done(#(Error(#(reason, meta, env, k)), state, output))
+                }
               }
-            Ok(Resume(returned)) ->
-              loop(block.resume(returned, env, k), state, session, output)
-            Error(reason) ->
+            Ok(Resume(returned)) -> {
+              observe(
+                label,
+                simple_debug.inspect(lift),
+                "mock",
+                simple_debug.inspect(returned),
+              )
+              loop_observed(
+                block.resume(returned, env, k),
+                state,
+                session,
+                output,
+                observe,
+              )
+            }
+            Error(reason) -> {
+              observe(
+                label,
+                simple_debug.inspect(lift),
+                "refused",
+                simple_debug.describe(reason),
+              )
               system.Done(#(Error(#(reason, meta, env, k)), state, output))
+            }
           }
         }
         // Relative imports read the file system so are checked by the read_file policy.
@@ -525,14 +611,34 @@ pub fn loop(
               ))
               let state = Runtime(..state, state: looked_up)
               case result {
-                Ok(value) ->
-                  loop(block.resume(value, env, k), state, session, output)
+                Ok(value) -> {
+                  observe(
+                    "ReadFile",
+                    simple_debug.inspect(request),
+                    "import",
+                    path,
+                  )
+                  loop_observed(
+                    block.resume(value, env, k),
+                    state,
+                    session,
+                    output,
+                    observe,
+                  )
+                }
                 Error(reason) ->
                   system.Done(#(Error(#(reason, meta, env, k)), state, output))
               }
             }
-            Error(reason) ->
+            Error(reason) -> {
+              observe(
+                "ReadFile",
+                simple_debug.inspect(request),
+                "refused",
+                simple_debug.describe(reason),
+              )
               system.Done(#(Error(#(reason, meta, env, k)), state, output))
+            }
           }
         }
         break.UndefinedReference(reference) -> {
@@ -544,7 +650,13 @@ pub fn loop(
           let state = Runtime(..state, state: looked_up)
           case result {
             Ok(value) ->
-              loop(block.resume(value, env, k), state, session, output)
+              loop_observed(
+                block.resume(value, env, k),
+                state,
+                session,
+                output,
+                observe,
+              )
             Error(reason) ->
               system.Done(#(Error(#(reason, meta, env, k)), state, output))
           }
@@ -710,7 +822,7 @@ fn audit(session: Session, label, lift, outcome, state) {
 }
 
 /// Write the chat in the opencode session export format.
-fn export(
+pub fn export(
   session: Session,
   history: List(chat.Message(tool.Call)),
   path: String,
@@ -813,6 +925,13 @@ fn stream_completion(
   session: Session,
   history: List(chat.Message(tool.Call)),
 ) -> system.Effect(Result(chat.Completion(tool.Call), String)) {
+  use result <- system.map(completion(session, history, io.print))
+  io.println("")
+  result
+}
+
+/// Stream a completion into a frontend callback while retaining provider parsing.
+pub fn completion(session: Session, history, on_delta) {
   let request =
     provider.stream_completion_request(
       session.llm,
@@ -822,7 +941,7 @@ fn stream_completion(
   use response <- system.then(system.fetch_stream(request))
   case response {
     Ok(response.Response(status: 200, body: reader, ..)) ->
-      read_stream(session.llm.provider, reader, <<>>, chat.fresh())
+      read_stream(session.llm.provider, reader, <<>>, chat.fresh(), on_delta)
     Ok(response.Response(status:, body: reader, ..)) -> {
       use body <- system.map(read_all(reader, <<>>))
       Error(
@@ -844,24 +963,20 @@ fn stream_completion(
   }
 }
 
-fn read_stream(llm_provider, reader, remaining, completion) {
+fn read_stream(llm_provider, reader, remaining, completion, on_delta) {
   use chunk <- system.then(system.read_chunk(reader))
   case chunk, terminal.interrupted() {
-    _, True -> {
-      io.println("")
-      system.Done(Error(stopped_message))
-    }
+    _, True -> system.Done(Error(stopped_message))
     Ok(#(Some(bits), reader)), False -> {
       let #(completions, remaining) =
         provider.completion_chunk_parse(llm_provider, remaining, bits)
       list.each(completions, fn(delta: chat.Completion(tool.Call)) {
-        io.print(delta.content)
+        on_delta(delta.content)
       })
       let completion = chat.append_chunks(completion, completions)
-      read_stream(llm_provider, reader, remaining, completion)
+      read_stream(llm_provider, reader, remaining, completion, on_delta)
     }
     Ok(#(None, _)), False -> {
-      io.println("")
       system.Done(Ok(completion))
     }
     Error(reason), False ->
