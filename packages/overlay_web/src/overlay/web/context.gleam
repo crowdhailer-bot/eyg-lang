@@ -1,7 +1,6 @@
 //// The context a the module that is in scope for an overlay session run.
 
 import eyg/analysis/inference/levels_j/contextual as infer
-import eyg/analysis/type_/binding
 import eyg/analysis/type_/binding/debug as analysis_debug
 import eyg/analysis/type_/binding/error
 import eyg/analysis/type_/isomorphic as t
@@ -17,6 +16,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/string
 import gleam/uri
 import multiformats/cid/v1
+import overlay/context as overlay_context
 import overlay/web/tools
 
 pub const default_readme = "This is the overlay agent"
@@ -236,29 +236,13 @@ pub fn module(status: Status) -> cache.Module(tools.Meta) {
 }
 
 /// The module's own instructions, if it has a string readme field.
-/// probably can be removed or removed to overlay
 pub fn provided_readme(status: Status) -> Option(String) {
-  let cache.Module(value: module, ..) = module(status)
-  case module {
-    value.Record(fields) ->
-      case dict.get(fields, "readme") {
-        Ok(value.String(readme)) -> Some(readme)
-        _ -> None
-      }
-    _ -> None
-  }
+  let cache.Module(value:, ..) = module(status)
+  overlay_context.provided_readme(value)
 }
 
 /// The instructions the agent is given for this session.
 pub fn readme(status: Status) -> String {
-  case provided_readme(status) {
-    Some(readme) -> readme
-    None -> {
-      let cache.Module(type_:, ..) = module(status)
-      let #(type_, _) = binding.instantiate(type_, 0, dict.new())
-      default_readme
-      <> "\n\nThe context module has type:\n"
-      <> analysis_debug.mono(type_)
-    }
-  }
+  let cache.Module(value:, type_:) = module(status)
+  overlay_context.readme(value, Some(type_))
 }

@@ -1,5 +1,4 @@
 import eyg/analysis/inference/levels_j/contextual as infer
-import eyg/analysis/type_/binding
 import eyg/analysis/type_/binding/debug as analysis_debug
 import eyg/analysis/type_/binding/error
 import eyg/hub/cache
@@ -18,6 +17,8 @@ import gleam/list
 import gleam/string
 import multiformats/cid/v1
 import ogre/origin
+import overlay/agent
+import overlay/check as overlay_check
 import overlay/llm/chat
 import overlay/llm/tool
 import overlay/tools/guide
@@ -25,7 +26,6 @@ import overlay/tools/run
 import pal/platform/browser
 import pal/system
 import touch_grass/harness/browser as harness
-import touch_grass/interface
 
 pub type Context {
   Context(
@@ -76,53 +76,49 @@ pub fn execute_all(
 fn execute_single(ctx: Context, call: tool.Call) -> #(Context, Progress) {
   let tool.Call(id:, function:) = call
   let tool.FunctionCall(name:, arguments:) = function
-  case name {
-    "run" ->
-      case run.cast(arguments) {
-        Ok(code) ->
-          case parser.all_from_string(code) {
-            Ok(source) -> {
-              let source = ir.map_annotation(source, fn(_) { [] })
-              case check_single(source, ctx.cache, ctx.context) {
-                [] -> {
-                  let #(ctx, output, call) =
-                    source
-                    |> execute(ctx.context)
-                    |> loop(ctx, [])
-                  #(ctx, Progress(id:, output:, call:))
-                }
-                errors -> {
-                  let references = missing_references(errors)
-                  case requires_pull(references, ctx.cache) {
-                    True -> {
-                      let cache = cache.pull(ctx.cache)
-                      let ctx = Context(..ctx, cache:)
-                      #(ctx, failed(id, Pulling(source)))
-                    }
-                    False -> {
-                      case to_fetch(references, ctx.cache, []) {
-                        [] -> #(ctx, failed(id, Errored(errors)))
-                        needed -> {
-                          let cache = cache.fetch_all(ctx.cache, needed)
-                          let ctx = Context(..ctx, cache:)
-                          #(ctx, failed(id, Fetching(needed, source)))
-                        }
-                      }
-                    }
-                  }
+  case agent.cast_tool_call(name, arguments) {
+    Ok(agent.Run(code)) -> run_code(ctx, id, code)
+    Ok(agent.Guide(name)) -> read_guide(ctx, id, name)
+    Error(agent.DecodeError(reason)) -> #(ctx, failed(id, BadArguments(reason)))
+    Error(agent.UnknownTool) -> #(ctx, failed(id, UnknownTool(name)))
+  }
+}
+
+fn run_code(ctx: Context, id: String, code: String) -> #(Context, Progress) {
+  case parser.all_from_string(code) {
+    Ok(source) -> {
+      let source = ir.map_annotation(source, fn(_) { [] })
+      case check_single(source, ctx.cache, ctx.context) {
+        [] -> {
+          let #(ctx, output, call) =
+            source
+            |> execute(ctx.context)
+            |> loop(ctx, [])
+          #(ctx, Progress(id:, output:, call:))
+        }
+        errors -> {
+          let references = missing_references(errors)
+          case requires_pull(references, ctx.cache) {
+            True -> {
+              let cache = cache.pull(ctx.cache)
+              let ctx = Context(..ctx, cache:)
+              #(ctx, failed(id, Pulling(source)))
+            }
+            False -> {
+              case to_fetch(references, ctx.cache, []) {
+                [] -> #(ctx, failed(id, Errored(errors)))
+                needed -> {
+                  let cache = cache.fetch_all(ctx.cache, needed)
+                  let ctx = Context(..ctx, cache:)
+                  #(ctx, failed(id, Fetching(needed, source)))
                 }
               }
             }
-            Error(reason) -> #(ctx, failed(id, InvalidCode(reason)))
           }
-        Error(reason) -> #(ctx, failed(id, BadArguments(reason)))
+        }
       }
-    "guide" ->
-      case guide.cast(arguments) {
-        Ok(name) -> read_guide(ctx, id, name)
-        Error(reason) -> #(ctx, failed(id, BadArguments(reason)))
-      }
-    _ -> #(ctx, failed(id, UnknownTool(name)))
+    }
+    Error(reason) -> #(ctx, failed(id, InvalidCode(reason)))
   }
 }
 
@@ -132,21 +128,10 @@ fn check_single(
   context: cache.Module(_),
 ) -> List(#(a, error.Reason)) {
   let analysis =
-    infer.pure()
-    |> with_scope([#("context", context.type_)])
-    |> infer.with_effects(interface.types(harness.effects()))
+    overlay_check.agent(harness.effects(), context.type_)
     |> infer.check(source)
     |> cache.infer_sync(cache)
   infer.all_errors(analysis)
-}
-
-// TODO move to infer module
-fn with_scope(
-  context: infer.Context,
-  scope: List(#(String, binding.Poly)),
-) -> infer.Context {
-  let infer.Context(env:, ..) = context
-  infer.Context(..context, env: list.append(scope, env))
 }
 
 pub fn missing_references(errors) {
@@ -335,7 +320,7 @@ fn do_all_returns(
           let message =
             chat.ToolResultMessage(
               tool_call_id: id,
-              text: report(output, text),
+              text: run.report(output, text),
               images: [],
             )
           do_all_returns(calls, [message, ..acc])
@@ -343,14 +328,6 @@ fn do_all_returns(
         Error(Nil) -> Error(Nil)
       }
     }
-  }
-}
-
-/// Return everything printed before the final result of the tool call.
-pub fn report(output: List(String), result: String) -> String {
-  case list.reverse(output) {
-    [] -> result
-    printed -> "Output:\n" <> string.concat(printed) <> "\nResult:\n" <> result
   }
 }
 

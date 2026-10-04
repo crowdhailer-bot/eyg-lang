@@ -31,7 +31,9 @@ The `.overlay.eyg` file returns a record with the following fields:
 - `context` Any value. It is in scope as the `context` variable of every program the agent runs.
   If it is a record with a string `readme` field the readme is added to the system prompt.
 
-The config is evaluated once when the session starts, it can perform effects such as reading files.
+The config is type checked and then evaluated once when the session starts, it can perform effects such as reading files.
+Each policy field must be a pure function from the effect's lift type to `Pass(lift) | Mock(lower)`.
+The type of the context is given to the agent when there is no readme, and the agent's code is type checked against it before it runs.
 Configuration errors name the field at fault but do not print values, as they often contain secrets.
 
 An example configuration
@@ -154,10 +156,6 @@ This is potentially not an overlay specific capability
 Add a generator, `eyg @overlay.generate .`, that adds overlay configuration to a project.
 It would create `.overlay.eyg`, an `.env.eyg` and gitignore the env file.
 This requires the `overlay` EYG package to be published.
-
-Type check the configuration when the agent starts.
-The policy type is derived from the platform effects, each field `(lift) -> Pass(lift) | Mock(lower)` and the policy must be pure.
-The type of `context` can then be given to the agent and used to type check the agent's code before running it, as the web harness does.
 
 Publish the `overlay` EYG package so configs can use `@overlay.policy` and `@overlay.skills` rather than importing by path.
 

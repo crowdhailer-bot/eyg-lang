@@ -2,11 +2,13 @@ import eyg/analysis/inference/levels_j/contextual as infer
 import eyg/analysis/type_/binding
 import eyg/analysis/type_/binding/debug
 import eyg/analysis/type_/binding/error
+import eyg/analysis/type_/isomorphic as t
 import eyg/cli/internal/config
 import eyg/hub/cache
 import eyg/ir/tree as ir
 import eyg/parser
 import filepath
+import gleam/dict
 import gleam/list
 import loam/execute
 import loam/source
@@ -26,32 +28,21 @@ pub fn execute(
   let context = infer.unpure()
 
   let state = execute.State(config.client.origin, cache.empty())
-  use #(_poly, type_, errors) <- system.then(check_from(
+  use #(type_, errors, _state) <- system.then(check_from(
     source,
     cwd,
     context,
     state,
+    Follow,
   ))
 
   use Nil <- system.then(
-    system.each(
-      list.map(errors, fn(error) {
-        let #(location, reason) = error
-        let message = debug.render_reason(reason)
-        let hint = debug.hint(reason)
-        parser.render_error(
-          message,
-          hint,
-          source.code(location),
-          source.span(location),
-        )
-        |> system.stdout()
-      }),
-    ),
+    system.each(list.map(render_errors(errors), system.stdout)),
   )
 
   case errors {
     [] -> {
+      let #(type_, _) = binding.instantiate(type_, 0, dict.new())
       let type_ = debug.render_type(type_)
       use Nil <- system.then(system.stdout(type_))
       system.Done(Ok(0))
@@ -68,8 +59,9 @@ pub fn check_from(
   cwd: String,
   context: infer.Context,
   state: execute.State,
+  relative: Relative,
 ) -> system.Effect(
-  #(binding.Poly, binding.Mono, List(#(source.Location, error.Reason))),
+  #(binding.Poly, List(#(source.Location, error.Reason)), execute.State),
 ) {
   let #(dir, path) = case source.1.origin {
     source.Disk(path:) -> #(filepath.directory_name(path), path)
@@ -81,18 +73,40 @@ pub fn check_from(
     source.Release(..) -> #(cwd, "")
   }
 
-  use #(poly, type_, errors, _state) <- system.map(do_check_all(
+  use #(poly, _type, errors, state) <- system.map(do_check_all(
     context,
     dir,
     source,
     [],
     [path],
     state,
+    relative,
   ))
-  #(poly, type_, errors)
+  #(poly, errors, state)
 }
 
-type Errors =
+/// How relative references are checked.
+/// Agent code may only read files allowed by its policy so imports are given any type,
+/// and are checked by the policy when the code runs.
+pub type Relative {
+  Follow
+  AnyType
+}
+
+/// Render type errors with the source they occur in.
+pub fn render_errors(errors: Errors) -> List(String) {
+  list.map(errors, fn(error) {
+    let #(location, reason) = error
+    parser.render_error(
+      debug.render_reason(reason),
+      debug.hint(reason),
+      source.code(location),
+      source.span(location),
+    )
+  })
+}
+
+pub type Errors =
   List(#(source.Location, error.Reason))
 
 fn do_check_all(
@@ -102,6 +116,7 @@ fn do_check_all(
   errors: Errors,
   visited: List(String),
   state: execute.State,
+  relative: Relative,
 ) -> system.Effect(#(binding.Poly, binding.Mono, Errors, execute.State)) {
   check_loop(
     infer.check(context, source),
@@ -110,6 +125,7 @@ fn do_check_all(
     errors,
     visited,
     state,
+    relative,
   )
 }
 
@@ -120,6 +136,7 @@ fn check_loop(
   errors: Errors,
   visited: List(String),
   state: execute.State,
+  relative: Relative,
 ) -> system.Effect(#(binding.Poly, binding.Mono, Errors, execute.State)) {
   case step {
     infer.Done(analysis) ->
@@ -143,12 +160,15 @@ fn check_loop(
             Error(Nil) -> Error(Nil)
           }
           resume(type_)
-          |> check_loop(context, directory, errors, visited, state)
+          |> check_loop(context, directory, errors, visited, state, relative)
         }
+        ir.Relative(..) if relative == AnyType ->
+          resume(Ok(t.Var(#(True, 0))))
+          |> check_loop(context, directory, errors, visited, state, relative)
         ir.Relative(location:) -> {
           let next = fn(type_, errors, state) {
             resume(type_)
-            |> check_loop(context, directory, errors, visited, state)
+            |> check_loop(context, directory, errors, visited, state, relative)
           }
           case system.resolve_relative(directory, location) {
             Ok(path) -> {
@@ -167,6 +187,7 @@ fn check_loop(
                               errors,
                               [path, ..visited],
                               state,
+                              relative,
                             )
                           use #(poly, _type_, errors, state) <- system.then(
                             check,

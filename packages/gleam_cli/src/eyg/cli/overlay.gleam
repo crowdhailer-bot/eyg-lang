@@ -1,13 +1,11 @@
-//// This module is the effectful implementation of the tool calls available to overlay.
-//// The state passed to each tool call is a cache of state that is reusable between tool calls.
-//// Currently this state is only used for keeping access tokens for authenticated calls to API's
-//// The state is currently a bun specific implementation however as it is scoped to tool calls it could be moved to overlay
-//// Moving the full application state to overlay core is a bad idea, because we want to track different state when streaming
-//// vs using The Elm Architecture in a Lustre web app.
-//// 
-//// The code execution tool is defined sans io using an effect type defined in this project.
-//// The other tools could use the same effect logic, this is probably a good idea once we start applying policies for which files can be read.
+//// Run an overlay agent in the terminal.
+////
+//// The config is type checked and evaluated once, then the session reads prompts a line at a time.
+//// Every effect performed by the agent's code is checked by the policy from the config.
 
+import eyg/analysis/inference/levels_j/contextual as infer
+import eyg/analysis/type_/binding
+import eyg/cli/check
 import eyg/cli/internal/config
 import eyg/cli/internal/terminal
 import eyg/hub/cache
@@ -22,9 +20,12 @@ import eyg/ir/tree as ir
 import gleam/dict
 import gleam/http/response
 import gleam/int
+import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
+import gleam/string
+import gleam_community/ansi
 import loam/execute
 import loam/platform/computer
 import loam/source
@@ -32,16 +33,28 @@ import loam/system
 import midas/continuation.{type Continuation as K}
 import midas/effect
 import overlay/agent
+import overlay/check as overlay_check
 import overlay/config as overlay_config
+import overlay/context
+import overlay/llm/chat
 import overlay/llm/provider
+import overlay/llm/tool
 import overlay/policy
 import overlay/tools/guide
+import overlay/tools/run
 
-// I don't need to implement streaming but if so that goes at the loam level
-// the tools module in overlay web should be reusable
-// policy is read as part of config, which can read files and effects. policy is pure
+/// Everything about a session that is fixed when it starts.
+pub type Session {
+  Session(
+    llm: provider.Llm,
+    provider_context: provider.Context,
+    cwd: String,
+    policy: policy.Policy(execute.Value),
+    context: execute.Value,
+    context_type: binding.Poly,
+  )
+}
 
-// Env should be readable on startup
 pub fn execute(input, config: config.Config) {
   use cwd <- system.then(system.cwd())
   use cwd <- system.try(cwd)
@@ -51,26 +64,43 @@ pub fn execute(input, config: config.Config) {
   use source <- system.try(source.parse_input(code, input))
 
   let state = execute.State(config.client.origin, cache.empty())
-  use #(result, _state) <- system.then(execute.block(source, [], state))
+  use #(type_, errors, state) <- system.then(check.check_from(
+    source,
+    cwd,
+    infer.unpure(),
+    state,
+    check.Follow,
+  ))
+  use Nil <- system.then(
+    system.each(list.map(check.render_errors(errors), system.stdout)),
+  )
+  use <- bool_guard(errors != [], "error: the overlay config has type errors")
+  use context_type <- system.try(
+    overlay_check.config(type_, computer.effects())
+    |> result.map_error(fn(reasons) {
+      "error: invalid overlay config: " <> string.join(reasons, "\n")
+    }),
+  )
+
+  use #(result, state) <- system.then(execute.block(source, [], state))
   case result {
     Ok(#(Some(user_config), _)) ->
       case overlay_config.decode(user_config, labels()) {
         Ok(user_config) -> {
-          // A context without a string readme is still usable by the agent.
-          let readme =
-            cast.field("readme", cast.as_string, user_config.context)
-            |> result.unwrap("The context has no readme.")
-          use Nil <- system.then(
-            outer_loop(
-              user_config.llm,
-              provider_context(readme),
-              cwd,
-              state,
-              user_config.policy,
-              user_config.context,
-              [],
-            ),
-          )
+          let readme = context.readme(user_config.context, Some(context_type))
+          let session =
+            Session(
+              llm: user_config.llm,
+              provider_context: agent.provider_context(
+                computer.effects(),
+                readme,
+              ),
+              cwd:,
+              policy: user_config.policy,
+              context: user_config.context,
+              context_type:,
+            )
+          use Nil <- system.then(outer_loop(session, state, []))
           Ok(0) |> system.Done
         }
         Error(reason) ->
@@ -84,27 +114,25 @@ pub fn execute(input, config: config.Config) {
   }
 }
 
-// I call this chat because we're in a chat agent
-import overlay/llm/chat
+fn bool_guard(
+  condition: Bool,
+  reason: String,
+  then: fn() -> system.Effect(Result(a, String)),
+) -> system.Effect(Result(a, String)) {
+  case condition {
+    True -> system.Done(Error(reason))
+    False -> then()
+  }
+}
 
-fn outer_loop(
-  llm,
-  provider_context,
-  cwd,
-  eyg_state,
-  policy,
-  user_context,
-  history,
-) {
+fn outer_loop(session: Session, eyg_state, history) {
   use read <- system.then(input(">>>", "send a message"))
   case read {
     Ok("") -> system.Done(Nil)
     Ok(text) -> {
-      use result <- system.then(
-        inner_loop(llm, provider_context, cwd, eyg_state, policy, user_context, [
-          chat.UserMessage(text, []),
-          ..history
-        ]),
+      let message = chat.UserMessage(text, [])
+      use #(result, eyg_state) <- system.then(
+        inner_loop(session, eyg_state, [message, ..history]),
       )
       // A failed completion is reported and the session continues from the
       // history before the failed message, so the user can try again.
@@ -117,23 +145,11 @@ fn outer_loop(
           system.Done(history)
         }
       })
-      outer_loop(
-        llm,
-        provider_context,
-        cwd,
-        eyg_state,
-        policy,
-        user_context,
-        history,
-      )
+      outer_loop(session, eyg_state, history)
     }
     Error(Nil) -> system.Done(Nil)
   }
 }
-
-import gleam/io
-import gleam/string
-import gleam_community/ansi
 
 pub fn input(
   prompt: String,
@@ -154,25 +170,16 @@ pub fn input(
   }
 }
 
-fn provider_context(readme: String) -> provider.Context {
-  provider.Context(
-    system_prompt: agent.system_prompt(computer.effects(), readme),
-    tools: agent.tools(),
-  )
-}
-
 pub fn inner_loop(
-  llm,
-  provider_context,
-  cwd,
-  eyg_state,
-  policy,
-  context,
-  history,
+  session: Session,
+  eyg_state: execute.State,
+  history: List(chat.Message(tool.Call)),
+) -> system.Effect(
+  #(Result(List(chat.Message(tool.Call)), String), execute.State),
 ) {
   use completion <- system.then(provider.completion(
-    llm,
-    provider_context,
+    session.llm,
+    session.provider_context,
     list.reverse(history),
     fetch,
   )(system.Done))
@@ -181,7 +188,7 @@ pub fn inner_loop(
       io.println(completion.content)
       let history = [chat.from_completion(completion), ..history]
       case completion.tool_calls {
-        [] -> system.Done(Ok(history))
+        [] -> system.Done(#(Ok(history), eyg_state))
         calls -> {
           use #(history, eyg_state) <- system.then(
             system.fold(calls, #(history, eyg_state), fn(acc, call) {
@@ -191,32 +198,20 @@ pub fn inner_loop(
                 ansi.dim,
                 "[step " <> int.to_string(step(history)) <> "] ",
               ))
-              use #(result, _) <- system.then(execute_call(
+              use #(result, eyg_state) <- system.then(execute_call(
+                session,
                 function,
-                cwd,
                 eyg_state,
-                policy,
-                context,
               ))
-              // let result = result.map(result, pair.first)
-              let result = result_to_message(id, result)
-              let history = [result, ..history]
+              let history = [result_to_message(id, result), ..history]
               system.Done(#(history, eyg_state))
             }),
           )
-          inner_loop(
-            llm,
-            provider_context,
-            cwd,
-            eyg_state,
-            policy,
-            context,
-            history,
-          )
+          inner_loop(session, eyg_state, history)
         }
       }
     }
-    Error(reason) -> system.Done(Error(reason))
+    Error(reason) -> system.Done(#(Error(reason), eyg_state))
   }
 }
 
@@ -239,16 +234,10 @@ fn fetch(
   system.Fetch(request, _)
 }
 
-// ---------------------------- toools
-
-import overlay/llm/tool
-
 pub fn execute_call(
+  session: Session,
   call: tool.FunctionCall,
-  cwd: String,
   eyg_state: execute.State,
-  policy: policy.Policy(execute.Value),
-  context: execute.Value,
 ) -> system.Effect(#(Result(tool.Return, String), execute.State)) {
   let tool.FunctionCall(name, arguments) = call
   case agent.cast_tool_call(name, arguments) {
@@ -257,21 +246,17 @@ pub fn execute_call(
       case call {
         agent.Run(code) -> {
           use #(result, eyg_state, output) <- system.then(run_do(
+            session,
             code,
-            cwd,
             eyg_state,
-            policy,
-            context,
           ))
           let result = case result {
-            // current state is not used by the CLI implementation, this will need to change.
-            Ok(#(Some(value), _)) -> {
-              Ok(tool.Return(report(output, simple_debug.inspect(value)), []))
-            }
-            Ok(#(None, _)) -> Ok(tool.Return(report(output, ""), []))
-            Error(reason) -> {
-              Error(report(output, reason))
-            }
+            Ok(#(Some(value), _)) ->
+              Ok(
+                tool.Return(run.report(output, simple_debug.inspect(value)), []),
+              )
+            Ok(#(None, _)) -> Ok(tool.Return(run.report(output, ""), []))
+            Error(reason) -> Error(run.report(output, reason))
           }
           io.println(log_result(result))
           system.Done(#(result, eyg_state))
@@ -322,38 +307,46 @@ fn truncate(text) {
   }
 }
 
-/// Output is collected newest-first, scoped to a single tool call.
-fn report(output: List(String), result: String) -> String {
-  case list.reverse(output) {
-    [] -> result
-    printed -> "Output:\n" <> string.concat(printed) <> "\nResult:\n" <> result
-  }
-}
-
-// There's a problem that the final execute is tied to runtime
-// ---------------------- run
-
+/// Type check then run the agent's code.
+/// Type errors are returned to the agent without running anything.
 pub fn run_do(
-  code,
-  cwd,
-  eyg_state,
-  policy: policy.Policy(execute.Value),
-  context: execute.Value,
+  session: Session,
+  code: String,
+  eyg_state: execute.State,
 ) -> system.Effect(#(Result(_, String), execute.State, List(String))) {
-  let input = source.Stdin
-
-  case source.parse_input(code, input) {
+  case source.parse_input(code, source.Stdin) {
     Ok(source) -> {
-      let scope = [#("context", context)]
-      use #(result, state, output) <- system.map(
-        loop(block.execute(source, scope), eyg_state, policy, []),
-      )
-      let result = case result {
-        Ok(value) -> Ok(value)
-        Error(#(reason, location, _env, k)) ->
-          Error(execute.render_error(reason, location, k, cwd))
+      let inference =
+        overlay_check.agent(computer.effects(), session.context_type)
+      use #(_type, errors, eyg_state) <- system.then(check.check_from(
+        source,
+        session.cwd,
+        inference,
+        eyg_state,
+        check.AnyType,
+      ))
+      case errors {
+        [] -> {
+          let scope = [#("context", session.context)]
+          use #(result, state, output) <- system.map(
+            loop(block.execute(source, scope), eyg_state, session.policy, []),
+          )
+          let result = case result {
+            Ok(value) -> Ok(value)
+            Error(#(reason, location, _env, k)) ->
+              Error(execute.render_error(reason, location, k, session.cwd))
+          }
+          #(result, state, output)
+        }
+        _ ->
+          system.Done(
+            #(
+              Error(string.join(check.render_errors(errors), "\n")),
+              eyg_state,
+              [],
+            ),
+          )
       }
-      #(result, state, output)
     }
     Error(reason) -> system.Done(#(Error(reason), eyg_state, []))
   }
@@ -412,6 +405,9 @@ pub fn loop(
     Ok(return) -> system.Done(#(Ok(return), state, output))
     Error(#(reason, meta, env, k)) ->
       case reason {
+        // Aborting ends the program, it does no IO so needs no policy.
+        break.UnhandledEffect("Abort", _) ->
+          system.Done(#(Error(#(reason, meta, env, k)), state, output))
         break.UnhandledEffect(label, lift) -> {
           use lift <- system.then(resolve_paths(label, lift, meta.origin))
           use #(result, state) <- system.then(apply_policy(

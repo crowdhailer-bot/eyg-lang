@@ -9,6 +9,7 @@ import gleam/json
 import gleam/list
 import gleam/string
 import oas/generator/utils
+import overlay/llm/provider
 import overlay/llm/tool
 import overlay/tools/guide
 import overlay/tools/run
@@ -112,4 +113,15 @@ fn to(result, call) {
 /// The tools available to every overlay agent.
 pub fn tools() -> List(tool.Tool) {
   [run.spec(), guide.spec()]
+}
+
+/// The system prompt and tools for a conversation with an agent on a platform with these effects.
+pub fn provider_context(
+  effects: List(interface.Interface(a, b)),
+  readme: String,
+) -> provider.Context {
+  provider.Context(
+    system_prompt: system_prompt(effects, readme),
+    tools: tools(),
+  )
 }

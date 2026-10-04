@@ -4,6 +4,8 @@ import gleam/dict
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
+import gleam/http/response.{type Response, Response}
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{None}
@@ -20,6 +22,65 @@ pub type Config {
 }
 
 const origin = origin.Origin(http.Https, "api.mistral.ai", None)
+
+pub fn completion_request(config, model, system_prompt, messages, tools) {
+  let Config(api_key:) = config
+  let data = chat_request_encode(model, system_prompt, messages, tools, False)
+
+  origin.to_request(origin)
+  |> request.set_method(http.Post)
+  |> request.set_path("/v1/chat/completions")
+  |> requestx.set_bearer_token(api_key)
+  |> requestx.set_json(data)
+}
+
+pub fn completion_response(
+  response: Response(BitArray),
+) -> Result(chat.Completion(tool.Call), String) {
+  case response {
+    Response(status: 200, body:, ..) ->
+      case json.parse_bits(body, response_decoder()) {
+        Ok(completion) -> Ok(completion)
+        Error(reason) -> Error(string.inspect(reason))
+      }
+    Response(status:, body:, ..) ->
+      Error(
+        "unexpected status: "
+        <> int.to_string(status)
+        <> case bit_array.to_string(body) {
+          Ok("") | Error(Nil) -> ""
+          Ok(body) -> " " <> body
+        },
+      )
+  }
+}
+
+fn response_decoder() {
+  use choices <- decode.field(
+    "choices",
+    decode.list(decode.field("message", message_decoder(), decode.success)),
+  )
+  case choices {
+    [choice, ..] -> decode.success(choice)
+    [] -> decode.failure(chat.fresh(), "completion")
+  }
+}
+
+fn message_decoder() {
+  use content <- decode.optional_field(
+    "content",
+    [],
+    decode.optional(content_decoder()) |> decode.map(option.unwrap(_, [])),
+  )
+  use tool_calls <- decode.optional_field(
+    "tool_calls",
+    [],
+    decode.optional(decode.list(tool_call_decoder()))
+      |> decode.map(option.unwrap(_, [])),
+  )
+  let content = string.concat(content)
+  decode.success(chat.Completion(thinking: "", content:, tool_calls:))
+}
 
 pub fn stream_completion_request(
   config,
@@ -106,7 +167,8 @@ fn chunk_decoder() {
   use type_ <- decode.field("type", decode.string)
   case type_ {
     "text" -> decode.field("text", decode.string, decode.success)
-    _ -> panic
+    // Other chunks, such as thinking, are not part of the content.
+    _ -> decode.success("")
   }
 }
 
@@ -116,7 +178,7 @@ fn text_chunk(text) {
 
 pub fn tool_call_decoder() {
   use id <- decode.field("id", decode.string)
-  use _index <- decode.field("index", decode.int)
+  use _index <- decode.optional_field("index", 0, decode.int)
   use function <- decode.field("function", {
     use name <- decode.field("name", decode.string)
     use arguments <- decode.field("arguments", decode.string)
@@ -148,7 +210,15 @@ fn tool_call_encode(tool_call: tool.Call) {
 }
 
 pub fn completion_chunk_parse(remaining: BitArray, chunk: BitArray) {
-  let assert Ok(buffer) = bit_array.to_string(<<remaining:bits, chunk:bits>>)
+  let buffer = <<remaining:bits, chunk:bits>>
+  case bit_array.to_string(buffer) {
+    Ok(text) -> parse_lines(text)
+    // A chunk can end part way through a multi byte character.
+    Error(Nil) -> #([], buffer)
+  }
+}
+
+fn parse_lines(buffer) {
   let #(lines, remaining) = stringx.chunk_lines(buffer)
   let completion =
     list.filter_map(lines, fn(line) {

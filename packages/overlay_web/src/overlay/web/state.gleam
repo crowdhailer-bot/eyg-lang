@@ -381,15 +381,8 @@ fn stream_next_chunk(provider, reader, remaining) {
 }
 
 fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
-  let tools = agent.tools()
   let context =
-    provider.Context(
-      system_prompt: agent.system_prompt(
-        harness.effects(),
-        context.readme(state.context),
-      ),
-      tools:,
-    )
+    agent.provider_context(harness.effects(), context.readme(state.context))
   let history = list.append(messages, state.history) |> list.reverse
   provider.stream_completion_request(state.llm, context, history)
 }
