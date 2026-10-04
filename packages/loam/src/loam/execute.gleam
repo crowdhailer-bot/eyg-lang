@@ -45,6 +45,11 @@ pub fn block(source, scope, state) {
   loop(block.execute(source, scope), state)
 }
 
+/// Observe completed EYG effects without changing their implementation.
+pub fn block_observed(source, scope, state, observe) {
+  loop_observed(block.execute(source, scope), state, observe)
+}
+
 /// Rebuild a failed reason back into full debug information
 pub fn try_await(
   result: system.Effect(#(Result(t, Reason), State)),
@@ -64,6 +69,14 @@ pub fn loop(
   return: Result(#(Option(Value), Scope), Debug),
   state: State,
 ) -> system.Effect(#(Result(#(Option(Value), Scope), Debug), State)) {
+  loop_observed(return, state, fn(_, _, _) { Nil })
+}
+
+fn loop_observed(
+  return: Result(#(Option(Value), Scope), Debug),
+  state: State,
+  observe: fn(String, Value, Value) -> Nil,
+) -> system.Effect(#(Result(#(Option(Value), Scope), Debug), State)) {
   case return {
     Ok(return) -> system.Done(#(Ok(return), state))
     Error(#(reason, meta, env, k)) ->
@@ -72,7 +85,8 @@ pub fn loop(
           case computer.cast(label, lift) {
             Ok(effect) -> {
               use value <- system.then(computer.extrinsic(effect, meta.origin))
-              loop(block.resume(value, env, k), state)
+              observe(label, lift, value)
+              loop_observed(block.resume(value, env, k), state, observe)
             }
 
             Error(reason) ->
@@ -85,7 +99,7 @@ pub fn loop(
             env,
             k,
           )
-          loop(block.resume(value, env, k), state)
+          loop_observed(block.resume(value, env, k), state, observe)
         }
 
         _ -> system.Done(#(Error(#(reason, meta, env, k)), state))
