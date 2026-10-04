@@ -36,12 +36,12 @@ export async function agent(page, { query = '' } = {}) {
 
   return {
     // Run a program as the agent and return the tool result the agent received.
-    async run(code) {
+    async run(code, { timeout = 5000 } = {}) {
       programs.push(code);
       const count = results.length;
       await page.getByPlaceholder('Ask anything...').fill('Run the program');
       await page.getByPlaceholder('Ask anything...').press('Enter');
-      await expect.poll(() => results.length).toBe(count + 1);
+      await expect.poll(() => results.length, { timeout }).toBe(count + 1);
       await expect(page.locator('.layout')).toHaveAttribute('data-agent-status', 'waiting');
       return results[count];
     },

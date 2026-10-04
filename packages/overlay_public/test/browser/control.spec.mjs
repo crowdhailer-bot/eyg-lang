@@ -129,3 +129,51 @@ let png = pw.screenshot(pw.get_by_role(board, "list", ""))
   expect(result.images).toHaveLength(1);
   await expect(inner.locator('#status')).toHaveText('Refreshed n');
 });
+
+// Count active listeners on the application window, including listeners whose
+// callbacks are otherwise impossible to inspect through the browser API.
+async function trackMessageListeners(page) {
+  await page.addInitScript(() => {
+    if (window !== window.top) return;
+    const listeners = new Set();
+    const add = window.addEventListener.bind(window);
+    const remove = window.removeEventListener.bind(window);
+    window.addEventListener = (type, listener, ...options) => {
+      if (type === 'message') listeners.add(listener);
+      return add(type, listener, ...options);
+    };
+    window.removeEventListener = (type, listener, ...options) => {
+      if (type === 'message') listeners.delete(listener);
+      return remove(type, listener, ...options);
+    };
+    window.activeMessageListeners = () => listeners.size;
+  });
+}
+
+test('repeated artifact controls release their reply listeners', async ({ page }) => {
+  await trackMessageListeners(page);
+  const overlay = await agent(page);
+  await overlay.show([departures]);
+  const initial = await page.evaluate(() => window.activeMessageListeners());
+  const commands = Array.from({ length: 20 }, () =>
+    `let _ = ${puppet('Css("h1")', 'TextContent({})')}`);
+  const result = await overlay.run(commands.join('\n') + '\n42');
+  expect(result.content).toBe('42');
+  expect(await page.evaluate(() => window.activeMessageListeners())).toBe(initial);
+});
+
+test('a frame that never replies releases its listener at the deadline', async ({ page }) => {
+  await trackMessageListeners(page);
+  const overlay = await agent(page);
+  await overlay.show([departures]);
+  const initial = await page.evaluate(() => window.activeMessageListeners());
+  // Replace the preview with a document that has no puppet listener. This
+  // exercises the transport deadline, not a selector error from the puppet.
+  await page.locator('iframe.artifact-preview').evaluate(frame => {
+    frame.srcdoc = '<!doctype html><body>Unavailable preview</body>';
+  });
+  await expect(page.frameLocator('iframe.artifact-preview').locator('body')).toHaveText('Unavailable preview');
+  const result = await overlay.run(puppet('Css("h1")', 'TextContent({})', 100), { timeout: 10_000 });
+  expect(result.content).toContain('No reply from frame');
+  expect(await page.evaluate(() => window.activeMessageListeners())).toBe(initial);
+});

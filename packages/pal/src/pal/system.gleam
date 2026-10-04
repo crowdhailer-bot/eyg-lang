@@ -327,18 +327,18 @@ pub fn run(effect: Effect(m)) -> Promise(m) {
 fn request_frame(selector, message, timeout) {
   let deadline = date.get_time(date.now()) + timeout
   let id = request_id()
-  let reply =
-    promise.new(fn(resolve) {
-      // plinth cannot remove a window listener, after the reply it does nothing.
-      window.add_event_listener("message", fn(event) {
-        case decode.run(message_event.data(event), reply_decoder(id)) {
-          Ok(reply) -> resolve(Ok(reply))
-          Error(_) -> Nil
-        }
-      })
-    })
+  let #(reply, resolve) = promise.start()
+  let listener = fn(event) {
+    case decode.run(message_event.data(event), reply_decoder(id)) {
+      Ok(reply) -> resolve(Ok(reply))
+      Error(_) -> Nil
+    }
+  }
+  window.add_event_listener("message", listener)
   let message = json.object([#("id", json.string(id)), #("request", message)])
-  send_request(selector, message, reply, deadline, 50)
+  use result <- promise.map(send_request(selector, message, reply, deadline, 50))
+  window.remove_event_listener("message", listener)
+  result
 }
 
 fn reply_decoder(id) {

@@ -28,6 +28,14 @@ pub fn prompt(a: String) -> Result(String, Nil)
 @external(javascript, "../../window_ffi.mjs", "addEventListener")
 pub fn add_event_listener(type_: String, listener: fn(Event(t)) -> Nil) -> Nil
 
+/// Remove a listener previously registered with `add_event_listener`.
+/// Pass the same callback value that was used to register it.
+@external(javascript, "../../window_ffi.mjs", "removeEventListener")
+pub fn remove_event_listener(
+  type_: String,
+  listener: fn(Event(t)) -> Nil,
+) -> Nil
+
 @external(javascript, "../../window_ffi.mjs", "document")
 pub fn document(window: Window) -> Document
 

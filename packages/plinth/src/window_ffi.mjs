@@ -33,6 +33,10 @@ export function addEventListener(type, listener) {
   return window.addEventListener(type, listener);
 }
 
+export function removeEventListener(type, listener) {
+  return window.removeEventListener(type, listener);
+}
+
 export function document(window) {
   return window.document;
 }
