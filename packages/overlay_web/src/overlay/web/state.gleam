@@ -26,6 +26,7 @@ import overlay/llm/provider
 import overlay/llm/provider/ollama
 import overlay/llm/tool
 import overlay/policy
+import overlay/web/artifact
 import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/tools
@@ -52,6 +53,7 @@ pub type State {
     cache: cache.Cache(tools.Meta),
     counter: Int,
     expanded: set.Set(Int),
+    artifacts: artifact.Store,
     /// Rounds of tool calls since the last prompt.
     steps: Int,
     /// The policy as written by the user, applied with `UserAppliedPolicy`.
@@ -94,6 +96,7 @@ pub fn new(config: Config) -> State {
     cache:,
     counter: 0,
     expanded: set.new(),
+    artifacts: artifact.new(),
     steps: 0,
     policy_source: "",
     policy: None,
@@ -160,6 +163,8 @@ pub type Message {
   LlmTokenRejected(reason: String)
   UserClickedExpand(Int)
   UserClickedShrink(Int)
+  UserClosedArtifact(artifact.Item)
+  UserShowedArtifact(artifact.Placement)
   // run messages
   EffectHandled(task_id: Int, value: istate.Value(tools.Meta))
   CacheMessage(cache.ActionCompleted)
@@ -192,6 +197,16 @@ fn do_update(
   message: Message,
 ) -> #(State, List(system.Effect(Message))) {
   case message {
+    UserClosedArtifact(item) -> #(
+      State(..state, artifacts: artifact.close(state.artifacts, item)),
+      [],
+    )
+    UserShowedArtifact(placement) -> {
+      case artifact.show(state.artifacts, placement) {
+        Ok(artifacts) -> #(State(..state, artifacts:), [])
+        Error(_) -> #(state, [])
+      }
+    }
     ProviderSetupMessage(message) -> {
       let can_save = case state.status {
         Waiting -> True
@@ -434,6 +449,7 @@ fn current_context(state: State) {
     counter:,
     effects: [],
     context: context.module(context),
+    artifacts: state.artifacts,
     origin: state.origin,
     policy: state.policy,
   )
@@ -444,7 +460,7 @@ fn current_context(state: State) {
 fn run_effects_if_any_remain_to_do(return, state: State) {
   let #(ctx, calls) = return
 
-  let tools.Context(cache:, counter:, effects: inner, ..) = ctx
+  let tools.Context(cache:, counter:, effects: inner, artifacts:, ..) = ctx
   let effects =
     list.map(
       inner,
@@ -454,7 +470,7 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
       }),
     )
 
-  let state = State(..state, cache:, counter:)
+  let state = State(..state, cache:, counter:, artifacts:)
   let #(state, cache_effects) = flush(state)
   let effects = list.append(cache_effects, effects)
 
@@ -532,7 +548,8 @@ fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
   let context =
     agent.provider_context(
       tools.effects(),
-      context.instructions(state.context_source, state.context),
+      context.instructions(state.context_source, state.context)
+        <> artifact.instructions,
       option.is_some(state.policy),
     )
   let history = list.append(messages, state.history) |> list.reverse
