@@ -17,6 +17,8 @@ import eyg/interpreter/expression
 import eyg/interpreter/simple_debug
 import eyg/interpreter/state
 import eyg/interpreter/value
+import eyg/ir/tree as ir
+import gleam/dict
 import gleam/http/response
 import gleam/list
 import gleam/option.{None, Some}
@@ -28,8 +30,9 @@ import loam/system
 import midas/continuation.{type Continuation as K}
 import ogre/origin
 import overlay/agent
+import overlay/config as overlay_config
 import overlay/llm/provider
-import overlay/llm/provider/ollama
+import overlay/policy
 import overlay/tools/run
 
 // I don't need to implement streaming but if so that goes at the loam level
@@ -49,7 +52,7 @@ pub fn execute(input, config: config.Config) {
   use #(result, _state) <- system.then(execute.block(source, [], state))
   case result {
     Ok(#(Some(user_config), _)) ->
-      case cast(user_config) {
+      case overlay_config.decode(user_config, labels()) {
         Ok(user_config) -> {
           // A context without a string readme is still usable by the agent.
           let readme =
@@ -69,8 +72,7 @@ pub fn execute(input, config: config.Config) {
           Ok(0) |> system.Done
         }
         Error(reason) ->
-          Error(execute.render_error(reason, source.1, state.Empty, cwd))
-          |> system.Done
+          Error("error: invalid overlay config: " <> reason) |> system.Done
       }
     Ok(#(None, _)) ->
       Error(execute.render_error(break.Vacant, source.1, state.Empty, cwd))
@@ -80,69 +82,6 @@ pub fn execute(input, config: config.Config) {
   }
 }
 
-pub type Config {
-  Config(llm: provider.Llm, policy: execute.Value, context: execute.Value)
-}
-
-/// we can assume cast returns good values for policy and context because we should type check before hande
-/// We need to extract the context type so it can be used as a module when evaluating
-fn cast(value) {
-  case
-    cast.field("llm", cast_llm, value),
-    cast.field("policy", Ok, value),
-    cast.field("context", Ok, value)
-  {
-    Ok(provider), Ok(policy), Ok(context) -> {
-      let llm = provider.Llm(provider:, model: "glm-5.3:cloud")
-      Ok(Config(llm:, policy:, context:))
-    }
-    Error(reason), _, _ -> Error(reason)
-    Ok(_), Error(reason), _ -> Error(reason)
-    Ok(_), Ok(_), Error(reason) -> Error(reason)
-  }
-}
-
-// cast is the wrong term, we need a decode API
-fn cast_llm(value) {
-  use tagged <- result.try(cast.as_tagged(value))
-  case tagged {
-    #("Ollama", inner) -> result.map(cast_ollama(inner), provider.Ollama)
-    #(_, _) -> Error(break.NoMatch(value))
-  }
-}
-
-fn cast_ollama(value) {
-  use origin <- result.try(cast.field("origin", cast.as_string, value))
-  use origin <- result.try(
-    origin.from_string(origin)
-    |> result.replace_error(break.IncorrectTerm("origin", value.String(origin))),
-  )
-  use api_key <- result.try(cast.field(
-    "api_key",
-    cast.as_option(_, cast.as_string),
-    value,
-  ))
-  Ok(ollama.Config(origin:, api_key:))
-}
-
-// fn cast_policy(value) {
-//   use read_file <- result.try(cast.field(
-//     "read_file",
-//     fn(raw) {
-//       // if we've type checked we can assume the value is good
-//       // let assert value.Closure(param:, body:, env:) = raw
-//       // use #(_poly, type_, errors) <- system.then(check_from(
-//       //   source,
-//       //   cwd,
-//       //   context,
-//       // ))
-//       Ok(raw)
-//     },
-//     value,
-//   ))
-//   echo read_file
-//   Ok(Nil)
-// }
 // I call this chat because we're in a chat agent
 import overlay/llm/chat
 
@@ -301,7 +240,7 @@ pub fn execute_call(
   call: tool.FunctionCall,
   cwd: String,
   eyg_state: execute.State,
-  policy: execute.Value,
+  policy: policy.Policy(execute.Value),
   context: execute.Value,
 ) -> system.Effect(#(Result(tool.Return, String), execute.State)) {
   let tool.FunctionCall(name, arguments) = call
@@ -360,7 +299,7 @@ pub fn run_do(
   code,
   cwd,
   eyg_state,
-  policy: execute.Value,
+  policy: policy.Policy(execute.Value),
   context: execute.Value,
 ) -> system.Effect(#(Result(_, String), execute.State, List(String))) {
   let input = source.Stdin
@@ -368,7 +307,6 @@ pub fn run_do(
   case source.parse_input(code, input) {
     Ok(source) -> {
       let scope = [#("context", context)]
-      let assert Ok(policy) = cast_policy(policy)
       use #(result, state, output) <- system.map(
         loop(block.execute(source, scope), eyg_state, policy, []),
       )
@@ -383,72 +321,53 @@ pub fn run_do(
   }
 }
 
-// allow/mock
-// forward/mock
-// allow/deny
-// Pass/mock
-fn cast_policy(value) {
-  use append_file <- result.try(cast.field("append_file", Ok, value))
-  use create_key <- result.try(cast.field("create_key", Ok, value))
-  use cwd <- result.try(cast.field("cwd", Ok, value))
-  // use decode_json <- result.try(cast.field("decode_json", Ok, value))
-  use delete_file <- result.try(cast.field("delete_file", Ok, value))
-  use env <- result.try(cast.field("env", Ok, value))
-  // use exit <- result.try(cast.field("exit", Ok, value))
-  // use eyg_parse <- result.try(cast.field("eyg_parse", Ok, value))
-  use fetch <- result.try(cast.field("fetch", Ok, value))
-  // use flip <- result.try(cast.field("flip", Ok, value))
-  // use hash <- result.try(cast.field("hash", Ok, value))
-  use make_directory <- result.try(cast.field("make_directory", Ok, value))
-  use now <- result.try(cast.field("now", Ok, value))
-  use random <- result.try(cast.field("random", Ok, value))
-  use read_directory <- result.try(cast.field("read_directory", Ok, value))
-  use read_file <- result.try(cast.field("read_file", Ok, value))
-  use sign <- result.try(cast.field("sign", Ok, value))
-  use sleep <- result.try(cast.field("sleep", Ok, value))
-  use standard_error <- result.try(cast.field("standard_error", Ok, value))
-  use standard_in <- result.try(cast.field("standard_in", Ok, value))
-  use standard_out <- result.try(cast.field("standard_out", Ok, value))
-  use write_file <- result.try(cast.field("write_file", Ok, value))
-  [
-    #("AppendFile", append_file),
-    #("CreateKey", create_key),
-    #("CWD", cwd),
-    // #("Decode_json", decode_json),
-    #("DeleteFile", delete_file),
-    #("Env", env),
-    // #("Exit", exit),
-    // #("Eyg_parse", eyg_parse),
-    #("Fetch", fetch),
-    // #("Flip", flip),
-    // #("Hash", hash),
-    #("MakeDirectory", make_directory),
-    #("Now", now),
-    #("Random", random),
-    #("ReadDirectory", read_directory),
-    #("ReadFile", read_file),
-    #("Sign", sign),
-    #("Sleep", sleep),
-    #("StandardError", standard_error),
-    #("StandardIn", standard_in),
-    #("StandardOut", standard_out),
-    #("WriteFile", write_file),
-  ]
-  |> Ok
-}
-
-fn apply_policy(label, value, meta, policy, state) {
-  case list.key_find(policy, label) {
-    Ok(run) -> execute.pure_loop(expression.call(run, [#(value, meta)]), state)
-    Error(Nil) -> system.Done(#(Ok(value.Tagged("Pass", value)), state))
+/// Ask the policy what to do with an effect.
+/// Policy functions are pure, a failure in the policy is reported as an abort.
+fn apply_policy(
+  label: String,
+  lift: execute.Value,
+  meta: source.Location,
+  policy: policy.Policy(execute.Value),
+  state: execute.State,
+) -> system.Effect(
+  #(Result(policy.Decision(execute.Value), execute.Reason), execute.State),
+) {
+  case policy.rule(policy, label) {
+    policy.Apply(function) -> {
+      use #(result, state) <- system.map(execute.pure_loop(
+        expression.call(function, [#(lift, meta)]),
+        state,
+      ))
+      let result = case result {
+        Ok(returned) ->
+          policy.decision(returned)
+          |> result.map_error(fn(reason) {
+            abort("policy for " <> label <> " failed: " <> reason)
+          })
+        Error(#(reason, _, _, _)) ->
+          Error(abort(
+            "policy for "
+            <> label
+            <> " failed: "
+            <> simple_debug.describe(reason),
+          ))
+      }
+      #(result, state)
+    }
+    policy.Unrestricted -> system.Done(#(Ok(policy.Pass(lift)), state))
+    policy.Refused -> system.Done(#(Error(abort(policy.refused(label))), state))
   }
 }
 
-// This is a replacement for execute.loop because of the police
+fn abort(reason: String) -> execute.Reason {
+  break.UnhandledEffect("Abort", value.String(reason))
+}
+
+// This is a replacement for execute.loop because of the policy
 pub fn loop(
   return: Result(_, execute.Debug),
   state: execute.State,
-  policy: List(#(String, execute.Value)),
+  policy: policy.Policy(execute.Value),
   output: List(String),
 ) -> system.Effect(#(Result(_, execute.Debug), execute.State, List(String))) {
   case return {
@@ -456,7 +375,6 @@ pub fn loop(
     Error(#(reason, meta, env, k)) ->
       case reason {
         break.UnhandledEffect(label, lift) -> {
-          // let assert Ok(policy) = cast_policy(policy)
           use #(result, state) <- system.then(apply_policy(
             label,
             lift,
@@ -465,7 +383,7 @@ pub fn loop(
             state,
           ))
           case result {
-            Ok(value.Tagged(label: "Pass", value: modified)) ->
+            Ok(policy.Pass(modified)) ->
               case computer.cast(label, modified) {
                 Ok(effect) -> {
                   let effect = computer.extrinsic(effect, meta.origin)
@@ -483,9 +401,57 @@ pub fn loop(
                 Error(reason) ->
                   system.Done(#(Error(#(reason, meta, env, k)), state, output))
               }
-            Ok(value.Tagged(label: "Mock", value: returned)) ->
+            Ok(policy.Mock(returned)) ->
               loop(block.resume(returned, env, k), state, policy, output)
-            _ -> system.Done(#(Error(#(reason, meta, env, k)), state, output))
+            Error(reason) ->
+              system.Done(#(Error(#(reason, meta, env, k)), state, output))
+          }
+        }
+        // Relative imports read the file system so are checked by the read_file policy.
+        break.UndefinedReference(ir.Relative(location:)) -> {
+          let request =
+            value.Record(
+              dict.from_list([
+                #("path", value.String(location)),
+                #("offset", value.Integer(0)),
+                #("limit", value.Integer(import_limit)),
+              ]),
+            )
+          use #(decision, state) <- system.then(apply_policy(
+            "ReadFile",
+            request,
+            meta,
+            policy,
+            state,
+          ))
+          let path = case decision {
+            Ok(policy.Pass(modified)) ->
+              cast.field("path", cast.as_string, modified)
+            Ok(policy.Mock(value.Tagged("Error", reason))) ->
+              Error(import_denied(location, simple_debug.inspect(reason)))
+            Ok(policy.Mock(_)) ->
+              Error(import_denied(
+                location,
+                "imports can only be passed or mocked with an error",
+              ))
+            Error(reason) -> Error(reason)
+          }
+          case path {
+            Ok(path) -> {
+              use #(result, state) <- system.then(execute.lookup(
+                ir.Relative(path),
+                meta.origin,
+                state,
+              ))
+              case result {
+                Ok(value) ->
+                  loop(block.resume(value, env, k), state, policy, output)
+                Error(reason) ->
+                  system.Done(#(Error(#(reason, meta, env, k)), state, output))
+              }
+            }
+            Error(reason) ->
+              system.Done(#(Error(#(reason, meta, env, k)), state, output))
           }
         }
         break.UndefinedReference(reference) -> {
@@ -505,4 +471,15 @@ pub fn loop(
         _ -> system.Done(#(Error(#(reason, meta, env, k)), state, output))
       }
   }
+}
+
+const import_limit = 100_000_000
+
+fn import_denied(location, reason) {
+  abort("import of " <> location <> " denied by policy: " <> reason)
+}
+
+/// The effects available to agent code.
+fn labels() {
+  list.map(computer.effects(), fn(effect) { effect.name })
 }

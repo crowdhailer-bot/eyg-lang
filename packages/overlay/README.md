@@ -23,8 +23,9 @@ eyg overlay path/to/.overlay.eyg
 
 The `.policy.eyg` file returns a record with the following fields:
 
-- `llm` that describes the configuration of the LLM to use, this matches the `Llm` type in gleam module `overlay/llm/provider`.
-- `policy` A record with `Pass`/`Mock` rules for each external effect on the platform.
+- `llm` a record `{provider, model}` matching the `Llm` type in gleam module `overlay/llm/provider`.
+  A bare provider, e.g. `Ollama({...})`, uses the default model `glm-5.3:cloud`.
+- `policy` A record with a function for each effect the agent may perform, see [Policies](#policies).
 - `context` A record with at least the field `readme`. The readme content is added as context to the agent. The agent is able to access the context by the `context` variable in any programs it runs.
 
 Starting the agent type checks the configuration.
@@ -47,7 +48,10 @@ let readme = perform ReadFile("./README.md")
 let readme = string.append(readme, @overlay.print_skills(skills))
 
 {
-  llm: Ollama({origin: "https://ollama.com", api_key: Some(api_key)}),
+  llm: {
+    provider: Ollama({origin: "https://ollama.com", api_key: Some(api_key)}),
+    model: "glm-5.3:cloud"
+  },
   policy: policy,
   context: {readme}
 }
@@ -60,6 +64,20 @@ NOTE: Loading relative references goes through the same permission check as `Rea
 
 NOTE: in `overlay_web` The llm configuration is provided through the UI.
 The policy is provided through the UI but is still an textarea input that accepts a program
+
+### Policies
+
+A policy field is named as the effect label in snake case, i.e. `read_file` for `ReadFile` and `cwd` for `CWD`.
+The function receives the value the program performed the effect with and returns:
+
+- `Pass(value)` to perform the effect, the value can be modified, i.e. to add an authorization header.
+- `Mock(value)` to resume the program with `value` without performing the effect, i.e. `Mock(Error("denied"))`.
+
+An effect without a policy field is refused, the program is aborted with an explanation.
+`DecodeJSON`, `EYGParse` and `Hash` do no IO and are always allowed.
+An unknown field is an error when the agent starts, the error lists the valid field names.
+
+Policy functions are pure, they cannot perform effects.
 
 ### Conventions
 
