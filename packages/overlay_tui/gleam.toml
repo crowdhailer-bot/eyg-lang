@@ -1,0 +1,25 @@
+name = "overlay_tui"
+version = "0.1.0"
+target = "javascript"
+
+[dependencies]
+overlay_terminal = { path = "../overlay_terminal" }
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+eyg_cli = { path = "../gleam_cli" }
+eyg_analysis = { path = "../gleam_analysis" }
+eyg_hub = { path = "../gleam_hub" }
+eyg_ir = ">= 3.0.0 and < 4.0.0"
+eyg_parser = ">= 0.4.0 and < 1.0.0"
+loam = { path = "../loam" }
+morph = { path = "../morph" }
+lustre = ">= 5.0.0 and < 6.0.0"
+gleam_json = ">= 3.1.0 and < 4.0.0"
+multiformats = ">= 4.0.0 and < 5.0.0"
+touch_grass = ">= 0.4.1 and < 1.0.0"
+
+[javascript]
+runtime = "bun"
+typescript_declarations = true
+
+[dev_dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"

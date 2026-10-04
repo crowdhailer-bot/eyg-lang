@@ -1,0 +1,17 @@
+name = "overlay_tui_bench"
+version = "0.1.0"
+target = "javascript"
+
+[dependencies]
+gleam_opentui = { path = "../gleam_opentui" }
+overlay_tui_core = { path = "../overlay_tui_core" }
+overlay_tui_signals = { path = "../overlay_tui_signals" }
+overlay_tui_lustre = { path = "../overlay_tui_lustre" }
+overlay_terminal = { path = "../overlay_terminal" }
+plinthx = { path = "../plinthx" }
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+gleam_javascript = ">= 1.0.0 and < 2.0.0"
+gleam_json = ">= 3.1.0 and < 4.0.0"
+
+[javascript]
+runtime = "bun"

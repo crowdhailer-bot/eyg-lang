@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gleam terminals — choosing the next overlay TUI</title>
+<style>
+:root{color-scheme:dark;--bg:#101713;--panel:#1b2520;--line:#34473b;--text:#eff4eb;--muted:#a6b6a8;--green:#b5e28e;--blue:#9ebfe7;--gold:#e7c580;--purple:#c9abe7}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:19px/1.5 system-ui,sans-serif}a{color:var(--green);text-underline-offset:4px}button,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 13px}button{cursor:pointer}button:hover,select:hover{border-color:var(--green)}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid var(--green);outline-offset:4px}
+header,footer{max-width:1424px;margin:auto;display:flex;align-items:center;justify-content:space-between;padding:17px 42px;color:var(--muted);font-size:14px;gap:14px}header{border-bottom:1px solid var(--line)}header strong{color:var(--text);letter-spacing:2px;text-transform:uppercase;font-size:13px}main{max-width:1424px;margin:auto}.slide{display:none;min-height:calc(100vh - 140px);padding:32px 42px 18px}.slide.active{display:flex;flex-direction:column;justify-content:center}.eyebrow{font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin:0 0 14px}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(48px,6.2vw,86px);line-height:1.05;letter-spacing:-3px;max-width:1000px;margin-bottom:22px}h2{font-size:clamp(35px,4vw,54px);line-height:1.12;letter-spacing:-1.8px;margin-bottom:22px}h3{font-size:24px;line-height:1.2;margin-bottom:13px}.lead{font-size:25px;line-height:1.4;max-width:1100px;color:#cad8cc}.muted,.small{color:var(--muted)}.small{font-size:15px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin:12px 0 20px}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.card{border:1px solid var(--line);border-radius:12px;padding:23px;background:var(--panel)}.card p:last-child{margin-bottom:0}.big{font-size:52px;line-height:1.05;display:block;margin-bottom:10px;color:var(--green)}.tag{font-size:12px;border:1px solid var(--line);border-radius:20px;padding:4px 9px;color:var(--green);vertical-align:middle}.note{border-left:3px solid var(--green);padding:3px 0 3px 18px;margin:15px 0;font-size:20px}.sources{font-size:13px;color:var(--muted);margin-top:auto;padding-top:18px}code{font:0.87em ui-monospace,SFMono-Regular,Consolas,monospace;color:#d6e6bf}pre{padding:18px;background:#0b110d;border:1px solid var(--line);border-radius:9px;line-height:1.6;overflow:auto;font-size:17px;white-space:pre-wrap}table{border-collapse:collapse;width:100%;margin:10px 0 16px;font-size:18px}th,td{border-bottom:1px solid var(--line);padding:12px 13px;text-align:left;vertical-align:top}th{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}tr.chosen td{background:#203220;color:var(--green)}svg.diagram{width:100%;height:auto;max-height:220px;margin:12px 0}svg text{font-family:system-ui,sans-serif}svg .box{fill:var(--panel);stroke:var(--line);stroke-width:2}svg .label{fill:var(--text);font-size:21px}svg .detail{fill:var(--muted);font-size:15px}svg .arrow{stroke:var(--green);stroke-width:2;fill:none}.controls{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin:4px 0 12px}.controls label{font-size:13px;color:var(--muted);display:grid;gap:5px}.controls select{font-size:16px}.chart{width:100%;height:auto;max-height:350px}.chart-note{font-size:14px;color:var(--muted);margin:0}.video-layout{display:grid;grid-template-columns:1.9fr 1fr;gap:24px}video{width:100%;max-height:54vh;background:#000;border:1px solid var(--line);border-radius:8px}.video-links{font-size:16px;line-height:1.9}footer nav{display:flex;gap:8px}footer button{font-size:14px}footer{border-top:1px solid var(--line)}.all .slide{display:flex;flex-direction:column;border-bottom:1px solid var(--line);min-height:90vh;justify-content:center}.all footer{position:sticky;bottom:0;background:var(--bg)}.kbd{border:1px solid var(--line);padding:1px 5px;border-radius:4px;font-size:12px}
+@media(max-width:800px){header,footer{padding:14px 20px}.slide{padding:28px 20px;min-height:calc(100vh - 150px)}.grid,.two,.video-layout{grid-template-columns:1fr}h1{letter-spacing:-1.7px}.lead{font-size:21px}table{font-size:14px}th,td{padding:9px 6px}.keyboard-hint{display:none}.card{padding:18px}svg.diagram{min-height:100px}.sources{overflow-wrap:anywhere}video{max-height:none}}
+@media(max-width:800px){table{display:block;overflow-x:auto;max-width:100%}.slide{overflow-wrap:anywhere}.grid>*,.video-layout>*{min-width:0}.controls label,.controls select{max-width:100%}}
+@media print{@page{size:A4 landscape;margin:12mm}body{background:white;color:#142018;font-size:13px;color-scheme:light}header,footer,.controls{display:none}.slide,.slide.active,.all .slide{display:flex!important;min-height:0;height:180mm;break-after:page;padding:0;justify-content:flex-start}h1{font-size:50px}h2{font-size:34px}.lead{font-size:18px;color:#334b3c}.card{background:#f3f6f1;color:#142018;padding:15px}.muted,.small,.sources,.chart-note,th{color:#46574b}.big,a,code{color:#315623}pre{background:#f3f6f1;font-size:12px}.note{font-size:15px}table{font-size:12px}.grid{gap:12px}svg .box{fill:#f3f6f1}svg .label{fill:#142018}svg .detail{fill:#46574b}video{max-height:85mm}.sources{font-size:10px}.chart text{fill:#142018}tr.chosen td{background:#e5efdc;color:#23401d}}
+</style>
+</head>
+<body>
+<header><strong>EYG / Terminal architecture</strong><span>04 October 2026 · OpenTUI 0.5.14 · Gleam 1.16.0</span><button id="overview" aria-pressed="false">Show all</button></header>
+<main>
+<section class="slide active" id="recommendation">
+<p class="eyebrow">01 / A decision, backed by working frontends</p>
+<h1>Start with direct<br>core bindings.</h1>
+<p class="note">Measurements and test counts describe the recorded revision, before the gleam_opentui extraction and current eval/artifact integration. See the benchmark README to rerun.</p>
+<p class="lead">Keep EYG application behavior in Gleam. Use retained OpenTUI widgets through <code>gleam_opentui</code>. Add a rendering framework when the application needs it.</p>
+<div class="grid">
+<div class="card"><span class="big">3</span>complete Gleam frontends<br><span class="small">Direct core · signals · Lustre</span></div>
+<div class="card"><span class="big">80</span>fresh-process benchmark trials<br><span class="small">Two workloads · two history sizes</span></div>
+<div class="card"><span class="big">0</span>handwritten TypeScript in the alternatives<br><span class="small">Small JavaScript host bindings remain</span></div>
+</div>
+<p class="small">The original TypeScript/Solid UI remains the comparison baseline. OpenTUI itself still supplies JavaScript/TypeScript and native Zig code.</p>
+<div class="sources">Open locally in a browser. Use arrow keys to navigate; charts and diagrams work offline. Recordings are relative repository links.</div>
+</section>
+
+<section class="slide" id="scope">
+<p class="eyebrow">02 / What was rebuilt</p><h2>One application. Four rendering paths.</h2>
+<table><thead><tr><th>Package</th><th>Rendering model</th><th>Application language</th></tr></thead><tbody>
+<tr><td><a href="../overlay_tui/README.md">overlay_tui</a></td><td>Original Solid JSX → OpenTUI</td><td>TypeScript + existing Gleam runtime</td></tr>
+<tr class="chosen"><td><a href="../overlay_tui_core/README.md">overlay_tui_core</a></td><td>Retained nodes, explicit property updates</td><td>Gleam</td></tr>
+<tr><td><a href="../overlay_tui_signals/README.md">overlay_tui_signals</a></td><td>Pure Gleam signal graph + keyed row ownership</td><td>Gleam</td></tr>
+<tr><td><a href="../overlay_tui_lustre/README.md">overlay_tui_lustre</a></td><td>Actual Lustre VDOM diff/cache + terminal backend</td><td>Gleam</td></tr>
+</tbody></table>
+<p class="lead">All three alternatives provide the REPL and overlay agent: completion, effects, prompts, streaming Markdown, scrolling, mouse interaction, clipboard, and structural editing with undo/redo.</p>
+<p class="note">Integrated <code>bot/overlay-review</code> at <code>d27244a</code>, the latest upstream head checked for this work.</p>
+<div class="sources">Shared native conformance suite: <a href="../overlay_tui_core/test/core_test.gleam">core_test.gleam</a>. The frontend implementations add no EYG effects.</div>
+</section>
+
+<section class="slide" id="foundation">
+<p class="eyebrow">03 / Share behavior; isolate the host</p><h2>The important boundary is below the view.</h2>
+<svg class="diagram" viewBox="0 0 1200 190" role="img" aria-label="Shared Gleam app feeds one of three frontends, through gleam_opentui to OpenTUI. The evaluator runs separately.">
+<defs><marker id="tip" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7" fill="#b5e28e"/></marker></defs>
+<rect class="box" x="0" y="20" width="245" height="105" rx="12"/><text class="label" x="22" y="58">terminal/app</text><text class="detail" x="22" y="88">Model · messages · commands</text>
+<path class="arrow" marker-end="url(#tip)" d="M250 70 H302"/>
+<rect class="box" x="312" y="20" width="250" height="105" rx="12"/><text class="label" x="334" y="58">Frontend</text><text class="detail" x="334" y="88">Core / signals / Lustre</text>
+<path class="arrow" marker-end="url(#tip)" d="M567 70 H619"/>
+<rect class="box" x="629" y="20" width="245" height="105" rx="12"/><text class="label" x="651" y="58">gleam_opentui</text><text class="detail" x="651" y="88">Native objects · Result errors</text>
+<path class="arrow" marker-end="url(#tip)" d="M879 70 H931"/>
+<rect class="box" x="941" y="20" width="255" height="105" rx="12"/><text class="label" x="963" y="58">@opentui/core</text><text class="detail" x="963" y="88">Widgets → Zig → terminal</text>
+<text class="detail" x="22" y="165">Separate Bun evaluator process ↔ typed JSON protocol ↔ shared controller</text>
+</svg>
+<div class="grid two"><div class="card"><h3>Host bindings follow Plinth</h3><p>OpenTUI lives in gleam_opentui, Web APIs in Plinth, and JavaScript, Node and Bun helpers in Plinthx. Keep native objects and receiver-first methods. Fallible calls return <code>Result</code>; thrown values become <code>String(error)</code>.</p></div>
+<div class="card"><h3>Evaluation cannot block typing</h3><p>Gleam owns the runtime queue in a separate process. Prompt replies bypass the queued evaluation, avoiding a stdin deadlock. Killing an infinite evaluation leaves the terminal responsive.</p></div></div>
+<div class="sources"><a href="../gleam_opentui/README.md">gleam_opentui</a> · <a href="../plinthx/README.md">plinthx</a> · <a href="../overlay_terminal/README.md">shared terminal runtime</a> · <a href="https://github.com/CrowdHailer/plinth/blob/ba246f26ff05ef933a5e1664def8d59ffbde317d/README.md">Plinth guidance, checked upstream head ba246f2</a></div>
+</section>
+
+<section class="slide" id="direct">
+<p class="eyebrow">04 / Direct @opentui/core bindings</p><h2>Retain the widget. Change its properties.</h2>
+<div class="grid two"><div><p class="lead">A dictionary maps stable run IDs to native rows. New rows are mounted once; existing rows receive changed properties; removed rows are destroyed.</p>
+<pre><code>Model update
+  → compare screen properties
+  → reconcile rows by run ID
+  → update changed text / Markdown / visibility
+  → OpenTUI schedules layout and drawing</code></pre>
+<p>Native widgets already provide scrolling, Markdown, editing, focus, selection and mouse behavior. A second tree is optional.</p></div>
+<div class="card"><h3>Hard part: editor coordinates</h3><p>A cursor can mean a native code-point offset, a Gleam grapheme index, or a terminal display column. Treating those as interchangeable broke Unicode completion.</p><p>Coalesce content/cursor notifications in a microtask, derive the grapheme index from the prefix, and preserve the suffix using grapheme slices. Highlight ranges use native offsets.</p><p class="small">Tests include Unicode completion, preserved text after the cursor, prompt draft restoration, and real mocked native input.</p></div></div>
+<p class="note">Trade-off: straightforward lifetime and update logic, but each mutable widget property needs an explicit setter and comparison.</p>
+<div class="sources"><a href="../overlay_tui_core/src/core/native_view.gleam">retained view</a> · <a href="../overlay_tui_core/src/core/controller.gleam">controller</a> · <a href="../overlay_terminal/src/terminal/completion.gleam">completion</a> · <a href="https://opentui.com/docs/core-concepts/renderables/">OpenTUI renderables</a></div>
+</section>
+
+<section class="slide" id="signals">
+<p class="eyebrow">05 / A Solid-like graph in pure Gleam</p><h2>Invalidate first. Pull fresh values. Own cleanup.</h2>
+<svg class="diagram" viewBox="0 0 1200 190" role="img" aria-label="A signal invalidates two memos in a diamond graph, which feed an owned effect. All invalidation happens before the effect reads.">
+<rect class="box" x="25" y="55" width="215" height="80" rx="12"/><text class="label" x="80" y="104">Signal</text>
+<rect class="box" x="410" y="5" width="230" height="70" rx="12"/><text class="label" x="468" y="49">Memo A</text>
+<rect class="box" x="410" y="110" width="230" height="70" rx="12"/><text class="label" x="468" y="154">Memo B</text>
+<rect class="box" x="820" y="55" width="340" height="80" rx="12"/><text class="label" x="880" y="104">Owned row effect</text>
+<path class="arrow" marker-end="url(#tip)" d="M245 90 L398 40 M245 100 L398 145 M645 40 L808 90 M645 145 L808 100"/>
+</svg>
+<div class="grid two"><div class="card"><h3>Dependency tracking, without JSX</h3><p>Reads subscribe dynamically; lazy memos cache; writes batch. Dirty propagation completes before effects pull their dependencies, preventing inconsistent diamond reads.</p><p>A keyed row owns its signal, subscriptions and native widget. Streaming updates its row; completed rows keep their identity.</p></div>
+<div class="card"><h3>Hard part: queued work after disposal</h3><p>A parent can remove a child whose effect is already queued. Lifetime scopes, rerun cleanup and ordered flushing let the parent dispose it first; queued disposed effects are skipped.</p><p class="small">Dedicated tests cover dynamic dependencies, diamonds, nested cleanup, batching, keyed moves and parent/child disposal.</p></div></div>
+<p class="note">Binding granularity is screen/row, not every JSX expression. No Solid resources, suspense, transitions or error boundaries; unchanged memo results can still wake effects.</p>
+<div class="sources"><a href="../overlay_tui_signals/src/signals/reactive.gleam">signal graph</a> · <a href="../overlay_tui_signals/src/signals/keyed.gleam">keyed ownership</a> · <a href="../overlay_tui_signals/README.md">scope and limitations</a></div>
+</section>
+
+<section class="slide" id="lustre">
+<p class="eyebrow">06 / Lustre as a terminal renderer</p><h2>Reuse the real VDOM. Adapt the patch boundary.</h2>
+<pre><code>view(Model) → Lustre Element(Message)
+            → lustre/vdom/diff + cache
+            → Mount / Reconcile patches
+            → Gleam adapter → retained OpenTUI objects</code></pre>
+<div class="grid two"><div class="card"><h3>Declarative tree, stable history</h3><p>The view defines native widget tags, keys, event handlers and memoized rows. The backend applies insert, remove, replace, move, text and property changes. There is no independently written diff algorithm.</p><p class="small">The shared controller owns the reducer and commands. A small Gleam render loop owns the actual Lustre cache.</p></div>
+<div class="card"><h3>Hard part: virtual and native trees differ</h3><p>Fragments and mapped events add virtual boundaries without native layout boxes. A separate metadata tree preserves those paths through keyed moves, keeping mouse handlers attached to the correct messages.</p><p>Focus is applied after visibility changes. Child ordering is synchronized only for structural patches.</p></div></div>
+<p class="note">Pins Lustre 5.7.1 internals. Its JavaScript server runtime has constructor-argument and dispatch-shadowing defects in this version; using the VDOM/cache modules directly avoids a dependency fork.</p>
+<div class="sources"><a href="../overlay_tui_lustre/src/terminal_lustre/adapter.gleam">terminal adapter</a> · <a href="../overlay_tui_lustre/src/terminal_lustre/render.gleam">render loop</a> · <a href="../overlay_tui_lustre/README.md">supported properties, runtime findings and upgrade cost</a></div>
+</section>
+
+<section class="slide" id="baseline">
+<p class="eyebrow">07 / The original TypeScript + Solid implementation</p><h2>Still a strong baseline.</h2>
+<div class="grid two"><div class="card"><h3>What it buys</h3><p>Established JSX, mature ownership semantics, upstream widget types and close alignment with OpenTUI examples. It is the fastest implementation here for typing and populating history.</p><p>For a team comfortable maintaining TypeScript, improving this version is a credible alternative to migration.</p></div>
+<div class="card"><h3>Hard part: retaining row identity</h3><p>The baseline replaces an entry object when streaming changes it. Solid's <code>For</code> uses object identity, so that row and its Markdown widget are recreated.</p><p>The Gleam versions retain the widget under its run ID. Stable per-row stores or signals could bring the same optimization to TypeScript.</p></div></div>
+<p class="lead">The measured streaming gain is evidence for stable widget identity in these implementations. It does not establish that Gleam is intrinsically faster than Solid or TypeScript.</p>
+<p class="note">The comparison keeps the original application behavior unchanged. Its benchmark adapter drives the real App, not a simplified substitute.</p>
+<div class="sources"><a href="../overlay_tui/src/ui/app.tsx">original App</a> · <a href="../overlay_tui/bench/session.mjs">benchmark adapter</a> · <a href="../overlay_tui/README.md">original package</a></div>
+</section>
+
+<section class="slide" id="zig">
+<p class="eyebrow">08 / Could we bind directly to Zig?</p><h2>Possible, but the boundary is much lower.</h2>
+<div class="grid"><div class="card"><h3>Verified locally</h3><p>The installed 0.5.14 shared library exports renderer, text/edit buffer, syntax style, native renderable and Yoga-related APIs.</p><p class="small">The ABI already includes native renderable support. It is more than a pixel or cell buffer.</p></div>
+<div class="card"><h3>Work it transfers to us</h3><p>Numeric handles, buffer layouts, ownership, native lifetime and platform loading need exact bindings. The public core API still supplies widget behavior, input integration and Markdown orchestration.</p></div>
+<div class="card"><h3>Recommendation</h3><p>Use public <code>@opentui/core</code> objects now. Keep the boundary in <code>gleam_opentui</code> so selected lower-level bindings can be introduced later if profiling justifies them.</p></div></div>
+<p class="note">This was an ABI and architecture investigation, not a fourth rebuilt frontend or a direct-Zig performance result.</p>
+<p>OpenTUI is moving more behavior into native code. Following the public API lets this application benefit without owning that migration.</p>
+<div class="sources"><a href="https://opentui.com/packages/opentui-core/">core package architecture</a> · <a href="https://github.com/anomalyco/opentui/blob/main/packages/core/src/zig.ts">upstream Zig bridge</a> · <a href="https://opentui.com/scrollback/whats-next-for-opentui/">upstream native migration direction</a></div>
+</section>
+
+<section class="slide" id="method">
+<p class="eyebrow">09 / Benchmark method</p><h2>Identical events. Native frames. Repeated processes.</h2>
+<div class="grid"><div class="card"><span class="big">5 × 4</span><h3>Trials × frontends</h3><p>Fresh Bun processes in rotating frontend order. Two workloads at 20 and 200 completed history rows: 80 trials total.</p></div>
+<div class="card"><span class="big">40 + 120</span><h3>Warmup + samples</h3><p>Streaming Markdown chunks or native mocked typing. Each timed update includes decode/input, state, reconciliation and one requested native frame.</p></div>
+<div class="card"><span class="big">110 × 34</span><h3>Terminal cells</h3><p>Bun 1.3.14 · OpenTUI 0.5.14 · Linux x64 · AMD EPYC-Genoa. Parser initialized and preloaded before the workload.</p></div></div>
+<p class="note">Frame latency measures the streaming preview; asynchronous syntax-parser jobs are not all completed within each timed update.</p>
+<p class="small">No emulator/display refresh, network, model or evaluator latency. RSS is sampled after parser draining and renderer teardown, without forced GC; it includes native allocations and is not a peak-memory measure. Import timing is inside an already-running Bun process, not cold startup. History timing includes row creation and a frame. Trials ran separately from recording/build work.</p>
+<div class="sources"><a href="./README.md">method and reproduction</a> · <a href="./bench.mjs">common driver</a> · <a href="./results/summary.json">aggregated data</a> · <a href="./results/typescript-stream-200-1.json">example raw trial</a>. All 80 raw JSON trials are checked in; every final stderr log was empty.</div>
+</section>
+
+<section class="slide" id="charts">
+<p class="eyebrow">10 / Explore the measurements</p><h2 id="chart-heading">Streaming favors retained row identity.</h2>
+<div class="controls"><label>Workload<select id="workload"><option value="stream">Streaming Markdown</option><option value="typing">Typing + completion</option></select></label>
+<label>Completed history rows<select id="history"><option value="200">200 rows</option><option value="20">20 rows</option></select></label>
+<label>Measurement<select id="metric"><option value="mean_ms">Mean frame latency</option><option value="p95_ms">95th percentile latency</option><option value="history_ms">Populate history + frame</option><option value="rss_after_mib">RSS after workload</option><option value="import_ms">Import renderer modules</option><option value="mount_ms">Mount + first frame</option></select></label></div>
+<svg id="chart" class="chart" viewBox="0 0 1200 330" role="img" aria-label="Benchmark comparison chart"></svg>
+<p class="chart-note" id="chart-note"></p><p class="note" id="chart-takeaway"></p>
+<div class="sources">Embedded data: <a href="./results/summary.json">summary.json</a>. Lower is better. No network requests are needed to change this chart.</div>
+</section>
+
+<section class="slide" id="results">
+<p class="eyebrow">11 / The trade-off at 200 history rows</p><h2>Faster streaming. Slower typing and history setup.</h2>
+@@RESULT_TABLE@@
+<p class="small">Latency columns: median of five trial means / median of five trial p95s. RSS is measured after streaming. All units are milliseconds except MiB.</p>
+<div class="grid two"><div class="card"><h3>@@DIRECT_STREAM_COMPARISON@@</h3><p>@@STREAM_DESCRIPTION@@ Keeping Markdown widget identity explains a substantial part of the advantage.</p></div>
+<div class="card"><h3>Typing: original remains quickest</h3><p>@@TYPING_DESCRIPTION@@</p></div></div>
+<p class="note">@@SIGNALS_DESCRIPTION@@</p>
+<div class="sources">This compares complete implementations with shared native widgets, not isolated framework overhead. Growing Markdown and application state work are included.</div>
+</section>
+
+<section class="slide" id="maintenance">
+<p class="eyebrow">12 / The cost after the demo</p><h2>Choose the abstraction we want to maintain.</h2>
+<table><thead><tr><th>Direction</th><th>Advantage</th><th>Ongoing cost</th></tr></thead><tbody>
+<tr class="chosen"><td>Direct core</td><td>Smallest rendering abstraction; explicit identity and lifetimes</td><td>Manual property updates; runtime validation of native options</td></tr>
+<tr><td>Gleam signals</td><td>Reusable reactive computations and owned keyed rows</td><td>Our graph scheduler and disposal semantics; incomplete Solid parity</td></tr>
+<tr><td>Lustre</td><td>Declarative view; existing keys, memoization and diff algorithm</td><td>Terminal patch adapter and coupling to pinned internal modules</td></tr>
+<tr><td>Original TypeScript</td><td>Upstream types, mature tooling, fastest typing here</td><td>Second application language and runtime boundary; identity optimization remains</td></tr>
+</tbody></table>
+<p class="lead">Adopt the direct frontend as the next development path. Keep the alternatives as working references, and extract more abstraction when repeated UI complexity makes its value concrete.</p>
+<div class="sources">All alternatives share the reducer, evaluator protocol, highlighting, completion and host bindings. Changing rendering direction does not require rewriting those layers.</div>
+</section>
+
+<section class="slide" id="recordings">
+<p class="eyebrow">13 / Watch the implementations</p><h2>Real terminal sessions, including live overlay calls.</h2>
+<div class="video-layout"><div><div class="controls"><label>Frontend<select id="video-variant"><option value="core">Direct core</option><option value="signals">Gleam signals</option><option value="lustre">Lustre</option></select></label><label>Session<select id="video-mode"><option value="repl">REPL + structural editor</option><option value="overlay">Live overlay + effects</option></select></label></div>
+<video id="demo" controls preload="metadata" src="../overlay_tui_core/recordings/repl.mp4">Open one of the recording links to watch the demo.</video></div>
+<div><h3>What to look for</h3><p id="demo-caption">Evaluate expressions, retain a binding, inspect stdout and type information, then structurally edit an argument with undo/redo and evaluate 62.</p><p class="small">The overlay sessions use the existing Codex example and login. They invoke the run tool, print “Hello from Gleam”, evaluate 42, and expand code and effects.</p>
+<div class="video-links"><a href="../overlay_tui_core/recordings/repl.mp4">Core REPL</a> · <a href="../overlay_tui_core/recordings/overlay.mp4">Core overlay</a><br><a href="../overlay_tui_signals/recordings/repl.mp4">Signals REPL</a> · <a href="../overlay_tui_signals/recordings/overlay.mp4">Signals overlay</a><br><a href="../overlay_tui_lustre/recordings/repl.mp4">Lustre REPL</a> · <a href="../overlay_tui_lustre/recordings/overlay.mp4">Lustre overlay</a></div></div></div>
+<div class="sources">Six new H.264 recordings, 20 fps. <a href="./record.sh">Recording script</a> · Original recordings: <a href="../overlay_tui/recordings/repl.mp4">REPL</a> / <a href="../overlay_tui/recordings/overlay.mp4">overlay</a>.</div>
+</section>
+
+<section class="slide" id="next">
+<p class="eyebrow">14 / Recommended next direction</p><h2>Gleam behavior.<br>Public core widgets.<br>One host-binding boundary.</h2>
+<div class="grid two"><div class="card"><h3>Validated beyond a screenshot</h3><p><strong>96 passing tests:</strong> 37 original, 22 shared runtime/model, 8 host bindings, 7 native workflow tests per frontend, 6 signal-graph tests and 2 Lustre adapter tests.</p><p>Native mouse, resize, Unicode completion, prompts, streaming, structural edits, infinite-evaluation responsiveness and cleanup are exercised.</p></div>
+<div class="card"><h3>Try the recommended path</h3><pre><code>cd packages/overlay_tui_core
+bun install
+gleam run</code></pre><p class="small">For the live overlay:<br><code>gleam run -- overlay ../overlay_tui/examples/codex.eyg</code><br>Requires the example's existing Codex authentication.</p></div></div>
+<p class="note">Keep TypeScript as the measured baseline until migration is accepted. The direct Gleam path is ready for continued development; native option typing and broader terminal compatibility remain areas to improve.</p>
+<div class="sources">After the upstream merge: also passed 164 CLI/provider tests and all 97 EYG package tests.<br><a href="../overlay_tui_core/README.md">direct frontend</a> · <a href="../plinthx/README.md">host bindings</a> · <a href="./README.md">benchmarks and reproduction</a> · <a href="./results/summary.json">all measurements</a></div>
+</section>
+</main>
+<footer><span id="position" aria-live="polite">1 / 14</span><span class="keyboard-hint"><span class="kbd">←</span> <span class="kbd">→</span> navigate · <span class="kbd">Home</span> first · browser print exports all slides</span><nav aria-label="Slide navigation"><button id="previous" aria-label="Previous slide">← Previous</button><button id="next-slide" aria-label="Next slide">Next →</button></nav></footer>
+<script type="application/json" id="benchmark-data">@@BENCHMARK@@</script>
+<script>
+(function(){
+"use strict";
+var slides=Array.from(document.querySelectorAll(".slide")), index=0;
+function show(next,writeHash){
+  index=Math.max(0,Math.min(slides.length-1,next));
+  slides.forEach(function(slide,i){slide.classList.toggle("active",i===index)});
+  document.getElementById("position").textContent=(index+1)+" / "+slides.length;
+  document.getElementById("previous").disabled=index===0;
+  document.getElementById("next-slide").disabled=index===slides.length-1;
+  if(writeHash) history.replaceState(null,"","#"+slides[index].id);
+  if(document.body.classList.contains("all"))slides[index].scrollIntoView({behavior:"smooth"});
+  else window.scrollTo(0,0);
+  if(slides[index].id!=="recordings")document.getElementById("demo").pause();
+}
+function fromHash(){var found=slides.findIndex(function(s){return "#"+s.id===location.hash});show(found<0?0:found,false)}
+window.addEventListener("hashchange",fromHash);
+document.getElementById("previous").onclick=function(){show(index-1,true)};
+document.getElementById("next-slide").onclick=function(){show(index+1,true)};
+document.getElementById("overview").onclick=function(){var all=document.body.classList.toggle("all");this.textContent=all?"Slide mode":"Show all";this.setAttribute("aria-pressed",String(all));show(index,false)};
+document.addEventListener("keydown",function(e){if(/^(INPUT|SELECT|TEXTAREA|VIDEO|BUTTON)$/.test(e.target.tagName)||e.altKey||e.ctrlKey||e.metaKey)return;var next=index;if(e.key==="ArrowRight"||e.key==="PageDown")next++;else if(e.key==="ArrowLeft"||e.key==="PageUp")next--;else if(e.key==="Home")next=0;else if(e.key==="End")next=slides.length-1;else return;e.preventDefault();show(next,true)});
+var data=JSON.parse(document.getElementById("benchmark-data").textContent).rows;
+var names={typescript:"TypeScript / Solid",core:"Gleam / direct core",signals:"Gleam / signals",lustre:"Gleam / Lustre"};
+var colors={typescript:"#9ebfe7",core:"#b5e28e",signals:"#e7c580",lustre:"#c9abe7"};
+function chart(){
+ var workload=document.getElementById("workload").value,rows=Number(document.getElementById("history").value),metric=document.getElementById("metric").value;
+ var selected=data.filter(function(d){return d.workload===workload&&d.history_rows===rows});
+ var max=Math.max.apply(null,selected.map(function(d){return metric==="mean_ms"?d.max_trial_mean_ms:d[metric]}))*1.13;
+ var unit=metric==="rss_after_mib"?"MiB":"ms", svg=document.getElementById("chart");
+ var content='<title>'+workload+' at '+rows+' rows, '+metric+'</title>';
+ for(var t=0;t<=4;t++){var tx=245+t*825/4;content+='<line x1="'+tx+'" y1="15" x2="'+tx+'" y2="282" stroke="#34473b"/><text x="'+tx+'" y="316" fill="#a6b6a8" text-anchor="middle" font-size="15">'+(max*t/4).toFixed(max<20?1:0)+'</text>'}
+ selected.forEach(function(d,i){var y=27+i*65,w=d[metric]/max*825;content+='<text x="228" y="'+(y+29)+'" text-anchor="end" fill="#eff4eb" font-size="20">'+names[d.variant]+'</text><rect x="245" y="'+y+'" width="'+w+'" height="43" rx="5" fill="'+colors[d.variant]+'"/><text x="'+(255+(metric==="mean_ms"?d.max_trial_mean_ms/max*825:w))+'" y="'+(y+29)+'" fill="#eff4eb" font-size="19">'+d[metric].toFixed(metric==="rss_after_mib"?1:2)+'</text>';if(metric==="mean_ms"){var lo=245+d.min_trial_mean_ms/max*825,hi=245+d.max_trial_mean_ms/max*825;content+='<path d="M'+lo+' '+(y+22)+'H'+hi+'M'+lo+' '+(y+15)+'V'+(y+29)+'M'+hi+' '+(y+15)+'V'+(y+29)+'" fill="none" stroke="#eff4eb" stroke-width="2"/>'}});
+ svg.innerHTML=content;svg.setAttribute("aria-label",selected.map(function(d){return names[d.variant]+": "+d[metric].toFixed(2)+" "+unit}).join("; "));
+ document.getElementById("chart-heading").textContent=workload==="stream"?"Streaming favors retained row identity.":"Typing favors the original implementation.";
+ document.getElementById("chart-note").textContent="Units: "+unit+". "+(metric==="mean_ms"?"Median of five trial means. Whiskers show minimum and maximum trial means, not confidence intervals.":metric==="p95_ms"?"Median of the five within-trial 95th percentiles.":"Median of five trials. RSS is process memory without forced garbage collection.");
+ document.getElementById("chart-takeaway").textContent=workload==="stream"?"All Gleam alternatives preserve the streamed row's native identity. Core and signals are close; Lustre adds a virtual tree and patch translation.":"All alternatives remain responsive in this trace, but they add shared controller/model work and native boundary calls. The original stays quickest.";
+}
+["workload","history","metric"].forEach(function(id){document.getElementById(id).addEventListener("change",chart)});
+function video(){var variant=document.getElementById("video-variant").value,mode=document.getElementById("video-mode").value,v=document.getElementById("demo");v.pause();v.src="../overlay_tui_"+variant+"/recordings/"+mode+".mp4";v.load();document.getElementById("demo-caption").textContent=mode==="repl"?"Evaluate expressions, retain a binding, inspect stdout and type information, then structurally edit an argument with undo/redo and evaluate 62.":"A live Codex response invokes run, prints Hello from Gleam, and calculates 42. Code and effect details are expanded after completion."}
+document.getElementById("video-variant").addEventListener("change",video);document.getElementById("video-mode").addEventListener("change",video);
+chart();fromHash();
+})();
+</script>
+</body>
+</html>

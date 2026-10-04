@@ -1,0 +1,334 @@
+{
+  "recorded_at": "2026-10-04T14:41:31.394Z",
+  "source_revision": "31601020ee866489f08e4653131cdebfe126d201",
+  "opentui": "0.5.14",
+  "memory_sampling": "After parser draining and renderer teardown, without forced GC",
+  "cpu": "AMD EPYC-Genoa Processor",
+  "bun": "1.3.14",
+  "platform": "linux",
+  "architecture": "x64",
+  "aggregation": "Median of five trial means; p95 is median of five trial p95s. Ranges describe trial means, not confidence intervals.",
+  "rows": [
+    {
+      "workload": "stream",
+      "history_rows": 20,
+      "variant": "typescript",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 36.73278149166667,
+      "p95_ms": 66.32200999999986,
+      "min_trial_mean_ms": 36.213345075,
+      "max_trial_mean_ms": 40.8989968583333,
+      "import_ms": 619.890233,
+      "mount_ms": 30.050674999999956,
+      "history_ms": 37.427123999999935,
+      "rss_mounted_mib": 160.01171875,
+      "rss_after_mib": 267.87890625,
+      "heap_after_mib": 58.1096715927124,
+      "frames": [
+        "2719450718542305164"
+      ]
+    },
+    {
+      "workload": "stream",
+      "history_rows": 20,
+      "variant": "core",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 8.009192975000001,
+      "p95_ms": 13.469718000000057,
+      "min_trial_mean_ms": 7.663868525000009,
+      "max_trial_mean_ms": 8.172573033333329,
+      "import_ms": 216.493101,
+      "mount_ms": 31.20766499999999,
+      "history_ms": 47.564903000000015,
+      "rss_mounted_mib": 83.23828125,
+      "rss_after_mib": 190.0078125,
+      "heap_after_mib": 16.758970260620117,
+      "frames": [
+        "1752727125158620192"
+      ]
+    },
+    {
+      "workload": "stream",
+      "history_rows": 20,
+      "variant": "signals",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 7.9259861750000065,
+      "p95_ms": 13.796360999999933,
+      "min_trial_mean_ms": 7.801289508333322,
+      "max_trial_mean_ms": 8.171185974999991,
+      "import_ms": 213.254293,
+      "mount_ms": 27.485680000000002,
+      "history_ms": 44.72102899999999,
+      "rss_mounted_mib": 83.671875,
+      "rss_after_mib": 193.375,
+      "heap_after_mib": 17.310647010803223,
+      "frames": [
+        "1752727125158620192"
+      ]
+    },
+    {
+      "workload": "stream",
+      "history_rows": 20,
+      "variant": "lustre",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 8.23080766666666,
+      "p95_ms": 14.170450999999957,
+      "min_trial_mean_ms": 7.977212874999998,
+      "max_trial_mean_ms": 8.389049158333332,
+      "import_ms": 246.07705499999997,
+      "mount_ms": 34.41845999999998,
+      "history_ms": 66.36420499999997,
+      "rss_mounted_mib": 88.97265625,
+      "rss_after_mib": 205.15234375,
+      "heap_after_mib": 18.407126426696777,
+      "frames": [
+        "1752727125158620192"
+      ]
+    },
+    {
+      "workload": "stream",
+      "history_rows": 200,
+      "variant": "typescript",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 39.85620662499998,
+      "p95_ms": 68.997883,
+      "min_trial_mean_ms": 38.922735283333374,
+      "max_trial_mean_ms": 40.17670480833331,
+      "import_ms": 635.6253899999999,
+      "mount_ms": 33.67012599999998,
+      "history_ms": 208.43291599999998,
+      "rss_mounted_mib": 159.5390625,
+      "rss_after_mib": 295.73046875,
+      "heap_after_mib": 85.32617378234863,
+      "frames": [
+        "2719450718542305164"
+      ]
+    },
+    {
+      "workload": "stream",
+      "history_rows": 200,
+      "variant": "core",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 15.123581649999995,
+      "p95_ms": 20.869833999999628,
+      "min_trial_mean_ms": 13.871217425000015,
+      "max_trial_mean_ms": 16.16216499166666,
+      "import_ms": 210.779733,
+      "mount_ms": 24.08077,
+      "history_ms": 246.96061299999997,
+      "rss_mounted_mib": 83.375,
+      "rss_after_mib": 209.65625,
+      "heap_after_mib": 24.10442066192627,
+      "frames": [
+        "1752727125158620192"
+      ]
+    },
+    {
+      "workload": "stream",
+      "history_rows": 200,
+      "variant": "signals",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 14.443277500000004,
+      "p95_ms": 20.842161999999917,
+      "min_trial_mean_ms": 14.16109538333336,
+      "max_trial_mean_ms": 15.685561708333324,
+      "import_ms": 217.034315,
+      "mount_ms": 27.88521000000003,
+      "history_ms": 391.068659,
+      "rss_mounted_mib": 82.9453125,
+      "rss_after_mib": 223.68359375,
+      "heap_after_mib": 28.792000770568848,
+      "frames": [
+        "1752727125158620192"
+      ]
+    },
+    {
+      "workload": "stream",
+      "history_rows": 200,
+      "variant": "lustre",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 16.00995455,
+      "p95_ms": 21.46853400000009,
+      "min_trial_mean_ms": 15.324506833333347,
+      "max_trial_mean_ms": 17.115641574999994,
+      "import_ms": 235.734847,
+      "mount_ms": 35.192745,
+      "history_ms": 474.9596700000001,
+      "rss_mounted_mib": 88.63671875,
+      "rss_after_mib": 230.57421875,
+      "heap_after_mib": 36.43647384643555,
+      "frames": [
+        "1752727125158620192"
+      ]
+    },
+    {
+      "workload": "typing",
+      "history_rows": 20,
+      "variant": "typescript",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 1.1629497333333338,
+      "p95_ms": 3.119100000000003,
+      "min_trial_mean_ms": 1.1349817833333427,
+      "max_trial_mean_ms": 1.361236708333332,
+      "import_ms": 604.5666970000001,
+      "mount_ms": 36.99526500000002,
+      "history_ms": 33.19043499999998,
+      "rss_mounted_mib": 159.23828125,
+      "rss_after_mib": 173.671875,
+      "heap_after_mib": 38.49476337432861,
+      "frames": [
+        "3936219500308976816"
+      ]
+    },
+    {
+      "workload": "typing",
+      "history_rows": 20,
+      "variant": "core",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 1.723519400000005,
+      "p95_ms": 3.6897250000000668,
+      "min_trial_mean_ms": 1.5320666250000017,
+      "max_trial_mean_ms": 2.071499866666667,
+      "import_ms": 212.60714,
+      "mount_ms": 26.086805,
+      "history_ms": 37.75219200000001,
+      "rss_mounted_mib": 83.7265625,
+      "rss_after_mib": 114.91796875,
+      "heap_after_mib": 17.13398838043213,
+      "frames": [
+        "16367592025593854719"
+      ]
+    },
+    {
+      "workload": "typing",
+      "history_rows": 20,
+      "variant": "signals",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 1.7267289750000023,
+      "p95_ms": 3.6804239999999595,
+      "min_trial_mean_ms": 1.570531208333334,
+      "max_trial_mean_ms": 1.9183634000000003,
+      "import_ms": 212.376213,
+      "mount_ms": 29.54071700000003,
+      "history_ms": 43.00113299999998,
+      "rss_mounted_mib": 84.16015625,
+      "rss_after_mib": 116.8671875,
+      "heap_after_mib": 17.593388557434082,
+      "frames": [
+        "16367592025593854719"
+      ]
+    },
+    {
+      "workload": "typing",
+      "history_rows": 20,
+      "variant": "lustre",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 2.119203300000007,
+      "p95_ms": 4.77643999999998,
+      "min_trial_mean_ms": 1.826920800000001,
+      "max_trial_mean_ms": 2.2790463583333294,
+      "import_ms": 227.04215,
+      "mount_ms": 40.800745000000006,
+      "history_ms": 59.74734699999999,
+      "rss_mounted_mib": 89.05078125,
+      "rss_after_mib": 141.64453125,
+      "heap_after_mib": 18.765244483947754,
+      "frames": [
+        "16367592025593854719"
+      ]
+    },
+    {
+      "workload": "typing",
+      "history_rows": 200,
+      "variant": "typescript",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 1.4529603333333332,
+      "p95_ms": 3.344238000000132,
+      "min_trial_mean_ms": 1.3162200666666612,
+      "max_trial_mean_ms": 1.5092496249999916,
+      "import_ms": 625.931716,
+      "mount_ms": 26.975080999999932,
+      "history_ms": 193.257702,
+      "rss_mounted_mib": 158.87109375,
+      "rss_after_mib": 202.09765625,
+      "heap_after_mib": 44.579670906066895,
+      "frames": [
+        "18063588590898857322"
+      ]
+    },
+    {
+      "workload": "typing",
+      "history_rows": 200,
+      "variant": "core",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 2.1747693750000052,
+      "p95_ms": 4.339203999999995,
+      "min_trial_mean_ms": 2.1539182083333333,
+      "max_trial_mean_ms": 2.3113717083333296,
+      "import_ms": 209.62846199999998,
+      "mount_ms": 24.88660200000001,
+      "history_ms": 263.949801,
+      "rss_mounted_mib": 83.6875,
+      "rss_after_mib": 157.3359375,
+      "heap_after_mib": 25.6346492767334,
+      "frames": [
+        "8978557322743930774"
+      ]
+    },
+    {
+      "workload": "typing",
+      "history_rows": 200,
+      "variant": "signals",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 2.65750979166667,
+      "p95_ms": 4.759945000000016,
+      "min_trial_mean_ms": 2.454146408333341,
+      "max_trial_mean_ms": 3.115039474999993,
+      "import_ms": 212.70494599999998,
+      "mount_ms": 27.658468999999997,
+      "history_ms": 388.216173,
+      "rss_mounted_mib": 83.87890625,
+      "rss_after_mib": 169.7109375,
+      "heap_after_mib": 31.107314109802246,
+      "frames": [
+        "8978557322743930774"
+      ]
+    },
+    {
+      "workload": "typing",
+      "history_rows": 200,
+      "variant": "lustre",
+      "trials": 5,
+      "samples_per_trial": 120,
+      "mean_ms": 2.509461858333327,
+      "p95_ms": 4.6971900000000915,
+      "min_trial_mean_ms": 2.367264841666674,
+      "max_trial_mean_ms": 2.62580799166666,
+      "import_ms": 233.67890799999998,
+      "mount_ms": 33.685599999999994,
+      "history_ms": 481.614806,
+      "rss_mounted_mib": 88.3671875,
+      "rss_after_mib": 200.91796875,
+      "heap_after_mib": 41.926565170288086,
+      "frames": [
+        "8978557322743930774"
+      ]
+    }
+  ],
+  "logs": []
+}

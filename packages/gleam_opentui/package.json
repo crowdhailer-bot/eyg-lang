@@ -1,0 +1,6 @@
+{
+  "name": "@eyg/gleam-opentui",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@opentui/core": "0.5.14" }
+}
