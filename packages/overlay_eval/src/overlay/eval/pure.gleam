@@ -24,6 +24,7 @@ import gleam/result
 import gleam/string
 import oas/generator/utils
 import overlay/agent
+import overlay/eval/process
 import overlay/llm/chat
 import overlay/llm/provider/ollama
 import overlay/llm/tool
@@ -157,13 +158,10 @@ fn finish(result) {
     Ok(Nil) -> io.println("PASS: Fibonacci sum = 17710")
     Error(reason) -> {
       io.println_error("FAIL: " <> reason)
-      exit_code(1)
+      process.exit_code(1)
     }
   }
 }
-
-@external(javascript, "./process.mjs", "exitCode")
-fn exit_code(code: Int) -> Nil
 
 fn pure_prompt(syntax, builtins) {
   agent.introduction <> "
