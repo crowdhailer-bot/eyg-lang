@@ -1,0 +1,21 @@
+{
+  "name": "todomvc-typescript-eyg",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "eyg": "cd ../../packages/embed_js && bun run build",
+    "dev": "bun run eyg && vite",
+    "check": "bun run eyg && tsc",
+    "test": "bun test",
+    "build": "bun run eyg && tsc && vite build"
+  },
+  "dependencies": {
+    "todomvc-app-css": "^2.4.3"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5"
+  }
+}
