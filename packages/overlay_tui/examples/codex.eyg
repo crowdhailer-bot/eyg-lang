@@ -1,0 +1,18 @@
+// Uses an existing Codex login without writing or refreshing credentials.
+let codex = import "../../../eyg_packages/overlay/codex.eyg"
+let home = match perform Env("HOME") {
+  Some(home) -> { home }
+  None(_) -> { !never(perform Abort("HOME is not set")) }
+}
+let provider = match codex.read(!string_append(home, "/.codex/auth.json")) {
+  Ok(provider) -> { provider }
+  Error(reason) -> { !never(perform Abort(reason)) }
+}
+{
+  llm: {provider, model: "gpt-5.5"},
+  policy: {
+    standard_out: (text) -> { Pass(text) },
+    now: (input) -> { Pass(input) }
+  },
+  context: {readme: "Demonstrate EYG expressions. StandardOut and Now are available. Other external effects are not permitted."}
+}

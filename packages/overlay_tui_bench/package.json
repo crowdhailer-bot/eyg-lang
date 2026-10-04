@@ -1,0 +1,6 @@
+{
+  "name": "@eyg/tui-bench",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@opentui/core": "0.5.14" }
+}

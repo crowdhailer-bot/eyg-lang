@@ -126,6 +126,12 @@ carousel, video, and Bluesky viewer functions.
 [`playwright`](./eyg_packages/playwright/) checks and drives shown artifacts with the Playwright API.
 See the [artifact design and effect contract](./guides/overlay_artifacts.md).
 
+- [overlay_tui](./packages/overlay_tui/) OpenTUI/Solid CLI with text and structural REPLs, streaming overlay sessions, and inspectable effects.
+- [overlay_tui_core](./packages/overlay_tui_core/), [overlay_tui_signals](./packages/overlay_tui_signals/) and [overlay_tui_lustre](./packages/overlay_tui_lustre/) Gleam versions using direct OpenTUI bindings, a pure Gleam signal graph, and Lustre's VDOM. The [HTML presentation](./packages/overlay_tui_bench/presentation.html) compares their architecture, recordings, benchmarks and maintenance trade-offs.
+- [overlay_terminal](./packages/overlay_terminal/) Shared Gleam runtime for the terminal frontend experiments, including structural editing and subprocess IPC.
+- [gleam_opentui](./packages/gleam_opentui/) Direct OpenTUI bindings, including headless testing, clipboard and tree-sitter.
+- [plinthx](./packages/plinthx/) Local host bindings for the terminal experiments, following Plinth's platform API conventions.
+
 ## Philosophy
 
 **Building better languages and tools; for some measure of better.**

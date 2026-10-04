@@ -137,3 +137,17 @@ Upload a module that can be referenced by hash.
 # packages/gleam_cli
 EYG_ORIGIN=http://localhost:8001 gleam run -- publish standard ../../eyg_packages/standard/index.eyg.json 
 ```
+
+## Terminal frontends
+
+The terminal libraries are grouped in `overlay_terminal`, `overlay_tui`,
+`overlay_tui_core`, `overlay_tui_signals` and `overlay_tui_lustre`. Direct OpenTUI
+bindings are in the independent `gleam_opentui` package; browser bindings are
+in Plinth. Run `bun install --frozen-lockfile` in each frontend and
+`gleam_opentui` before building or testing. The Gleam frontend tests use the
+real native headless renderer. The TypeScript frontend also requires
+`bun run typecheck` and `bun test`. CI runs both sets.
+
+See the [benchmark guide](./packages/overlay_tui_bench/README.md) to reproduce
+the terminal comparison. The benchmark package is built in CI; timing results
+are recorded separately because they depend on the machine and workload.

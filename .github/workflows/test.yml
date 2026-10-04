@@ -126,6 +126,14 @@ jobs:
           "overlay_eval",
           "html_parser",
           "plinth",
+          "plinthx",
+          "gleam_opentui",
+          "overlay_terminal",
+          "overlay_tui",
+          "overlay_tui_core",
+          "overlay_tui_signals",
+          "overlay_tui_lustre",
+          "overlay_tui_bench",
           "overlay_public",
           "overlay_web",
           "pal",
@@ -143,6 +151,10 @@ jobs:
         with:
           otp-version: ${{matrix.otp}}
           gleam-version: ${{matrix.gleam}}
+      - name: Install native terminal dependencies
+        if: contains(fromJSON('["gleam_opentui", "overlay_tui", "overlay_tui_core", "overlay_tui_signals", "overlay_tui_lustre", "overlay_tui_bench"]'), matrix.package)
+        run: bun install --frozen-lockfile
+        working-directory: packages/${{matrix.package}}
       - run: gleam deps download
         shell: bash # Required for git deps
         working-directory: packages/${{matrix.package}}
@@ -152,9 +164,18 @@ jobs:
       - run: gleam build --target javascript --warnings-as-errors
         working-directory: packages/${{matrix.package}}
       - run: gleam test --target javascript --runtime bun
+        if: matrix.package != 'overlay_tui_bench' && matrix.package != 'overlay_tui'
         working-directory: packages/${{matrix.package}}
-      - run: gleam format --check src test
+      - run: |
+          gleam format --check src
+          if [ -d test ]; then gleam format --check test; fi
         working-directory: packages/${{matrix.package}}
+      - name: Check the TypeScript terminal frontend
+        if: matrix.package == 'overlay_tui'
+        working-directory: packages/overlay_tui
+        run: |
+          bun run typecheck
+          bun test
       - name: Validate eval suites
         if: matrix.package == 'overlay_eval'
         working-directory: packages/overlay_eval

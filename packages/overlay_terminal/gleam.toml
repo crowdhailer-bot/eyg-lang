@@ -1,0 +1,34 @@
+name = "overlay_terminal"
+version = "0.1.0"
+target = "javascript"
+
+[dependencies]
+plinth = { path = "../plinth" }
+plinthx = { path = "../plinthx" }
+filepath = ">= 1.0.0 and < 2.0.0"
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+gleam_javascript = ">= 1.0.0 and < 2.0.0"
+gleam_json = ">= 3.1.0 and < 4.0.0"
+gleam_regexp = ">= 1.1.0 and < 2.0.0"
+gleam_http = ">= 4.0.0 and < 5.0.0"
+eyg_cli = { path = "../gleam_cli" }
+eyg_analysis = { path = "../gleam_analysis" }
+eyg_interpreter = { path = "../gleam_interpreter" }
+eyg_hub = { path = "../gleam_hub" }
+eyg_ir = { path = "../gleam_ir" }
+eyg_parser = { path = "../gleam_parser" }
+loam = { path = "../loam" }
+morph = { path = "../morph" }
+overlay = { path = "../overlay" }
+overlay_llm = { path = "../overlay_llm" }
+lustre = "== 5.7.1"
+multiformats = ">= 4.0.0 and < 5.0.0"
+touch_grass = { path = "../touch_grass" }
+oas_generator_utils = ">= 1.0.0 and < 2.0.0"
+
+[javascript]
+runtime = "bun"
+typescript_declarations = true
+
+[dev_dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"

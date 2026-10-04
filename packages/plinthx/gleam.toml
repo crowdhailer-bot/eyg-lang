@@ -1,0 +1,17 @@
+name = "plinthx"
+version = "0.1.0"
+target = "javascript"
+description = "Low-level host bindings used by the EYG terminal experiments"
+
+[dependencies]
+plinth = { path = "../plinth" }
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+gleam_javascript = ">= 1.0.0 and < 2.0.0"
+gleam_json = ">= 3.1.0 and < 4.0.0"
+
+[javascript]
+runtime = "bun"
+typescript_declarations = true
+
+[dev_dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"

@@ -1,0 +1,22 @@
+{
+  "name": "@eyg/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "eyg-tui": "src/main.ts" },
+  "scripts": {
+    "build": "gleam build --target javascript --warnings-as-errors",
+    "dev": "bun --preload @opentui/solid/preload src/main.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opentui/core": "0.5.14",
+    "@opentui/solid": "0.5.14",
+    "solid-js": "1.9.12"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  }
+}
