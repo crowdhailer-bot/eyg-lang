@@ -85,6 +85,8 @@ pub type Effect(m) {
     resume: fn(Nil) -> Effect(m),
   )
   Prompt(question: String, resume: fn(Result(String, Nil)) -> Effect(m))
+  /// Read text from a file explicitly selected by the user, with I/O failures as values.
+  ReadTextFile(file: file.File, resume: fn(Result(String, String)) -> Effect(m))
   ReadFromClipboard(resume: fn(Result(String, String)) -> Effect(m))
   ReadChunk(
     reader: Reader,
@@ -163,6 +165,8 @@ pub fn then(effect: Effect(a), func: fn(a) -> Effect(b)) -> Effect(b) {
       Prompt(question, fn(x) { then(resume(x), func) })
     RequestFrame(selector, message, timeout, resume) ->
       RequestFrame(selector, message, timeout, fn(x) { then(resume(x), func) })
+    ReadTextFile(file, resume) ->
+      ReadTextFile(file, fn(x) { then(resume(x), func) })
     ReadFromClipboard(resume) ->
       ReadFromClipboard(fn(x) { then(resume(x), func) })
     ReadChunk(reader, resume) ->
@@ -214,6 +218,16 @@ pub fn run(effect: Effect(m)) -> Promise(m) {
     Alert(message:, resume:) -> {
       window.alert(message)
       run(resume())
+    }
+    ReadTextFile(file, resume) -> {
+      let reading =
+        file.text(file)
+        |> promise.map(Ok)
+        |> promise.rescue(fn(_) {
+          Error("The browser could not read the selected file")
+        })
+      use result <- promise.await(reading)
+      run(resume(result))
     }
     Download(input:, resume:) -> {
       download_file(input)

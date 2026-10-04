@@ -1,7 +1,9 @@
 import gleam/bit_array
 import gleam/dict
+import gleam/dynamic/decode
 import gleam/int
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/string
 import lustre/attribute as a
 import lustre/element
@@ -13,12 +15,12 @@ import overlay/web/artifact as art
 import overlay/web/artifact/session
 import overlay/web/puppet
 import overlay/web/state
+import plinth/browser/file
 
-pub fn render(
-  store: art.Store,
-  status: session.Status,
-  dirty: Bool,
-) -> element.Element(state.Message) {
+pub fn render(model: state.State) -> element.Element(state.Message) {
+  let store = model.artifacts
+  let status = model.artifact_storage
+  let dirty = model.artifacts_dirty
   h.section(
     [
       a.class("artifact-workspace"),
@@ -35,6 +37,7 @@ pub fn render(
     [
       h.div([a.class("workspace-heading")], [h.text("ARTIFACT WORKSPACE")]),
       storage_status(store, status, dirty),
+      transfer_controls(model),
       case store.panels {
         [] -> library(store)
         panels ->
@@ -47,6 +50,48 @@ pub fn render(
       },
     ],
   )
+}
+
+fn transfer_controls(model: state.State) {
+  h.div([a.class("artifact-transfer")], [
+    case dict.size(model.artifacts.versions) {
+      0 -> {
+        let busy = case model.status {
+          state.Waiting -> False
+          _ -> True
+        }
+        h.label([], [
+          h.span([], [h.text("Import workspace")]),
+          h.input([
+            a.type_("file"),
+            a.attribute("accept", ".json,application/json"),
+            a.attribute("aria-label", "Import workspace"),
+            a.disabled(busy),
+            event.on(
+              "change",
+              decode.map(
+                decode.at(["target", "files", "0"], decode.dynamic),
+                fn(raw) {
+                  case file.from_dynamic(raw) {
+                    Ok(file) -> state.UserSelectedArtifactFile(file)
+                    Error(Nil) -> state.Ignore
+                  }
+                },
+              ),
+            ),
+          ]),
+        ])
+      }
+      _ ->
+        h.button([event.on_click(state.UserExportedArtifacts)], [
+          h.text("Download workspace"),
+        ])
+    },
+    case model.artifact_import_error {
+      None -> element.none()
+      Some(reason) -> h.p([a.attribute("role", "alert")], [h.text(reason)])
+    },
+  ])
 }
 
 fn library(store: art.Store) {

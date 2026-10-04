@@ -71,6 +71,7 @@ ogre = { version = ">= 1.1.0 and < 2.0.0" }
 overlay = { path = "../overlay" }
 overlay_llm = { version = ">= 0.2.0 and < 1.0.0" }
 pal = { path = "../pal" }
+plinth = { path = "../plinth" }
 spotless = { version = ">= 7.0.0 and < 8.0.0" }
 touch_grass = { version = ">= 0.2.11 and < 1.0.0" }
 untethered = { path = "../untethered" }

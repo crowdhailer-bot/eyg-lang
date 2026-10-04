@@ -1,4 +1,4 @@
-import { BitArray$BitArray } from "./gleam.mjs";
+import { BitArray$BitArray, Result$Ok, Result$Error } from "./gleam.mjs";
 
 export function new_(fileBits, fileName) {
   return new File([fileBits.rawBuffer], fileName);
@@ -32,3 +32,9 @@ export function createObjectURL(file) {
   return URL.createObjectURL(file);
 }
 
+
+export function fromDynamic(raw) {
+  return typeof globalThis.File === "function" && raw instanceof globalThis.File
+    ? Result$Ok(raw)
+    : Result$Error();
+}

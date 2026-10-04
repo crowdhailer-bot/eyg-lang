@@ -162,3 +162,55 @@ pub fn a_completed_share_is_saved_even_while_the_agent_is_busy_test() {
     == dict.get(restored.shares, #("map", 1))
   let assert state.Executing([]) = next.status
 }
+
+pub fn portable_copies_preserve_content_without_sharing_secrets_test() {
+  let public_copy = saved_store()
+  let owned =
+    art.share(public_copy, "map", 1, art.Shared("id", "private-share-secret"))
+  let exported = session.export(owned)
+  assert !string.contains(exported, "private-share-secret")
+  assert Ok(public_copy) == session.import_copy(exported)
+  // Imported snapshots cannot bring ownership secrets into another tab either.
+  assert Ok(public_copy) == session.import_copy(session.encode(owned))
+  let current = state.State(..helpers.init_default(), artifacts: owned)
+  let #(_, actions) = state.update(current, state.UserExportedArtifacts)
+  let assert [system.Download(input, _)] = actions
+  assert "eyg-artifacts.json" == input.name
+  assert Ok(exported) == bit_array.to_string(input.content)
+}
+
+pub fn import_keeps_existing_work_even_if_it_started_while_the_file_was_read_test() {
+  let current = state.State(..helpers.init_default(), artifacts: saved_store())
+  let #(next, actions) =
+    state.update(current, state.ArtifactFileRead(Ok(session.encode(art.new()))))
+  assert current.artifacts == next.artifacts
+  let assert Some(_) = next.artifact_import_error
+  assert [] == actions
+  let current = state.State(..helpers.init_default(), status: state.Asking([]))
+  let #(next, actions) =
+    state.update(
+      current,
+      state.ArtifactFileRead(Ok(session.encode(saved_store()))),
+    )
+  assert art.new() == next.artifacts
+  let assert Some(_) = next.artifact_import_error
+  assert [] == actions
+}
+
+pub fn importing_into_an_empty_tab_saves_a_validated_copy_test() {
+  let #(next, actions) =
+    state.update(
+      helpers.init_default(),
+      state.ArtifactFileRead(Ok(session.encode(saved_store()))),
+    )
+  assert saved_store() == next.artifacts
+  let assert [system.SetSessionStorageItem("overlay.artifacts", _, _)] = actions
+  let #(next, actions) =
+    state.update(
+      helpers.init_default(),
+      state.ArtifactFileRead(Error("unreadable file")),
+    )
+  assert Some("unreadable file") == next.artifact_import_error
+  assert art.new() == next.artifacts
+  assert [] == actions
+}

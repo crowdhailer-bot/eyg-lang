@@ -1,3 +1,4 @@
+import gleam/dynamic.{type Dynamic}
 import gleam/javascript/promise.{type Promise}
 import plinth/browser/blob.{type Blob}
 
@@ -28,3 +29,7 @@ pub fn size(file: File) -> Int
 
 @external(javascript, "../../file_ffi.mjs", "createObjectURL")
 pub fn create_object_url(object: File) -> String
+
+/// Check that a value is a native File from this browser context.
+@external(javascript, "../../file_ffi.mjs", "fromDynamic")
+pub fn from_dynamic(raw: Dynamic) -> Result(File, Nil)

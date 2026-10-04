@@ -72,6 +72,19 @@ to retain those changes. The browser quota can be smaller than the 16 MiB
 artifact history limit. Saved bundles are validated again before restoration;
 malformed snapshots are reported and do not replace work already in progress.
 
+### Portable workspace files
+
+**Download workspace** saves files, all revisions and panel layout as
+`eyg-artifacts.json`. It works with the live workspace even if session storage
+is full. The file contains artifact contents; it does not contain provider
+credentials, chat history or sharing ownership secrets.
+
+Open a new Overlay tab and choose that file with **Import workspace**. Imports
+are limited to 32 MiB and pass the same artifact validation as session recovery.
+Import is available only in an empty, idle workspace, and a file that finishes
+reading after work has started cannot replace that work. An imported copy can
+be shared independently; it does not update the original's public links.
+
 ### Local srcdoc wrapper
 
 ```text

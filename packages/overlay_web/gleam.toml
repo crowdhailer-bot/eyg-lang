@@ -3,6 +3,7 @@ version = "0.0.0"
 target = "javascript"
 
 [dependencies]
+plinth = { path = "../plinth" }
 gleam_stdlib = ">= 1.0.0 and < 2.0.0"
 castor = ">= 2.1.0 and < 3.0.0"
 eyg_analysis = ">= 2.0.0 and < 3.0.0"

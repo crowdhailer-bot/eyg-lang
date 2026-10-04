@@ -144,3 +144,13 @@ fn share_decoder() {
   use shared <- decode.field("shared", schema.shared_artifact_decoder())
   decode.success(#(name, version, shared))
 }
+
+/// A portable copy contains files and layout, without ownership secrets.
+pub fn export(store: art.Store) -> String {
+  encode(art.Store(..store, shares: dict.new()))
+}
+
+pub fn import_copy(stored: String) -> Result(art.Store, String) {
+  restore(stored)
+  |> result.map(fn(store) { art.Store(..store, shares: dict.new()) })
+}

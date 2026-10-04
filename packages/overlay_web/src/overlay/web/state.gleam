@@ -37,6 +37,7 @@ import overlay/web/puppet
 import overlay/web/tools
 import overlay/web/workspace
 import pal/system
+import plinth/browser/file
 import touch_grass/download
 import touch_grass/now
 import untethered/ledger/client as ledger
@@ -66,6 +67,7 @@ pub type State {
     artifact_storage: artifact_session.Status,
     artifacts_dirty: Bool,
     artifact_save_revision: Int,
+    artifact_import_error: Option(String),
     /// Rounds of tool calls since the last prompt.
     steps: Int,
     /// The policy as written by the user, applied with `UserAppliedPolicy`.
@@ -114,6 +116,7 @@ pub fn new(config: Config) -> State {
     artifact_storage: artifact_session.Saved,
     artifacts_dirty: False,
     artifact_save_revision: 0,
+    artifact_import_error: None,
     steps: 0,
     policy_source: "",
     policy: None,
@@ -203,6 +206,9 @@ pub type Message {
   ArtifactsLoaded(Result(Option(String), String))
   ArtifactsSaved(revision: Int, result: Result(Nil, String))
   UserRetriedArtifactSave
+  UserExportedArtifacts
+  UserSelectedArtifactFile(file.File)
+  ArtifactFileRead(Result(String, String))
   UserClickedShare(artifact.Item)
   ArtifactShared(
     name: String,
@@ -269,6 +275,60 @@ fn do_update(
   message: Message,
 ) -> #(State, List(system.Effect(Message))) {
   case message {
+    UserExportedArtifacts -> {
+      let content = artifact_session.export(state.artifacts)
+      let action =
+        system.Download(
+          download.Input("eyg-artifacts.json", <<content:utf8>>),
+          fn() { system.Done(Ignore) },
+        )
+      #(state, [action])
+    }
+    UserSelectedArtifactFile(file) ->
+      case can_import_artifacts(state), file.size(file) <= 33_554_432 {
+        False, _ -> #(
+          State(
+            ..state,
+            artifact_import_error: Some(
+              "Open an empty, idle tab to import artifacts",
+            ),
+          ),
+          [],
+        )
+        True, False -> #(
+          State(
+            ..state,
+            artifact_import_error: Some(
+              "Choose a workspace file no larger than 32 MiB",
+            ),
+          ),
+          [],
+        )
+        True, True -> {
+          let action =
+            system.ReadTextFile(file, fn(result) {
+              system.Done(ArtifactFileRead(result))
+            })
+          #(State(..state, artifact_import_error: None), [action])
+        }
+      }
+    ArtifactFileRead(result) -> {
+      let restored = case can_import_artifacts(state) {
+        False ->
+          Error("Work has started in this tab. Import into a new, empty tab")
+        True -> result.try(result, artifact_session.import_copy)
+      }
+      case restored {
+        Ok(artifacts) -> #(
+          State(..state, artifacts:, artifact_import_error: None),
+          [],
+        )
+        Error(reason) -> #(
+          State(..state, artifact_import_error: Some(reason)),
+          [],
+        )
+      }
+    }
     ArtifactsLoaded(stored) -> {
       // A late storage read must not replace work already created this session.
       case state.artifacts == artifact.new(), stored {
@@ -802,5 +862,12 @@ fn workspace_instructions(files) {
 This session has a workspace file system. Use file effects to read and change it. Paths are relative to its root and cannot leave it.
 "
     None -> ""
+  }
+}
+
+fn can_import_artifacts(state: State) -> Bool {
+  case state.status {
+    Waiting -> state.artifacts == artifact.new()
+    _ -> False
   }
 }

@@ -228,6 +228,11 @@ fn perform(
       perform(log(session, transcript.Download(input.name)), resume())
     system.WriteToClipboard(text:, resume:) ->
       perform(log(session, transcript.Copy(text)), resume(Ok(Nil)))
+    system.ReadTextFile(resume:, ..) ->
+      perform(
+        session,
+        resume(Error("File selection is unavailable in an eval")),
+      )
     system.ReadFromClipboard(resume:) ->
       perform(session, resume(Error("the clipboard is empty in an eval")))
     system.RequestFrame(resume:, ..) ->

@@ -469,7 +469,7 @@ pre {
   }
 
   .artifact-workspace { position: relative; height: 80dvh; padding-top: 12px; }
-  .artifact-workspace.empty { display: none; }
+  .artifact-workspace.empty { height: auto; min-height: 220px; }
 
   .hero>h1 {
     font-size: 400%;
@@ -586,3 +586,9 @@ pre {
 .artifact-library-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .artifact-library button { cursor: pointer; background: #111; color: white; border: 1px solid #111; padding: 5px 8px; font: inherit; }
 .artifact-library button:focus-visible { outline: 2px solid #4165dc; outline-offset: 3px; }
+
+.artifact-transfer { margin-bottom: 8px; font-size: 12px; }
+.artifact-transfer label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.artifact-transfer input { max-width: 100%; min-width: 0; font: inherit; }
+.artifact-transfer button { cursor: pointer; background: white; border: 1px solid #aaa; padding: 5px 8px; font: inherit; }
+.artifact-transfer [role="alert"] { margin: 6px 0; color: #a22622; }

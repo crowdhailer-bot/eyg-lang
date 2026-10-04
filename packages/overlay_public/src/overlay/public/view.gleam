@@ -80,11 +80,7 @@ pub fn render(model: state.State) {
           state.Ignore,
         ),
       ]),
-      artifacts.render(
-        model.artifacts,
-        model.artifact_storage,
-        model.artifacts_dirty,
-      ),
+      artifacts.render(model),
     ],
   )
 }
