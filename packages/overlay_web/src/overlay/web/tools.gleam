@@ -29,6 +29,7 @@ import overlay/tools/guide
 import overlay/tools/run
 import overlay/web/artifact
 import overlay/web/puppet
+import overlay/web/workspace
 import pal/platform/browser
 import pal/system
 import touch_grass as tg
@@ -43,6 +44,7 @@ pub type Context {
     effects: List(system.Effect(#(Int, state.Value(Meta)))),
     context: cache.Module(Meta),
     artifacts: artifact.Store,
+    workspace: Option(workspace.Workspace),
     origin: origin.Origin,
     /// Without a policy every effect is performed.
     policy: Option(policy.Policy(state.Value(Meta))),
@@ -114,7 +116,7 @@ fn run_code(ctx: Context, id: String, code: String) -> #(Context, Progress) {
   case parser.all_from_string(code) {
     Ok(source) -> {
       let source = ir.map_annotation(source, fn(_) { [] })
-      case check_single(source, ctx.cache, ctx.context) {
+      case check_single(source, ctx) {
         [] -> {
           let #(ctx, output, call) =
             source
@@ -150,13 +152,12 @@ fn run_code(ctx: Context, id: String, code: String) -> #(Context, Progress) {
 
 fn check_single(
   source: #(ir.Expression(a), a),
-  cache: cache.Cache(b),
-  context: cache.Module(_),
+  ctx: Context,
 ) -> List(#(a, error.Reason)) {
   let analysis =
-    overlay_check.agent(effects(), context.type_)
+    overlay_check.agent(session_effects(ctx.workspace), ctx.context.type_)
     |> infer.check(source)
-    |> cache.infer_sync(cache)
+    |> cache.infer_sync(ctx.cache)
   infer.all_errors(analysis)
 }
 
@@ -296,7 +297,32 @@ fn workspace_effects() {
   ]
 }
 
+/// Workspace effects still pass through the same policy as all other effects.
 fn perform(label, lift, env, k, ctx: Context, output) {
+  case ctx.workspace, interface.cast(workspace.effects(), label, lift) {
+    Some(files), Ok(effect) -> {
+      let #(files, value) = workspace.perform(files, effect)
+      let ctx = Context(..ctx, workspace: Some(files))
+      loop(expression.resume(value, env, k), ctx, output)
+    }
+    Some(_), Error(break.UnhandledEffect(..)) | None, _ ->
+      artifact_perform(label, lift, env, k, ctx, output)
+    Some(_), Error(reason) -> #(ctx, output, Exception(reason))
+  }
+}
+
+pub fn session_effects(files: Option(workspace.Workspace)) {
+  case files {
+    None -> effects()
+    Some(_) ->
+      list.append(
+        effects(),
+        list.map(workspace.effects(), tg.map(_, fn(_) { Nil })),
+      )
+  }
+}
+
+fn artifact_perform(label, lift, env, k, ctx: Context, output) {
   case interface.cast(workspace_effects(), label, lift) {
     Ok(ArtifactEffect(effect)) -> {
       let #(artifacts, value) = artifact.perform(ctx.artifacts, effect)
@@ -487,7 +513,7 @@ pub fn pulled(ctx: Context, progress: Progress) -> #(Context, Progress) {
   case call {
     Pulling(source) -> {
       // TODO move to cache.infer_sync that will gather need to pull and to fetch references
-      case check_single(source, ctx.cache, ctx.context) {
+      case check_single(source, ctx) {
         [] -> {
           let #(ctx, output, call) =
             source
@@ -529,7 +555,7 @@ pub fn check_fetching(
       let cids = list.filter(cids, still_fetching(_, ctx.cache))
       case cids {
         [] ->
-          case check_single(source, ctx.cache, ctx.context) {
+          case check_single(source, ctx) {
             [] -> {
               let #(ctx, output, call) =
                 source

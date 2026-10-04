@@ -1,5 +1,6 @@
 import eyg/hub/cache
 import eyg/hub/publisher
+import eyg/interpreter/value
 import eyg/ir/dag_json
 import eyg/ir/tree as ir
 import gleam/bit_array
@@ -22,6 +23,7 @@ import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/state.{State}
 import overlay/web/tools
+import overlay/web/workspace
 import pal/system
 import untethered/ledger/schema
 import untethered/substrate
@@ -1010,4 +1012,105 @@ pub fn export_downloads_the_chat_test() {
   assert string.starts_with(input.name, "overlay-session-")
   let assert Ok(content) = bit_array.to_string(input.content)
   assert string.contains(content, "\"text\":\"hello\"")
+}
+
+pub fn finished_runs_keep_computed_values_test() {
+  let status =
+    chat_completion("")
+    |> with_code("first", "!int_add(2, 3)")
+    |> with_code("second", "perform Alert(\"Hello World\")")
+    |> streaming
+  let state = State(..init_default(), status:)
+  let #(state, actions) = state.update(state, state.LlmStreamFinished(Ok(Nil)))
+  // Nothing is kept until every call of the completion has finished.
+  assert [] == state.runs
+  let assert [system.Alert("Hello World", resume:)] = actions
+  let assert system.Done(message) = resume()
+  let #(state, _actions) = state.update(state, message)
+  let assert [second, first] = state.runs
+  assert "first" == first.id
+  assert tools.Successful(value.Integer(5)) == first.call
+  assert "second" == second.id
+  assert tools.Successful(value.unit()) == second.call
+}
+
+pub fn workspace_sessions_can_change_files_test() {
+  let code =
+    "let _ = perform WriteFile({path: \"notes.md\", contents: !string_to_binary(\"hi\")})
+match perform ReadFile({path: \"notes.md\", offset: 0, limit: 10}) {
+  Ok(bytes) -> { !string_from_binary(bytes) }
+  Error(reason) -> { Error({}) }
+}"
+  let status = chat_completion("") |> with_code("abc", code) |> streaming
+  let files = workspace.new()
+  let state = State(..init_default(), status:, workspace: Some(files))
+  let #(state, actions) = state.update(state, state.LlmStreamFinished(Ok(Nil)))
+  assert state.Asking([chat.ToolResultMessage("abc", "Ok(\"hi\")", [])])
+    == state.status
+  let assert Some(files) = state.workspace
+  assert [#("notes.md", <<"hi">>)] == workspace.files(files)
+
+  // The system prompt only offers file effects to sessions with a workspace.
+  let assert [system.FetchStreamResponse(request:, resume: _)] = actions
+  let assert Ok([#("system", prompt), ..]) =
+    json.parse_bits(request.body, helpers.ollama_messages_decoder())
+  assert string.contains(prompt, "ReadFile")
+}
+
+pub fn file_effects_need_a_workspace_test() {
+  let code = "perform ReadFile({path: \"notes.md\", offset: 0, limit: 10})"
+  let status = chat_completion("") |> with_code("abc", code) |> streaming
+  let state = State(..init_default(), status:)
+  let #(state, actions) = state.update(state, state.LlmStreamFinished(Ok(Nil)))
+  let assert state.Asking([chat.ToolResultMessage("abc", reason, [])]) =
+    state.status
+  assert string.contains(reason, "ReadFile")
+  assert None == state.workspace
+  let assert [system.FetchStreamResponse(request:, resume: _)] = actions
+  let assert Ok([#("system", prompt), ..]) =
+    json.parse_bits(request.body, helpers.ollama_messages_decoder())
+  assert !string.contains(prompt, "ReadFile")
+}
+
+pub fn system_prompt_lists_effect_types_test() {
+  let #(_state, actions) = submit_first_prompt("hello")
+  let assert [system.FetchStreamResponse(request:, resume: _)] = actions
+  let assert Ok([#("system", prompt), ..]) =
+    json.parse_bits(request.body, helpers.ollama_messages_decoder())
+  assert string.contains(prompt, "\n- Alert(String) -> {}\n")
+}
+
+pub fn workspace_writes_are_checked_by_policy_test() {
+  let state = with_policy("{}")
+  let status =
+    chat_completion("")
+    |> with_code(
+      "write",
+      "perform WriteFile({path: \"notes.md\", contents: !string_to_binary(\"hi\")})",
+    )
+    |> streaming
+  let state = State(..state, status:, workspace: Some(workspace.new()))
+  let #(state, _) = state.update(state, state.LlmStreamFinished(Ok(Nil)))
+  let assert Some(files) = state.workspace
+  assert [] == workspace.files(files)
+  let assert state.Asking([chat.ToolResultMessage("write", reason, [])]) =
+    state.status
+  assert string.contains(reason, "not permitted")
+}
+
+pub fn artifacts_are_checked_by_policy_test() {
+  let state = with_policy("{}")
+  let status =
+    chat_completion("")
+    |> with_code(
+      "artifact",
+      "perform Artifact({name: \"denied\", bundle: [{path: \"index.html\", media_type: \"text/html\", content: !string_to_binary(\"hello\")}]})",
+    )
+    |> streaming
+  let #(state, _) =
+    state.update(State(..state, status:), state.LlmStreamFinished(Ok(Nil)))
+  let assert state.Asking([chat.ToolResultMessage("artifact", reason, [])]) =
+    state.status
+  assert string.contains(reason, "not permitted")
+  let assert Error(_) = artifact.revision(state.artifacts, "denied", 1)
 }

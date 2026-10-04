@@ -129,6 +129,7 @@ fn fresh() {
     artifacts: a.new(),
     origin: origin.https("eyg.run"),
     policy: None,
+    workspace: None,
   )
 }
 

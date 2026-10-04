@@ -34,6 +34,7 @@ import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/puppet
 import overlay/web/tools
+import overlay/web/workspace
 import pal/system
 import touch_grass/download
 import touch_grass/now
@@ -52,6 +53,8 @@ pub type State {
     context: context.Status,
     status: AgentStatus,
     history: List(chat.Message(tool.Call)),
+    runs: List(tools.Progress),
+    workspace: Option(workspace.Workspace),
     input: String,
     input_error: Option(String),
     origin: origin.Origin,
@@ -95,6 +98,8 @@ pub fn new(config: Config) -> State {
     context: status,
     status: Waiting,
     history: [],
+    runs: [],
+    workspace: None,
     input: "",
     input_error: None,
     origin: origin,
@@ -420,6 +425,7 @@ fn do_update(
           State(
             ..state,
             history: [],
+            runs: [],
             steps: 0,
             input_error: None,
             expanded: set.new(),
@@ -437,7 +443,9 @@ fn do_update(
     UserClickedExport -> #(state, [export_history(state)])
     UserUpdatedPolicy(policy_source) -> #(State(..state, policy_source:), [])
     UserAppliedPolicy ->
-      case load_policy(state.policy_source, state.cache) {
+      case
+        load_workspace_policy(state.policy_source, state.cache, state.workspace)
+      {
         Ok(policy) -> #(State(..state, policy:, policy_error: None), [])
         Error(reason) -> #(State(..state, policy_error: Some(reason)), [])
       }
@@ -483,6 +491,7 @@ fn current_context(state: State) {
     effects: [],
     context: context.module(context),
     artifacts: state.artifacts,
+    workspace: state.workspace,
     origin: state.origin,
     policy: state.policy,
   )
@@ -493,7 +502,14 @@ fn current_context(state: State) {
 fn run_effects_if_any_remain_to_do(return, state: State) {
   let #(ctx, calls) = return
 
-  let tools.Context(cache:, counter:, effects: inner, artifacts:, ..) = ctx
+  let tools.Context(
+    cache:,
+    counter:,
+    effects: inner,
+    artifacts:,
+    workspace:,
+    ..,
+  ) = ctx
   let effects =
     list.map(
       inner,
@@ -503,14 +519,16 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
       }),
     )
 
-  let state = State(..state, cache:, counter:, artifacts:)
+  let state = State(..state, cache:, counter:, artifacts:, workspace:)
   let #(state, cache_effects) = flush(state)
   let effects = list.append(cache_effects, effects)
 
   // I think here we do the switch on pulling. 
   case tools.all_returns(calls) {
     Error(Nil) -> #(State(..state, status: Executing(calls)), effects)
-    Ok(messages) ->
+    Ok(messages) -> {
+      let runs = list.fold(calls, state.runs, fn(runs, call) { [call, ..runs] })
+      let state = State(..state, runs:)
       case state.steps >= max_steps {
         True -> {
           let reason =
@@ -525,6 +543,7 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
           #(state, [fetch_completion(state, messages), ..effects])
         }
       }
+    }
   }
 }
 
@@ -602,8 +621,9 @@ fn stream_next_chunk(provider, reader, remaining) {
 fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
   let context =
     agent.provider_context(
-      tools.effects(),
+      tools.session_effects(state.workspace),
       context.instructions(state.context_source, state.context)
+        <> workspace_instructions(state.workspace)
         <> artifact.instructions
         <> puppet.instructions,
       option.is_some(state.policy),
@@ -618,6 +638,10 @@ pub fn load_policy(
   source: String,
   cache: cache.Cache(tools.Meta),
 ) -> Result(Option(policy.Policy(istate.Value(tools.Meta))), String) {
+  load_workspace_policy(source, cache, None)
+}
+
+fn load_workspace_policy(source, cache, workspace) {
   case string.trim(source) {
     "" -> Ok(None)
     code -> {
@@ -638,7 +662,10 @@ pub fn load_policy(
           |> Error
       })
       use Nil <- result.try(
-        overlay_check.policy(infer.poly_type(analysis), tools.effects())
+        overlay_check.policy(
+          infer.poly_type(analysis),
+          tools.session_effects(workspace),
+        )
         |> result.map_error(string.join(_, "\n")),
       )
       use value <- result.try(
@@ -646,7 +673,8 @@ pub fn load_policy(
         |> cache.static_loop(cache, expression.resume)
         |> result.map_error(fn(debug) { simple_debug.describe(debug.0) }),
       )
-      let labels = list.map(tools.effects(), fn(effect) { effect.name })
+      let labels =
+        list.map(tools.session_effects(workspace), fn(effect) { effect.name })
       policy.decode(value, labels) |> result.map(Some)
     }
   }
@@ -672,4 +700,14 @@ fn export_history(state: State) {
     )
   use <- system.Download(input)
   system.Done(Ignore)
+}
+
+fn workspace_instructions(files) {
+  case files {
+    Some(_) ->
+      "
+This session has a workspace file system. Use file effects to read and change it. Paths are relative to its root and cannot leave it.
+"
+    None -> ""
+  }
 }

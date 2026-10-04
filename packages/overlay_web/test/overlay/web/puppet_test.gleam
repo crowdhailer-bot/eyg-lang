@@ -35,6 +35,7 @@ fn shown() {
       artifacts: artifact.new(),
       origin: origin.https("eyg.run"),
       policy: None,
+      workspace: None,
     )
   let #(ctx, _) =
     run(

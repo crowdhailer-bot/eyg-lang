@@ -15,14 +15,7 @@ import overlay/tools/guide
 import overlay/tools/run
 import touch_grass/interface
 
-/// Construct the system prompt for an agent
-/// `policed` is true when the effects are checked by a policy.
-pub fn system_prompt(
-  effects: List(interface.Interface(a, b)),
-  readme: String,
-  policed: Bool,
-) -> String {
-  "You are an expert automation assistant.
+pub const introduction = "You are an expert automation assistant.
 You help users by executing EYG scripts to interact with the users system.
 DO NOT guess any function of effects. Only use what you have seen explained and use the guide tool to learn more about writing EYG code.
 
@@ -30,8 +23,17 @@ ALWAYS use djot syntax for your responses.
 If none of the programs you ran produced an answer, say so, DO NOT estimate or invent results.
 DO NOT write code blocks in your responses unless explicitly asked.
 All code execution uses the 'run' tool.
-Every program has the variable context in scope, it is the module described in the Context section at the end of this prompt.
+Every program has the variable context in scope, it is the module described in the Context section at the end of this prompt."
 
+/// Construct the system prompt for an agent
+/// `policed` is true when the effects are checked by a policy.
+pub fn system_prompt(
+  effects: List(interface.Interface(a, b)),
+  readme: String,
+  policed: Bool,
+) -> String {
+  introduction
+  <> "
 ALWAYS read the syntax guide, using the guide tool, before writing scripts.
 Other guides are builtins and http-fetch.
 
