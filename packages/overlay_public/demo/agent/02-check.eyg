@@ -1,0 +1,13 @@
+// Check the board shows live departures and see what it looks like
+let pw = context.playwright
+let board = pw.page("departures")
+let departures = pw.locator(board, "[data-arrival]")
+let _ = pw.expect(pw.first(departures)).to_be_visible({})
+let next = pw.first(departures)
+let _ = pw.screenshot(board)
+{
+  departures: pw.count(departures),
+  routes: !int_subtract(pw.count(pw.locator(board, "#routes .chip")), 1),
+  next: pw.inner_text(pw.locator(next, ".where strong")),
+  arriving: pw.inner_text(pw.locator(next, ".eta"))
+}
