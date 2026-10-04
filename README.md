@@ -101,6 +101,9 @@ Another reason could be to imagine your own syntax, or even visual editor, and r
 - [gleam_hub](./packages/gleam_hub/) Schemas, encoders and decoders for the EYG Hub API. (Unpublished)
 - [gleam_ir](./packages/gleam_ir/) Data structures for the EYG IR. This is the original implementation of EYG.
 - [gleam_interpreter](./packages/gleam_interpreter/) A Gleam interpreter for EYG targeting JavaScript. Runs in the browser and on the server.
+- [gleam_embed](./packages/gleam_embed/) Run programs, keep a typed shell, exchange JSON values, and add an agent to a JavaScript host written in Gleam.
+- [embed_js](./packages/embed_js/) Build one ES module with TypeScript declarations for JavaScript hosts.
+- [ash_eyg](./packages/ash_eyg/) Expose Ash resource actions as typed effects, with Mix tasks and application-owned package caches.
 - [gleam_parser](./packages/gleam_parser/) Parser for a curly braces syntax for EYG IR.
 - [hub](./packages/hub/) Backend application for [eyg.run](https://eyg.run). Stores modules, packages and signatories.
 - [morph](./packages/morph/) Higher level AST and transformation functions for structural edits. (Unpublished)
@@ -108,6 +111,29 @@ Another reason could be to imagine your own syntax, or even visual editor, and r
 - [untethered](./packages/untethered/) Location independent datastructures to immutably record decisions. Foundation of EYG hub package signing. (Unpublished)
 - [vscode-eyg](./packages/vscode-eyg/) VS Code extension and canonical TextMate grammar, also used by the web guides.
 - [website](./packages/website/) Website for documentation, guides and introduction on [eyg.run](https://eyg.run).
+
+## Embedding EYG
+
+A host supplies the effects a script may perform. EYG checks the complete script
+against those effects before running it. The interpreter, type checker, parser,
+and hub cache can also be used separately; hosts choose the pieces they need.
+
+Start with the browser examples, which use the shared shell and agent libraries.
+The server examples add runtime-specific setup:
+
+| Host | Example | Setup and walkthrough |
+| --- | --- | --- |
+| Gleam / Lustre | [TodoMVC](./examples/todomvc_lustre/) | [Typed effects, shell, and agent](./guides/embedding_todomvc.md) |
+| JavaScript / TypeScript | [TodoMVC](./examples/todomvc_typescript/) | [One bundled ES module](./guides/embedding_typescript.md) |
+| Existing Gleam browser app | [Hashi](./examples/hashi/) | [Script an unchanged game](./guides/embedding_hashi.md); requires Gleam 1.18.1+ |
+| nginx / njs | [Request handler](./examples/njs/) | [Compile EYG to a module](./guides/embedding_njs.md); requires Docker |
+| Erlang / OTP | [Counters](./examples/erl_counter/) | [Effects, supervision, and cached packages](./posts/embedding-eyg-in-erlang/index.md) |
+| Elixir / Phoenix | [LiveView counters](./examples/phoenix_counters/) | [A script editor in an application](./posts/embedding-eyg-in-elixir/index.md) |
+| Elixir / Ash | [Helpdesk](./examples/helpdesk/) | [Derive and restrict effects from resources](./posts/using-eyg-in-ash/index.md) |
+
+The examples include tests and recorded demonstrations. The BEAM hosts currently
+build the EYG libraries from this checkout with Gleam; their READMEs describe the
+setup. [CONTRIBUTING.md](./CONTRIBUTING.md) lists validation commands.
 
 ## EYG packages
 [eyg_packages](./eyg_packages/)

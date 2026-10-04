@@ -20,6 +20,33 @@ Test all the eyg packages.
 eyg script entry.eyg
 ```
 
+### Embedding examples
+
+Use Gleam 1.18.1 or later for Hashi's Git dependencies in subdirectories.
+The browser examples need Bun and a current EYG CLI built from this checkout.
+The Ash package and Phoenix example require Elixir 1.17 or later; the helpdesk
+requires Elixir 1.20 or later. Use a compatible Erlang/OTP installation and keep
+Gleam on `PATH`.
+
+```sh
+for pkg in packages/embed_js examples/{todomvc_lustre,hashi,njs}; do
+  ( cd "$pkg" && gleam format --check src test && gleam build --target javascript --warnings-as-errors && gleam test --target javascript --runtime bun )
+done
+( cd packages/embed_js && bun run test )
+( cd examples/todomvc_typescript && bun install --frozen-lockfile && bun run build && bun test ./test )
+( cd examples/todomvc_lustre && bun install --frozen-lockfile && bun run build )
+( cd examples/hashi && eyg script bin/fetch_style.eyg && bun install --frozen-lockfile && bun run build )
+( cd examples/erl_counter && gleam build --warnings-as-errors && erl -pa build/dev/erlang/*/ebin -noshell -s erl_counter_test main -s init stop )
+for pkg in packages/ash_eyg examples/{phoenix_counters,helpdesk}; do
+  ( cd "$pkg" && mix deps.get && mix format --check-formatted && mix test )
+done
+```
+
+The tests use deterministic host and hub fixtures. The recordings use scripted
+model responses. Interactive agents need a configured model provider, and scripts
+with uncached package references need access to a hub. For nginx integration,
+follow [the njs example](./examples/njs/README.md) to compile and serve the handler.
+
 ## Writing EYG packages
 
 All EYG packages are in the `eyg_packages` directory.

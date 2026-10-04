@@ -57,7 +57,17 @@ synchronous `(label, value) => reply` callback. Use `js.basic` for the basic
 replies and records effects. Language breaks are thrown as objects with an
 `eygBreak` field, for example `{eygBreak: {UndefinedVariable: "x"}}`.
 
-## Notes
+## Embedded modules
+
+`compiler.to_module(program, refs)` checks the program and returns either type
+errors or ES module source. Its default export contains `program`, `run`, and
+`runAsync`. Supply handlers by effect name; asynchronous handlers may return
+promises to `runAsync`. A function-valued program is called by the host before
+passing its result to a runner. Local EYG effect handlers remain in the module.
+
+See the [nginx example](../../examples/njs/) for compilation and host integration.
+
+## Compiler design
 
 Compilation path follows two main resources.
 
