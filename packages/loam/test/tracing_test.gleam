@@ -1,10 +1,15 @@
+import eyg/hub/cache
+import eyg/interpreter/value
 import gleam/int
 import gleam/javascript/promise
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
 import javascript/mutable_reference as ref
+import loam/execute
+import loam/source
 import loam/system
+import ogre/origin
 import otel/clock
 import otel/codec
 import plinthx/browser/fetch
@@ -39,6 +44,31 @@ fn capture() {
     ],
     spans,
   )
+}
+
+pub fn observed_blocks_retain_runtime_spans_and_effect_order_test() {
+  let #(server, env, received) = capture()
+  let observed = ref.new([])
+  let assert Ok(program) =
+    source.parse("let first = perform Now({}) perform Now({})", source.Inline)
+  let state = execute.State(origin.https("unused.invalid"), cache.ready())
+  let workflow =
+    execute.block_observed(program, [], state, fn(label, _, reply) {
+      let _ = ref.update(observed, fn(entries) { [#(label, reply), ..entries] })
+      Nil
+    })
+  assert ref.get(observed) == []
+  use #(outcome, _) <- promise.await(system.run_with_environment(workflow, env))
+  let assert Ok(#(Some(value.Integer(_)), _)) = outcome
+  let assert [#("Now", value.Integer(_)), #("Now", value.Integer(_))] =
+    list.reverse(ref.get(observed))
+  let spans = ref.get(received)
+  let assert Ok(block) = list.find(spans, fn(span) { span.name == "eyg.eval" })
+  let effects = list.filter(spans, fn(span) { span.name == "eyg.effect.Now" })
+  assert list.length(effects) == 2
+  assert list.all(effects, fn(span) { span.parent_id == Some(block.span_id) })
+  use stopped <- promise.map(server.stop(server, True))
+  assert stopped == Ok(Nil)
 }
 
 pub fn explicit_spans_are_lazy_and_close_before_the_caller_continues_test() {

@@ -46,10 +46,15 @@ pub type State {
 }
 
 pub fn block(source: ir.Node(source.Location), scope, state) {
+  block_observed(source, scope, state, fn(_, _, _) { Nil })
+}
+
+/// Observe completed EYG effects while preserving runtime tracing.
+pub fn block_observed(source: ir.Node(source.Location), scope, state, observe) {
   system.span(
     "eyg.eval",
     trace_attributes(source.1.origin),
-    fn() { loop(block.execute(source, scope), state) },
+    fn() { loop_observed(block.execute(source, scope), state, observe) },
     fn(output) {
       case output.0 {
         Ok(_) -> None
@@ -78,6 +83,14 @@ pub fn loop(
   return: Result(#(Option(Value), Scope), Debug),
   state: State,
 ) -> system.Effect(#(Result(#(Option(Value), Scope), Debug), State)) {
+  loop_observed(return, state, fn(_, _, _) { Nil })
+}
+
+fn loop_observed(
+  return: Result(#(Option(Value), Scope), Debug),
+  state: State,
+  observe: fn(String, Value, Value) -> Nil,
+) -> system.Effect(#(Result(#(Option(Value), Scope), Debug), State)) {
   case return {
     Ok(return) -> system.Done(#(Ok(return), state))
     Error(#(reason, meta, env, k)) ->
@@ -86,7 +99,8 @@ pub fn loop(
           case computer.cast(label, lift) {
             Ok(effect) -> {
               use value <- system.then(traced_effect(label, effect, meta.origin))
-              loop(block.resume(value, env, k), state)
+              observe(label, lift, value)
+              loop_observed(block.resume(value, env, k), state, observe)
             }
 
             Error(reason) ->
@@ -99,7 +113,7 @@ pub fn loop(
             env,
             k,
           )
-          loop(block.resume(value, env, k), state)
+          loop_observed(block.resume(value, env, k), state, observe)
         }
 
         _ -> system.Done(#(Error(#(reason, meta, env, k)), state))
