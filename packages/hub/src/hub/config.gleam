@@ -1,8 +1,9 @@
 import envoy
+import gleam/int
 import gleam/result.{try}
 
 pub type Config {
-  Config(secret_key_base: String, postgres: Postgres)
+  Config(secret_key_base: String, postgres: Postgres, port: Int)
 }
 
 pub type Postgres {
@@ -14,5 +15,7 @@ pub fn from_env() {
   use postgres_host <- try(envoy.get("POSTGRES_HOST"))
   use postgres_password <- try(envoy.get("POSTGRES_PASSWORD"))
   let postgres = Postgres(host: postgres_host, password: postgres_password)
-  Ok(Config(secret_key_base:, postgres:))
+  // Running more than one hub locally needs a free port.
+  let port = envoy.get("PORT") |> try(int.parse) |> result.unwrap(8080)
+  Ok(Config(secret_key_base:, postgres:, port:))
 }

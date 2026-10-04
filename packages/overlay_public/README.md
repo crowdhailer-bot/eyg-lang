@@ -20,3 +20,10 @@ Add `?package=<name>` to the URL to use a published package as the context, see 
 
 The browser agent can use the effects listed in its system prompt, there is no file system access.
 `Fetch` only reaches servers that allow cross origin requests.
+Browser tests run against the development server, started on port 5173 unless
+`OVERLAY_PORT` is set:
+
+```sh
+bun x playwright install chromium
+bun run test:browser
+```

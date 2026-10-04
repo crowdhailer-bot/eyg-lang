@@ -17,7 +17,7 @@ gleam_x = { path = "../gleam_x" }
 midas = ">= 3.0.0 and < 4.0.0"
 multiformats = ">= 4.0.0 and < 5.0.0"
 ogre = ">= 1.1.0 and < 2.0.0"
-plinth = ">= 0.11.0 and < 1.0.0"
+plinth = { path = "../plinth" }
 spotless = ">= 7.0.0 and < 8.0.0"
 touch_grass = ">= 0.2.12 and < 1.0.0"
 untethered = { path = "../untethered" }

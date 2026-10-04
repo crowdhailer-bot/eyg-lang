@@ -1,0 +1,282 @@
+import gleam/dynamic
+import gleam/dynamic/decode.{type Dynamic, DecodeError}
+import gleam/javascript/array.{type Array}
+import gleam/javascript/promise.{type Promise}
+import plinth/browser/dom_rect.{type DomRect}
+import plinth/browser/dom_token_list.{type DomTokenList}
+import plinth/browser/event.{type Event}
+import plinth/browser/window_proxy.{type WindowProxy}
+
+pub type Element
+
+@external(javascript, "../../element_ffi.mjs", "cast")
+fn do_cast(raw: Dynamic) -> Result(Element, Nil)
+
+pub fn cast(raw) {
+  case do_cast(raw) {
+    Ok(element) -> Ok(element)
+    Error(Nil) -> Error(DecodeError("Element", dynamic.classify(raw), []))
+  }
+}
+
+@external(javascript, "../../element_ffi.mjs", "addEventListener")
+pub fn add_event_listener(
+  a: Element,
+  b: String,
+  c: fn(Event(t)) -> Nil,
+) -> fn() -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "getAttribute")
+pub fn get_attribute(element: Element, name: String) -> Result(String, Nil)
+
+@external(javascript, "../../element_ffi.mjs", "setAttribute")
+pub fn set_attribute(element: Element, name: String, value: String) -> Nil
+
+/// Binding of [`Element.hasAttribute`](https://developer.mozilla.org/en-US/docs/Web/API/Element/hasAttribute).
+@external(javascript, "../../element_ffi.mjs", "hasAttribute")
+pub fn has_attribute(element: Element, name: String) -> Bool
+
+@external(javascript, "../../element_ffi.mjs", "removeAttribute")
+pub fn remove_attribute(element: Element, name: String) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "getBoundingClientRect")
+pub fn get_bounding_client_rect(element: Element) -> DomRect
+
+/// Serialized HTML or XML of the element's descendants.
+///
+/// Reading this normally succeeds in an HTML document. In an XML document
+/// (including XHTML or standalone SVG), the getter is specified to throw
+/// `InvalidStateError` if the contents cannot be serialized as well-formed XML.
+/// This can happen after DOM manipulation introduces XML-invalid characters or
+/// comments containing `--`.
+/// The owning document determines the serialization format, so inline SVG in an
+/// HTML document uses HTML serialization.
+///
+/// See the [HTML Standard](https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#the-innerhtml-property)
+/// and [XML serialization rules](https://w3c.github.io/DOM-Parsing/#xml-serialization).
+///
+/// Binding of [`Element.innerHTML`](https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML).
+@external(javascript, "../../element_ffi.mjs", "innerHTML")
+pub fn inner_html(element: Element) -> Result(String, String)
+
+@external(javascript, "../../element_ffi.mjs", "setInnerHTML")
+pub fn set_inner_html(element: Element, value: String) -> Nil
+
+/// Serialized HTML or XML of the element and its descendants.
+///
+/// Reading this normally succeeds in an HTML document. In an XML document
+/// (including XHTML or standalone SVG), the getter is specified to throw
+/// `InvalidStateError` if the element cannot be serialized as well-formed XML.
+/// This can happen after DOM manipulation introduces XML-invalid characters or
+/// comments containing `--`.
+/// The owning document determines the serialization format, so inline SVG in an
+/// HTML document uses HTML serialization.
+///
+/// See the [HTML Standard](https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#the-outerhtml-property)
+/// and [XML serialization rules](https://w3c.github.io/DOM-Parsing/#xml-serialization).
+///
+/// Binding of [`Element.outerHTML`](https://developer.mozilla.org/en-US/docs/Web/API/Element/outerHTML).
+@external(javascript, "../../element_ffi.mjs", "outerHTML")
+pub fn outer_html(element: Element) -> Result(String, String)
+
+@external(javascript, "../../element_ffi.mjs", "setInnerText")
+pub fn set_inner_text(element: Element, value: String) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "innerText")
+pub fn inner_text(element: Element) -> String
+
+@external(javascript, "../../element_ffi.mjs", "textContent")
+pub fn text_content(element: Element) -> String
+
+pub type Position {
+  BeforeBegin
+  AfterBegin
+  BeforeEnd
+  AfterEnd
+}
+
+fn position_to_string(position) {
+  case position {
+    BeforeBegin -> "beforebegin"
+    AfterBegin -> "afterbegin"
+    BeforeEnd -> "beforeend"
+    AfterEnd -> "afterend"
+  }
+}
+
+@external(javascript, "../../element_ffi.mjs", "insertAdjacentElement")
+fn do_insert_adjacent_element(
+  target: Element,
+  position: String,
+  element: Element,
+) -> Result(Element, String)
+
+pub fn insert_adjacent_element(
+  target: Element,
+  position: Position,
+  element: Element,
+) -> Result(Element, String) {
+  let position = position_to_string(position)
+  do_insert_adjacent_element(target, position, element)
+}
+
+@external(javascript, "../../element_ffi.mjs", "insertAdjacentHTML")
+fn do_insert_adjacent_html(
+  target: Element,
+  position: String,
+  html: String,
+) -> Result(Element, String)
+
+pub fn insert_adjacent_html(
+  target: Element,
+  position: Position,
+  html: String,
+) -> Result(Element, String) {
+  let position = position_to_string(position)
+  do_insert_adjacent_html(target, position, html)
+}
+
+@external(javascript, "../../element_ffi.mjs", "insertAdjacentText")
+fn do_insert_adjacent_text(
+  target: Element,
+  position: String,
+  text: String,
+) -> Result(Element, String)
+
+pub fn insert_adjacent_text(
+  target: Element,
+  position: Position,
+  text: String,
+) -> Result(Element, String) {
+  let position = position_to_string(position)
+  do_insert_adjacent_text(target, position, text)
+}
+
+@external(javascript, "../../element_ffi.mjs", "nextElementSibling")
+pub fn next_element_sibling(element: Element) -> Result(Element, Nil)
+
+@external(javascript, "../../element_ffi.mjs", "closest")
+pub fn closest(element: Element, selector: String) -> Result(Element, Nil)
+
+/// Returns the first element that is a descendant of the element on which it is invoked that matches the specified group of selectors.
+/// Binding of [`Element.querySelector`](https://developer.mozilla.org/en-US/docs/Web/API/Element/querySelector).
+@external(javascript, "../../element_ffi.mjs", "querySelector")
+pub fn query_selector(
+  element: Element,
+  selector: String,
+) -> Result(Element, Nil)
+
+/// Returns an array of elements matching the specified group of selectors
+/// which are descendants of the passed element.
+/// Binding of [`Element.querySelectorAll`](https://developer.mozilla.org/en-US/docs/Web/API/Element/querySelectorAll).
+@external(javascript, "../../element_ffi.mjs", "querySelectorAll")
+pub fn query_selector_all(element: Element, selector: String) -> Array(Element)
+
+@external(javascript, "../../element_ffi.mjs", "requestFullscreen")
+pub fn request_fullscreen(element: Element) -> Promise(Result(Nil, String))
+
+@external(javascript, "../../element_ffi.mjs", "clientHeight")
+pub fn client_height(element: Element) -> Int
+
+@external(javascript, "../../element_ffi.mjs", "clientLeft")
+pub fn client_left(element: Element) -> Int
+
+@external(javascript, "../../element_ffi.mjs", "clientTop")
+pub fn client_top(element: Element) -> Int
+
+@external(javascript, "../../element_ffi.mjs", "clientWidth")
+pub fn client_width(element: Element) -> Int
+
+@external(javascript, "../../element_ffi.mjs", "scrollIntoView")
+pub fn scroll_into_view(element: Element) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "scrollHeight")
+pub fn scroll_height(element: Element) -> Float
+
+@external(javascript, "../../element_ffi.mjs", "scrollLeft")
+pub fn scroll_left(element: Element) -> Float
+
+@external(javascript, "../../element_ffi.mjs", "scrollTop")
+pub fn scroll_top(element: Element) -> Float
+
+@external(javascript, "../../element_ffi.mjs", "scrollWidth")
+pub fn scroll_width(element: Element) -> Float
+
+@external(javascript, "../../element_ffi.mjs", "setScrollHeight")
+pub fn set_scroll_height(element: Element, value: Float) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "setScrollLeft")
+pub fn set_scroll_left(element: Element, value: Float) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "setScrollTop")
+pub fn set_scroll_top(element: Element, value: Float) -> Nil
+
+/// behaviour is one of smooth, instant, auto
+@external(javascript, "../../element_ffi.mjs", "scrollTo")
+pub fn scroll_to(
+  element: Element,
+  top: Float,
+  left: Float,
+  behaviour: String,
+) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "setScrollWidth")
+pub fn set_scroll_width(element: Element, value: Float) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "parentElement")
+pub fn parent_element(element: Element) -> Result(Element, Nil)
+
+@external(javascript, "../../element_ffi.mjs", "appendChild")
+pub fn append_child(parent: Element, child: Element) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "remove")
+pub fn remove(a: Element) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "datasetGet")
+pub fn dataset_get(element: Element, key: String) -> Result(String, Nil)
+
+// HTMLDataElement
+@external(javascript, "../../element_ffi.mjs", "value")
+pub fn value(element: Element) -> Result(String, Nil)
+
+@external(javascript, "../../element_ffi.mjs", "setValue")
+pub fn set_value(element: Element, value: String) -> Nil
+
+// Inputs
+@external(javascript, "../../element_ffi.mjs", "focus")
+pub fn focus(element: Element) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "blur")
+pub fn blur(element: Element) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "selectionStart")
+pub fn selection_start(element: Element) -> Result(Int, Nil)
+
+@external(javascript, "../../element_ffi.mjs", "setSelectionRange")
+pub fn set_selection_range(element: Element, start: Int, end: Int) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "setTextContent")
+pub fn set_text_content(element: Element, text: String) -> Nil
+
+@external(javascript, "../../element_ffi.mjs", "getChecked")
+pub fn get_checked(element: Element) -> Bool
+
+@external(javascript, "../../element_ffi.mjs", "contains")
+pub fn contains(element: Element, other: Element) -> Bool
+
+@external(javascript, "../../element_ffi.mjs", "classList")
+pub fn class_list(element: Element) -> DomTokenList
+
+/// Checks if an element matches a given selector.
+/// Binding of [`Element.matches`](https://developer.mozilla.org/en-US/docs/Web/API/Element/matches).
+@external(javascript, "../../element_ffi.mjs", "matches")
+pub fn matches(element: Element, selector: String) -> Bool
+
+/// The local part of the element's qualified name, lowercase for HTML elements.
+/// Binding of [`Element.localName`](https://developer.mozilla.org/en-US/docs/Web/API/Element/localName).
+@external(javascript, "../../element_ffi.mjs", "localName")
+pub fn local_name(element: Element) -> String
+
+/// The window of an element's nested browsing context, such as an iframe's.
+@external(javascript, "../../element_ffi.mjs", "contentWindow")
+pub fn content_window(element: Element) -> Result(WindowProxy, Nil)
