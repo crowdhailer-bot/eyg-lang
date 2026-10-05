@@ -3,6 +3,10 @@ import { expect } from '@playwright/test';
 // An EYG string literal, only quotes and backslashes need escaping.
 export const string = text => `"${text.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 
+// An EYG bundle file record with text content.
+export const file = (path, media_type, text) =>
+  `{path: ${string(path)}, media_type: ${string(media_type)}, content: !string_to_binary(${string(text)})}`;
+
 // A scripted agent, each prompt is answered by running the next program with the run tool.
 // Once the tool result arrives the agent finishes its turn.
 export async function agent(page, { query = '' } = {}) {
@@ -40,6 +44,16 @@ export async function agent(page, { query = '' } = {}) {
       await expect.poll(() => results.length).toBe(count + 1);
       await expect(page.locator('.layout')).toHaveAttribute('data-agent-status', 'waiting');
       return results[count];
+    },
+    // Save files as an artifact and show it across the whole workspace.
+    async show(files, name = 'test') {
+      const result = await this.run(`let bundle = [${files.join(', ')}]
+match perform Artifact({name: ${string(name)}, bundle}) {
+  Ok(_) -> { perform Show({item: Artifact(${string(name)}), origin: {x: 0, y: 0}, size: {x: 1000, y: 1000}}) }
+  Error(reason) -> { Error(reason) }
+}`);
+      expect(result.content).toBe('Ok({})');
+      return page.frameLocator(`iframe.artifact-preview[title=${JSON.stringify(name)}]`).frameLocator('iframe');
     },
   };
 }

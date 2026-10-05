@@ -25,12 +25,12 @@ import overlay/llm/provider
 import overlay/llm/provider/ollama
 import overlay/llm/tool
 import overlay/policy
+import overlay/web/artifact
 import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/tools
 import pal/system
 import touch_grass/download
-import touch_grass/harness/browser as harness
 import touch_grass/now
 
 pub type Config {
@@ -52,11 +52,12 @@ pub type State {
     cache: cache.Cache(tools.Meta),
     counter: Int,
     expanded: set.Set(Int),
+    artifacts: artifact.Store,
     /// Rounds of tool calls since the last prompt.
     steps: Int,
     /// The policy as written by the user, applied with `UserAppliedPolicy`.
     policy_source: String,
-    policy: Option(policy.Policy(harness.Effect, tools.Meta)),
+    policy: Option(policy.Policy(Nil, tools.Meta)),
     policy_error: Option(String),
   )
 }
@@ -94,6 +95,7 @@ pub fn new(config: Config) -> State {
     cache:,
     counter: 0,
     expanded: set.new(),
+    artifacts: artifact.new(),
     steps: 0,
     policy_source: "",
     policy: None,
@@ -160,6 +162,8 @@ pub type Message {
   LlmTokenRejected(reason: String)
   UserClickedExpand(Int)
   UserClickedShrink(Int)
+  UserClosedArtifact(artifact.Item)
+  UserShowedArtifact(artifact.Placement)
   // run messages
   EffectHandled(task_id: Int, value: istate.Value(tools.Meta))
   CacheMessage(cache.ActionCompleted)
@@ -192,6 +196,16 @@ fn do_update(
   message: Message,
 ) -> #(State, List(system.Effect(Message))) {
   case message {
+    UserClosedArtifact(item) -> #(
+      State(..state, artifacts: artifact.close(state.artifacts, item)),
+      [],
+    )
+    UserShowedArtifact(placement) -> {
+      case artifact.show(state.artifacts, placement) {
+        Ok(artifacts) -> #(State(..state, artifacts:), [])
+        Error(_) -> #(state, [])
+      }
+    }
     ProviderSetupMessage(message) -> {
       let can_save = case state.status {
         Waiting -> True
@@ -434,6 +448,7 @@ fn current_context(state: State) {
     counter:,
     effects: [],
     context: context.module(context),
+    artifacts: state.artifacts,
     policy: state.policy,
   )
 }
@@ -443,7 +458,7 @@ fn current_context(state: State) {
 fn run_effects_if_any_remain_to_do(return, state: State) {
   let #(ctx, calls) = return
 
-  let tools.Context(cache:, counter:, effects: inner, ..) = ctx
+  let tools.Context(cache:, counter:, effects: inner, artifacts:, ..) = ctx
   let effects =
     list.map(
       inner,
@@ -453,7 +468,7 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
       }),
     )
 
-  let state = State(..state, cache:, counter:)
+  let state = State(..state, cache:, counter:, artifacts:)
   let #(state, cache_effects) = flush(state)
   let effects = list.append(cache_effects, effects)
 
@@ -533,7 +548,8 @@ fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
       system_prompt: agent.system_prompt(
         state.origin,
         tools.effects(),
-        context.instructions(state.context_source, state.context),
+        context.instructions(state.context_source, state.context)
+          <> artifact.instructions,
         option.is_some(state.policy),
       ),
       tools: agent.tools(),
@@ -547,7 +563,7 @@ fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
 pub fn load_policy(
   source: String,
   cache: cache.Cache(tools.Meta),
-) -> Result(Option(policy.Policy(harness.Effect, tools.Meta)), String) {
+) -> Result(Option(policy.Policy(Nil, tools.Meta)), String) {
   case string.trim(source) {
     "" -> Ok(None)
     code -> {

@@ -24,9 +24,12 @@ import overlay/llm/chat
 import overlay/llm/tool
 import overlay/policy
 import overlay/tools/run
+import overlay/web/artifact
 import pal/platform/browser
 import pal/system
+import touch_grass as tg
 import touch_grass/harness/browser as harness
+import touch_grass/interface
 
 pub type Context {
   Context(
@@ -34,8 +37,9 @@ pub type Context {
     counter: Int,
     effects: List(system.Effect(#(Int, state.Value(Meta)))),
     context: cache.Module(Meta),
+    artifacts: artifact.Store,
     /// Without a policy every effect is performed.
-    policy: Option(policy.Policy(harness.Effect, Meta)),
+    policy: Option(policy.Policy(Nil, Meta)),
   )
 }
 
@@ -246,6 +250,19 @@ fn loop(
 }
 
 fn perform(label, lift, env, k, ctx: Context, output) {
+  case interface.cast(artifact.effects(), label, lift) {
+    Ok(effect) -> {
+      let #(artifacts, value) = artifact.perform(ctx.artifacts, effect)
+      let ctx = Context(..ctx, artifacts:)
+      loop(expression.resume(value, env, k), ctx, output)
+    }
+    Error(break.UnhandledEffect(..)) ->
+      browser_perform(label, lift, env, k, ctx, output)
+    Error(reason) -> #(ctx, output, Exception(reason))
+  }
+}
+
+fn browser_perform(label, lift, env, k, ctx: Context, output) {
   {
     case browser.cast(label, lift) {
       // Printing belongs to the result the agent reads, not only the browser
@@ -493,8 +510,11 @@ pub fn effects() {
       [harness.DNSimple, harness.GitHub, harness.Vimeo],
       harness.effect_label,
     )
-  harness.effects()
-  |> list.filter(fn(effect) { !list.contains(services, effect.name) })
+  let browser =
+    harness.effects()
+    |> list.filter(fn(effect) { !list.contains(services, effect.name) })
+    |> list.map(tg.map(_, fn(_) { Nil }))
+  list.append(browser, list.map(artifact.effects(), tg.map(_, fn(_) { Nil })))
 }
 
 type Outcome {
@@ -509,6 +529,7 @@ pub fn policy_rules() {
   policy.match_rules(effects(), [
     #("Abort", policy.Unchecked),
     #("Alert", policy.PolicyField("alert")),
+    #("Artifact", policy.PolicyField("artifact")),
     #("Copy", policy.PolicyField("copy")),
     #("DecodeJSON", policy.Unchecked),
     #("Download", policy.PolicyField("download")),
@@ -519,6 +540,7 @@ pub fn policy_rules() {
     #("Print", policy.PolicyField("print")),
     #("Prompt", policy.PolicyField("prompt")),
     #("Random", policy.Unchecked),
+    #("Show", policy.PolicyField("show")),
     #("Visit", policy.PolicyField("visit")),
   ])
 }
