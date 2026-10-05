@@ -9,6 +9,7 @@
 //// The other tools could use the same effect logic, this is probably a good idea once we start applying policies for which files can be read.
 
 import eyg/analysis/inference/levels_j/contextual as infer
+import eyg/analysis/type_/binding
 import eyg/cli/check
 import eyg/cli/internal/config
 import eyg/cli/internal/terminal
@@ -26,6 +27,7 @@ import gleam/dict
 import gleam/http/response
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/result
 import gleam/string
 import gleam_community/ansi
 import loam/execute
@@ -34,6 +36,7 @@ import loam/source
 import loam/system
 import midas/continuation.{type Continuation as K}
 import overlay/agent
+import overlay/check as overlay_check
 import overlay/config as overlay_config
 import overlay/llm/chat
 import overlay/llm/provider
@@ -56,6 +59,8 @@ pub type Session {
     cwd: String,
     policy: policy.Policy(harness_computer.Effect, source.Location),
     context: execute.Value,
+    /// The type of the context, the agent's code is checked against it.
+    context_type: binding.Poly,
   )
 }
 
@@ -77,7 +82,7 @@ pub fn execute(input, config: config.Config) {
   let context =
     infer.Context(..context, bindings:)
     |> infer.with_expected_type(expected)
-  use #(_, _, errors) <- system.then(check.check_from(
+  use #(type_, _, errors) <- system.then(check.check_from(
     source,
     cwd,
     context,
@@ -87,6 +92,8 @@ pub fn execute(input, config: config.Config) {
     [] -> Ok(Nil)
     _ -> Error(list.map(errors, check.render_error) |> string.join("\n"))
   })
+  let context_type = overlay_check.context(type_)
+
   use #(result, state) <- system.then(execute.block(source, [], state))
   case result {
     Ok(#(Some(user_config), _)) ->
@@ -98,7 +105,7 @@ pub fn execute(input, config: config.Config) {
               provider_context: provider.Context(
                 system_prompt: agent.system_prompt(
                   config.client.origin,
-                  computer.effects(),
+                  policy.harness(user_config.policy),
                   user_config.readme,
                 ),
                 tools: agent.tools(),
@@ -106,6 +113,7 @@ pub fn execute(input, config: config.Config) {
               cwd:,
               policy: user_config.policy,
               context: user_config.context,
+              context_type:,
             )
           use Nil <- system.then(outer_loop(session, state, []))
           Ok(0) |> system.Done
@@ -310,9 +318,8 @@ fn truncate(text) {
   }
 }
 
-// There's a problem that the final execute is tied to runtime
-// ---------------------- run
-
+/// Type check then run the agent's code.
+/// Type errors are returned to the agent without running anything.
 pub fn run_do(
   session: Session,
   code: String,
@@ -322,17 +329,40 @@ pub fn run_do(
 
   case source.parse_input(code, input) {
     Ok(source) -> {
-      let scope = [#("context", session.context)]
-
-      use #(result, state, output) <- system.map(
-        loop(block.execute(source, scope), eyg_state, session.policy, []),
-      )
-      let result = case result {
-        Ok(value) -> Ok(value)
-        Error(#(reason, location, _env, k)) ->
-          Error(execute.render_error(reason, location, k, session.cwd))
+      let inference =
+        overlay_check.agent(
+          policy.harness(session.policy),
+          session.context_type,
+        )
+      use #(_, _, errors) <- system.then(check.check_gated(
+        source,
+        session.cwd,
+        inference,
+        eyg_state,
+        import_gate(session.policy, source.1),
+      ))
+      case errors {
+        [] -> {
+          let scope = [#("context", session.context)]
+          use #(result, state, output) <- system.map(
+            loop(block.execute(source, scope), eyg_state, session.policy, []),
+          )
+          let result = case result {
+            Ok(value) -> Ok(value)
+            Error(#(reason, location, _env, k)) ->
+              Error(execute.render_error(reason, location, k, session.cwd))
+          }
+          #(result, state, output)
+        }
+        _ ->
+          system.Done(
+            #(
+              Error(list.map(errors, check.render_error) |> string.join("\n")),
+              eyg_state,
+              [],
+            ),
+          )
       }
-      #(result, state, output)
     }
     Error(reason) -> system.Done(#(Error(reason), eyg_state, []))
   }
@@ -452,18 +482,46 @@ fn decide(
   }
 }
 
+/// The ReadFile request a relative import of `path` is decided by.
+fn import_request(path) {
+  value.Record(
+    dict.from_list([
+      #("path", value.String(path)),
+      #("offset", value.Integer(0)),
+      #("limit", value.Integer(100_000_000)),
+    ]),
+  )
+}
+
+/// Decide the agent's relative imports when type checking, as they are decided when it runs.
+/// Policies are pure so asking the ReadFile gate performs no effects.
+fn import_gate(
+  policy: policy.Policy(harness_computer.Effect, source.Location),
+  meta: source.Location,
+) -> check.Gate {
+  fn(path, state) {
+    use #(decided, state) <- system.map(decide(
+      policy,
+      "ReadFile",
+      import_request(path),
+      meta,
+      state,
+    ))
+    let path = case decided {
+      Perform(_, modified) ->
+        cast.field("path", cast.as_string, modified)
+        |> result.replace_error(Nil)
+      Resume(_) | Failed(_) | Unavailable -> Error(Nil)
+    }
+    #(path, state)
+  }
+}
+
 // Relative imports read files, so ask the ReadFile gate before resolving them.
 fn lookup_reference(reference, meta, state, policy) {
   case reference {
     ir.Relative(path) -> {
-      let request =
-        value.Record(
-          dict.from_list([
-            #("path", value.String(path)),
-            #("offset", value.Integer(0)),
-            #("limit", value.Integer(100_000_000)),
-          ]),
-        )
+      let request = import_request(path)
       use #(decided, state) <- system.then(decide(
         policy,
         "ReadFile",

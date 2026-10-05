@@ -1,8 +1,13 @@
+import eyg/analysis/inference/levels_j/contextual as infer
+import eyg/analysis/type_/binding/debug
 import eyg/cli/check
 import eyg/cli/helpers
+import eyg/hub/cache
 import gleam/string
+import loam/execute
 import loam/sandbox
 import loam/source
+import loam/system
 import multiformats/cid/v1
 
 pub fn check_simple_expression_test() {
@@ -189,4 +194,53 @@ pub fn check_fails_unknown_ref_test() {
   let assert Error("") = output
   let assert [message] = sandbox.stdout
   assert string.contains(message, "missing reference")
+}
+
+fn check_gated(code, files, gate) {
+  let assert Ok(source) = source.parse_input(code, source.Stdin)
+  let state = execute.State(helpers.config.client.origin, cache.empty())
+  let assert #(sandbox.Returned(#(_poly, type_, errors)), _sandbox) =
+    check.check_gated(source, "/", infer.pure(), state, gate)
+    |> sandbox.run(sandbox.sandbox() |> sandbox.with_files(files))
+  #(debug.render_type(type_), errors)
+}
+
+pub fn gate_decides_the_location_of_an_import_test() {
+  let files = [#("/lib/greeting.eyg", "\"Hi\"")]
+  let gate = fn(location, state) {
+    let decided = case location {
+      "./greeting.eyg" -> Ok("/lib/greeting.eyg")
+      _ -> Error(Nil)
+    }
+    system.Done(#(decided, state))
+  }
+  let #(type_, errors) = check_gated("import \"./greeting.eyg\"", files, gate)
+  assert [] == errors
+  assert "String" == type_
+}
+
+pub fn import_denied_by_the_gate_is_an_error_test() {
+  let files = [#("/lib/greeting.eyg", "\"Hi\"")]
+  let gate = fn(_location, state) { system.Done(#(Error(Nil), state)) }
+  let #(_type, errors) =
+    check_gated("import \"/lib/greeting.eyg\"", files, gate)
+  let assert [_] = errors
+}
+
+pub fn imports_of_an_imported_file_are_not_gated_test() {
+  let files = [
+    #("/lib/greeting.eyg", "import \"./name.eyg\""),
+    #("/lib/name.eyg", "\"Ada\""),
+  ]
+  let gate = fn(location, state) {
+    let decided = case location {
+      "/lib/greeting.eyg" -> Ok(location)
+      _ -> Error(Nil)
+    }
+    system.Done(#(decided, state))
+  }
+  let #(type_, errors) =
+    check_gated("import \"/lib/greeting.eyg\"", files, gate)
+  assert [] == errors
+  assert "String" == type_
 }

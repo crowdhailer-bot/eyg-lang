@@ -9,6 +9,7 @@ import eyg/parser
 import filepath
 import gleam/list
 import gleam/option.{None}
+import gleam/result
 import loam/execute
 import loam/platform/computer
 import loam/source
@@ -63,6 +64,32 @@ pub fn check_from(
 ) -> system.Effect(
   #(binding.Poly, binding.Mono, List(#(source.Location, error.Reason))),
 ) {
+  check_gated(source, cwd, context, state, follow)
+}
+
+/// Decide the location of a relative import, or deny it.
+pub type Gate =
+  fn(String, execute.State) ->
+    system.Effect(#(Result(String, Nil), execute.State))
+
+/// Import every relative location as written.
+fn follow(location, state) {
+  system.Done(#(Ok(location), state))
+}
+
+/// Check code whose relative imports are decided by a gate, such as an agent's code
+/// whose policy decides which files it can read.
+/// The gate returns the location to import, a denied import is a missing reference.
+/// Imports within imported files are followed, as they are when the code runs.
+pub fn check_gated(
+  source: ir.Node(source.Location),
+  cwd: String,
+  context: infer.Context,
+  state: execute.State,
+  gate: Gate,
+) -> system.Effect(
+  #(binding.Poly, binding.Mono, List(#(source.Location, error.Reason))),
+) {
   let #(dir, path) = case source.1.origin {
     source.Disk(path:) -> #(filepath.directory_name(path), path)
     // source without a file resolves imports against the working directory.
@@ -76,7 +103,7 @@ pub fn check_from(
   let step = infer.check(context, source)
   // The host's expected result applies to the entry expression, not its imports.
   let dependency_context = infer.Context(..context, expected_type: None)
-  check_loop(step, dependency_context, dir, state, [], [path])
+  check_loop(step, dependency_context, dir, state, [], [path], gate)
 }
 
 pub fn render_error(error) {
@@ -106,6 +133,7 @@ fn do_check_all(
     state,
     errors,
     visited,
+    follow,
   )
 }
 
@@ -116,6 +144,7 @@ fn check_loop(
   state: execute.State,
   errors: List(#(source.Location, error.Reason)),
   visited: List(String),
+  gate: Gate,
 ) -> system.Effect(#(binding.Poly, binding.Mono, _)) {
   case step {
     infer.Done(analysis) ->
@@ -132,7 +161,7 @@ fn check_loop(
             state,
           ))
           resume(type_from_lookup(result))
-          |> check_loop(context, directory, state, errors, visited)
+          |> check_loop(context, directory, state, errors, visited, gate)
         }
         ir.Package(package:) -> {
           use #(result, state) <- system.then(execute.lookup_package(
@@ -140,7 +169,7 @@ fn check_loop(
             state,
           ))
           resume(type_from_lookup(result))
-          |> check_loop(context, directory, state, errors, visited)
+          |> check_loop(context, directory, state, errors, visited, gate)
         }
         ir.Version(package:, version:) -> {
           use #(result, state) <- system.then(execute.lookup_version(
@@ -149,7 +178,7 @@ fn check_loop(
             state,
           ))
           resume(type_from_lookup(result))
-          |> check_loop(context, directory, state, errors, visited)
+          |> check_loop(context, directory, state, errors, visited, gate)
         }
         ir.Pinned(release:) -> {
           use #(result, state) <- system.then(execute.lookup_pinned(
@@ -157,10 +186,16 @@ fn check_loop(
             state,
           ))
           resume(type_from_lookup(result))
-          |> check_loop(context, directory, state, errors, visited)
+          |> check_loop(context, directory, state, errors, visited, gate)
         }
         ir.Relative(location:) -> {
-          case system.resolve_relative(directory, location) {
+          use #(decided, state) <- system.then(gate(location, state))
+          let resolved =
+            result.try(decided, fn(location) {
+              system.resolve_relative(directory, location)
+              |> result.replace_error(Nil)
+            })
+          case resolved {
             Ok(path) -> {
               case cycle_check(visited, path) {
                 Ok(Nil) -> {
@@ -186,6 +221,7 @@ fn check_loop(
                             state,
                             errors,
                             visited,
+                            gate,
                           )
                         }
                         Error(_reason) ->
@@ -196,22 +232,37 @@ fn check_loop(
                             state,
                             errors,
                             visited,
+                            gate,
                           )
                       }
                     Error(_reason) -> {
                       resume(Error(Nil))
-                      |> check_loop(context, directory, state, errors, visited)
+                      |> check_loop(
+                        context,
+                        directory,
+                        state,
+                        errors,
+                        visited,
+                        gate,
+                      )
                     }
                   }
                 }
                 Error(_cycle) ->
                   resume(Error(Nil))
-                  |> check_loop(context, directory, state, errors, visited)
+                  |> check_loop(
+                    context,
+                    directory,
+                    state,
+                    errors,
+                    visited,
+                    gate,
+                  )
               }
             }
             Error(_reason) ->
               resume(Error(Nil))
-              |> check_loop(context, directory, state, errors, visited)
+              |> check_loop(context, directory, state, errors, visited, gate)
           }
         }
       }

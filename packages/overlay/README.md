@@ -31,7 +31,11 @@ The `.overlay.eyg` file returns a record with the following fields:
 - `context` A record with at least the field `readme`. The readme content is added as context to the agent. The agent is able to access the context by the `context` variable in any programs it runs.
 
 Starting the CLI agent checks the configuration and policy once.
-The required policy fields depend on the host's selected effect rules.
+The config is type checked and then evaluated once when the session starts, it can perform effects such as reading files.
+The required policy fields depend on the host's selected effect rules,
+each must be a pure function from the effect's lift type to `Pass(lift) | Mock(lower)`.
+The agent's code is type checked against the type of the context before it runs.
+Its relative imports are decided by the policy's `read_file` gate, as when the code runs, and the imported files are checked too.
 
 An example configuration
 

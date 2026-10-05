@@ -7,6 +7,7 @@ import eyg/interpreter/value as v
 import gleam/dict.{type Dict}
 import gleam/list
 import gleam/result
+import gleam/string
 import touch_grass/interface
 
 /// Require a user-supplied gate in the named field or
@@ -63,6 +64,13 @@ pub fn type_(rules: List(#(interface.Interface(_, _), Rule))) {
       }
     })
   t.record(fields)
+}
+
+/// The interfaces selected by the host's rules, these are the effects available to the agent.
+pub fn harness(policy: Policy(a, meta)) -> interface.Harness(a, meta) {
+  dict.values(policy)
+  |> list.map(fn(selected) { selected.interface })
+  |> list.sort(fn(a, b) { string.compare(a.name, b.name) })
 }
 
 pub fn decode_policy(

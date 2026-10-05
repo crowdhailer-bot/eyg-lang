@@ -1,5 +1,4 @@
 import eyg/analysis/inference/levels_j/contextual as infer
-import eyg/analysis/type_/binding
 import eyg/analysis/type_/binding/debug as analysis_debug
 import eyg/analysis/type_/binding/error
 import eyg/hub/cache
@@ -18,13 +17,13 @@ import gleam/list
 import gleam/string
 import multiformats/cid/v1
 import overlay/agent
+import overlay/check as overlay_check
 import overlay/llm/chat
 import overlay/llm/tool
 import overlay/tools/run
 import pal/platform/browser
 import pal/system
 import touch_grass/harness/browser as harness
-import touch_grass/interface
 
 pub type Context {
   Context(
@@ -122,21 +121,10 @@ fn check_single(
   context: cache.Module(_),
 ) -> List(#(a, error.Reason)) {
   let analysis =
-    infer.pure()
-    |> with_scope([#("context", context.type_)])
-    |> infer.with_effects(interface.types(harness.effects()))
+    overlay_check.agent(harness.effects(), context.type_)
     |> infer.check(source)
     |> cache.infer_sync(cache)
   infer.all_errors(analysis)
-}
-
-// TODO move to infer module
-fn with_scope(
-  context: infer.Context,
-  scope: List(#(String, binding.Poly)),
-) -> infer.Context {
-  let infer.Context(env:, ..) = context
-  infer.Context(..context, env: list.append(scope, env))
 }
 
 pub fn missing_references(errors) {
