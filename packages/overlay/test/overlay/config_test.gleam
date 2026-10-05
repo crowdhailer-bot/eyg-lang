@@ -3,13 +3,15 @@ import eyg/interpreter/state
 import eyg/interpreter/value as v
 import eyg/parser
 import gleam/dict
-import gleam/option.{Some}
+import gleam/option.{None, Some}
 import ogre/origin
 import overlay/config
 import overlay/llm/provider
+import overlay/llm/provider/bedrock
 import overlay/llm/provider/mistral
 import overlay/llm/provider/ollama
 import overlay/llm/provider/openai
+import overlay/llm/sigv4
 
 fn record(fields) -> state.Value(Nil) {
   v.Record(dict.from_list(fields))
@@ -96,4 +98,42 @@ pub fn openai_config_type_checks_test() {
 pub fn mistral_test() {
   let value = v.Tagged("Mistral", record([#("api_key", v.String("k"))]))
   assert provider(value) == provider.Mistral(mistral.Config("k"))
+}
+
+pub fn bedrock_test() {
+  let value =
+    v.Tagged(
+      "Bedrock",
+      record([
+        #("region", v.String("us-east-1")),
+        #("access_key_id", v.String("AKID")),
+        #("secret_access_key", v.String("secret")),
+        #("session_token", v.Tagged("None", record([]))),
+      ]),
+    )
+  assert provider(value)
+    == provider.Bedrock(bedrock.Config(
+      region: "us-east-1",
+      credentials: sigv4.Credentials(
+        access_key_id: "AKID",
+        secret_access_key: "secret",
+        session_token: None,
+      ),
+    ))
+}
+
+pub fn bedrock_session_token_test() {
+  let value =
+    v.Tagged(
+      "Bedrock",
+      record([
+        #("region", v.String("us-east-1")),
+        #("access_key_id", v.String("AKID")),
+        #("secret_access_key", v.String("secret")),
+        #("session_token", v.Tagged("Some", v.String("token"))),
+      ]),
+    )
+  let assert provider.Bedrock(bedrock.Config(credentials:, ..)) =
+    provider(value)
+  assert credentials.session_token == Some("token")
 }

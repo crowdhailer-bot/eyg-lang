@@ -7,9 +7,11 @@ import eyg/interpreter/value
 import gleam/result
 import ogre/origin
 import overlay/llm/provider
+import overlay/llm/provider/bedrock
 import overlay/llm/provider/mistral
 import overlay/llm/provider/ollama
 import overlay/llm/provider/openai
+import overlay/llm/sigv4
 import overlay/policy
 import touch_grass/interface
 
@@ -46,6 +48,15 @@ pub fn type_(rules, level, bindings) {
           #("Ollama", ollama),
           #("Mistral", mistral),
           #("OpenAI", openai),
+          #(
+            "Bedrock",
+            t.record([
+              #("region", t.String),
+              #("access_key_id", t.String),
+              #("secret_access_key", t.String),
+              #("session_token", t.option(t.String)),
+            ]),
+          ),
         ]),
       ),
       #("model", t.String),
@@ -94,6 +105,7 @@ fn cast_provider(
     #("Ollama", inner) -> result.map(cast_ollama(inner), provider.Ollama)
     #("Mistral", inner) -> result.map(cast_mistral(inner), provider.Mistral)
     #("OpenAI", inner) -> result.map(cast_openai(inner), provider.OpenAI)
+    #("Bedrock", inner) -> result.map(cast_bedrock(inner), provider.Bedrock)
     #(_, _) -> Error(break.NoMatch(value))
   }
 }
@@ -153,4 +165,27 @@ fn cast_headers(value) {
     use value <- result.try(cast.field("value", cast.as_string, header))
     Ok(#(key, value))
   })
+}
+
+/// Amazon Bedrock, the session token is needed for temporary credentials.
+fn cast_bedrock(value) {
+  use region <- result.try(cast.field("region", cast.as_string, value))
+  use access_key_id <- result.try(cast.field(
+    "access_key_id",
+    cast.as_string,
+    value,
+  ))
+  use secret_access_key <- result.try(cast.field(
+    "secret_access_key",
+    cast.as_string,
+    value,
+  ))
+  use session_token <- result.try(cast.field(
+    "session_token",
+    cast.as_option(_, cast.as_string),
+    value,
+  ))
+  let credentials =
+    sigv4.Credentials(access_key_id:, secret_access_key:, session_token:)
+  Ok(bedrock.Config(region:, credentials:))
 }

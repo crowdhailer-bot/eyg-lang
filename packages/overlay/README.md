@@ -29,6 +29,8 @@ The `.overlay.eyg` file returns a record with the following fields:
   `Mistral({api_key: String})`,
   and `OpenAI({origin: String, api_key: Option(String), path: String, headers: List({key: String, value: String})})`
   for any OpenAI compatible API, `path` is usually `"/v1/chat/completions"` and `headers` are added to every request.
+  `Bedrock({region: String, access_key_id: String, secret_access_key: String, session_token: Option(String)})` uses Amazon Bedrock,
+  the session token is needed for temporary credentials.
 - `policy` A record of gate functions for the fields required by the host's effect rules.
 - `context` A record with at least the field `readme`. The readme content is added as context to the agent. The agent is able to access the context by the `context` variable in any programs it runs.
 
@@ -161,8 +163,6 @@ Add a helper that would check that all env files have the same type.
 If possible this would be built in EYG and added to an `entry.eyg` file.
 This might require an effect, like EYGParse, but that takes a flat AST and checks it.
 A flat representation of types would also be needed.
-
-Add a bedrock client to `overlay_llm`.
 
 Create an `Overlay({llm, policy, context})` effect available in the CLI.
 This would allow users to define scripts and agents of a project in the same `entry.eyg` file.
