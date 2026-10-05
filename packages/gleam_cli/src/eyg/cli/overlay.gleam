@@ -350,65 +350,16 @@ pub fn loop(
     Error(#(reason, meta, env, k)) ->
       case reason {
         break.UnhandledEffect(label, lift) -> {
-          case dict.get(policy, label) {
-            Ok(policy.Interface(interface, policy.Gated(gate))) -> {
-              let return = expression.call(gate, [#(lift, meta)])
-              use #(result, state) <- system.then(execute.pure_loop(
-                return,
-                state,
-              ))
-              case result {
-                Ok(value) ->
-                  case policy.decision_from_value(value) {
-                    Ok(policy.Pass(modified)) -> {
-                      case interface.decode(modified) {
-                        Ok(effect) -> {
-                          let effect = computer.extrinsic(effect, meta.origin)
-                          // Capture the actual write after policy transformation while
-                          // still forwarding it to the terminal.
-                          let output = case effect {
-                            system.WriteStdout(text, _) -> [text, ..output]
-                            system.WriteStderr(text, _) -> [text, ..output]
-                            _ -> output
-                          }
-                          use value <- system.then(effect)
-                          loop(
-                            block.resume(value, env, k),
-                            state,
-                            policy,
-                            output,
-                          )
-                        }
-                        Error(reason) ->
-                          system.Done(#(
-                            Error(#(reason, meta, env, k)),
-                            state,
-                            output,
-                          ))
-                      }
-                    }
-                    Ok(policy.Mock(returned)) ->
-                      loop(
-                        block.resume(returned, env, k),
-                        state,
-                        policy,
-                        output,
-                      )
-                    Error(Nil) -> {
-                      let debug = #(
-                        break.IncorrectTerm(expected: "Pass/Mock", got: value),
-                        meta,
-                        builtin.default([]),
-                        state.Empty,
-                      )
-                      system.Done(#(Error(debug), state, output))
-                    }
-                  }
-                Error(debug) -> system.Done(#(Error(debug), state, output))
-              }
-            }
-            Ok(policy.Interface(interface, policy.Unrestricted)) -> {
-              case interface.decode(lift) {
+          use #(decided, state) <- system.then(decide(
+            policy,
+            label,
+            lift,
+            meta,
+            state,
+          ))
+          case decided {
+            Perform(interface, modified) ->
+              case interface.decode(modified) {
                 Ok(effect) -> {
                   let effect = computer.extrinsic(effect, meta.origin)
                   // Capture the actual write after policy transformation while
@@ -424,10 +375,11 @@ pub fn loop(
                 Error(reason) ->
                   system.Done(#(Error(#(reason, meta, env, k)), state, output))
               }
-            }
-            Error(Nil) -> {
+            Resume(returned) ->
+              loop(block.resume(returned, env, k), state, policy, output)
+            Failed(debug) -> system.Done(#(Error(debug), state, output))
+            Unavailable ->
               system.Done(#(Error(#(reason, meta, env, k)), state, output))
-            }
           }
         }
         break.UndefinedReference(reference) -> {
@@ -450,6 +402,56 @@ pub fn loop(
   }
 }
 
+/// What to do with an effect, decided by its gate.
+type Decided {
+  /// Perform the effect with this, possibly modified, input.
+  Perform(
+    interface: interface.Interface(harness_computer.Effect, source.Location),
+    input: execute.Value,
+  )
+  /// Resume the program with this value, the effect is not performed.
+  Resume(execute.Value)
+  /// The gate failed or returned an invalid decision.
+  Failed(execute.Debug)
+  /// The host has no rule for the effect.
+  Unavailable
+}
+
+/// Call the gate for an effect, unchecked effects are always performed.
+fn decide(
+  policy: policy.Policy(harness_computer.Effect, source.Location),
+  label: String,
+  lift: execute.Value,
+  meta: source.Location,
+  state: execute.State,
+) -> system.Effect(#(Decided, execute.State)) {
+  case dict.get(policy, label) {
+    Ok(policy.Interface(interface, policy.Gated(gate))) -> {
+      let return = expression.call(gate, [#(lift, meta)])
+      use #(result, state) <- system.map(execute.pure_loop(return, state))
+      let decided = case result {
+        Ok(value) ->
+          case policy.decision_from_value(value) {
+            Ok(policy.Pass(modified)) -> Perform(interface, modified)
+            Ok(policy.Mock(returned)) -> Resume(returned)
+            Error(Nil) ->
+              Failed(#(
+                break.IncorrectTerm(expected: "Pass/Mock", got: value),
+                meta,
+                builtin.default([]),
+                state.Empty,
+              ))
+          }
+        Error(debug) -> Failed(debug)
+      }
+      #(decided, state)
+    }
+    Ok(policy.Interface(interface, policy.Unrestricted)) ->
+      system.Done(#(Perform(interface, lift), state))
+    Error(Nil) -> system.Done(#(Unavailable, state))
+  }
+}
+
 // Relative imports read files, so ask the ReadFile gate before resolving them.
 fn lookup_reference(reference, meta, state, policy) {
   case reference {
@@ -462,46 +464,42 @@ fn lookup_reference(reference, meta, state, policy) {
             #("limit", value.Integer(100_000_000)),
           ]),
         )
-      case dict.get(policy, "ReadFile") {
-        Ok(policy.Interface(_, policy.Gated(gate))) -> {
-          use #(result, state) <- system.then(execute.pure_loop(
-            expression.call(gate, [#(request, meta)]),
+      use #(decided, state) <- system.then(decide(
+        policy,
+        "ReadFile",
+        request,
+        meta,
+        state,
+      ))
+      case decided {
+        Perform(_, modified) ->
+          case cast.field("path", cast.as_string, modified) {
+            Ok(path) -> execute.lookup(ir.Relative(path), meta.origin, state)
+            Error(reason) -> system.Done(#(Error(reason), state))
+          }
+        Resume(value.Tagged("Error", reason)) ->
+          system.Done(#(
+            Error(break.UnhandledEffect(
+              "Abort",
+              value.String(
+                "import of "
+                <> path
+                <> " denied by policy: "
+                <> simple_debug.inspect(reason),
+              ),
+            )),
             state,
           ))
-          case result {
-            Ok(value.Tagged("Pass", modified)) ->
-              case cast.field("path", cast.as_string, modified) {
-                Ok(path) ->
-                  execute.lookup(ir.Relative(path), meta.origin, state)
-                Error(reason) -> system.Done(#(Error(reason), state))
-              }
-            Ok(value.Tagged("Mock", value.Tagged("Error", reason))) ->
-              system.Done(#(
-                Error(break.UnhandledEffect(
-                  "Abort",
-                  value.String(
-                    "import of "
-                    <> path
-                    <> " denied by policy: "
-                    <> simple_debug.inspect(reason),
-                  ),
-                )),
-                state,
-              ))
-            Ok(returned) ->
-              system.Done(#(
-                Error(break.IncorrectTerm(
-                  "Pass(request) or Mock(Error(reason)) for an import",
-                  returned,
-                )),
-                state,
-              ))
-            Error(#(reason, _, _, _)) -> system.Done(#(Error(reason), state))
-          }
-        }
-        Ok(policy.Interface(_, policy.Unrestricted)) ->
-          execute.lookup(reference, meta.origin, state)
-        Error(Nil) ->
+        Resume(returned) ->
+          system.Done(#(
+            Error(break.IncorrectTerm(
+              "Pass(request) or Mock(Error(reason)) for an import",
+              returned,
+            )),
+            state,
+          ))
+        Failed(#(reason, _, _, _)) -> system.Done(#(Error(reason), state))
+        Unavailable ->
           system.Done(#(
             Error(break.UnhandledEffect("ReadFile", request)),
             state,
