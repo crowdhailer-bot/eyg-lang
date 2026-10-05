@@ -44,6 +44,15 @@ Run as a single command from a machine with ssh access
 ssh root@eyg.run 'docker compose --project-directory /opt/eyg.run exec -T backend gleam run -m hub/dev/grant_owner -- <package_name> "<principle_cid>"'
 ```
 
+### Withdrawing shared artifacts
+
+Artifacts shared from Overlay are served at `/artifact/<id>` to anyone with the
+link. An administrator can stop serving one, after which it is not found:
+
+```sh
+gleam run -m hub/dev/withdraw_artifact <id>
+```
+
 ### Notes
 
 All database management is in the server package.
