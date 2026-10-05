@@ -5,6 +5,8 @@ import { resolve } from 'node:path'
 // The hub the page resolves contexts and packages from. Set EYG_HUB to point at
 // a hub running locally.
 const hub = process.env.EYG_HUB ?? 'https://eyg.run'
+// Chat requests go to Ollama Cloud, set OLLAMA_ORIGIN to use another server.
+const ollama = process.env.OLLAMA_ORIGIN ?? 'https://ollama.com'
 function watchGleamDependencies(packagePaths) {
   const srcPaths = packagePaths.map((path) => resolve(path, 'src'))
   return {
@@ -31,7 +33,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'https://ollama.com',
+        target: ollama,
         changeOrigin: true,
       },
       '/guides': {

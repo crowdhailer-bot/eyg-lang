@@ -13,3 +13,11 @@ directly from the browser.
 ```sh
 bun run dev
 ```
+
+Browser tests run against the development server, started on port 5173 unless
+`OVERLAY_PORT` is set:
+
+```sh
+bun x playwright install chromium
+bun run test:browser
+```
