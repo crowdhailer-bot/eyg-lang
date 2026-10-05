@@ -14,22 +14,30 @@ import overlay/web/puppet
 import overlay/web/state
 
 pub fn render(store: art.Store) -> element.Element(state.Message) {
-  case store.panels {
-    [] -> element.none()
-    panels ->
-      h.section(
-        [a.class("artifact-workspace"), a.attribute("aria-label", "Artifacts")],
-        [
-          h.div([a.class("workspace-heading")], [h.text("ARTIFACT WORKSPACE")]),
+  h.section(
+    [
+      a.class("artifact-workspace"),
+      a.classes([#("empty", list.is_empty(store.panels))]),
+      a.attribute("aria-label", "Artifacts"),
+    ],
+    [
+      h.div([a.class("workspace-heading")], [h.text("ARTIFACT WORKSPACE")]),
+      case store.panels {
+        [] ->
+          h.div([a.class("artifact-empty")], [
+            h.p([], [h.text("Artifacts the agent shows appear here.")]),
+            h.p([], [h.text("Each runs sandboxed, without network or storage.")]),
+          ])
+        panels ->
           keyed.div(
             [a.class("artifact-canvas")],
             list.map(panels, fn(placement) {
               #(string.inspect(placement.item), panel(store, placement))
             }),
-          ),
-        ],
-      )
-  }
+          )
+      },
+    ],
+  )
 }
 
 fn percent(n) {
