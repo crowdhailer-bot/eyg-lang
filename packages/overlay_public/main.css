@@ -433,3 +433,38 @@ pre {
     max-width: calc(100vw - 20px);
   }
 }
+
+.policy {
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-content);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.5rem;
+  max-width: min(22rem, calc(100vw - 20px));
+
+  &[open] {
+    width: 22rem;
+  }
+
+  & summary {
+    cursor: pointer;
+  }
+
+  & pre {
+    max-height: 12rem;
+    overflow: auto;
+  }
+
+  & .policy-source {
+    display: block;
+    width: 100%;
+    font-family: monospace;
+    margin: 5px 0;
+  }
+
+  & button {
+    border: 1px solid var(--color-base-300);
+    border-radius: var(--radius-field);
+    padding: 2px 10px;
+    cursor: pointer;
+  }
+}

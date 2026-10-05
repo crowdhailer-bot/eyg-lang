@@ -33,6 +33,7 @@ pub fn render(model: state.State) {
           h.div([a.class("session-settings")], [
             provider_view.render(model),
             render_context(view.context(model)),
+            render_policy(model),
           ]),
         ],
       ),
@@ -211,4 +212,38 @@ fn first_line(text) {
     splitter.new(["\r\n", "\n"])
     |> splitter.split(text)
   pre
+}
+
+/// The policy decides which effects the agent's code may perform.
+fn render_policy(model: state.State) {
+  let status = case model.policy {
+    None -> "No policy, every effect is allowed"
+    Some(_) -> "Policy applied"
+  }
+  h.details([a.class("policy")], [
+    h.summary([], [h.text(status)]),
+    h.p([], [
+      h.text(
+        "A record with a function for each effect the agent may use, returning Pass(value) or Mock(value).",
+      ),
+    ]),
+    h.textarea(
+      [
+        a.class("policy-source"),
+        a.placeholder(
+          "{fetch: (request) -> { Pass(request) }, print: (text) -> { Pass(text) }}",
+        ),
+        a.rows(6),
+        event.on_input(state.UserUpdatedPolicy),
+      ],
+      model.policy_source,
+    ),
+    h.button([a.type_("button"), event.on_click(state.UserAppliedPolicy)], [
+      h.text("Apply policy"),
+    ]),
+    case model.policy_error {
+      Some(reason) -> h.pre([a.class("failure-message")], [h.text(reason)])
+      None -> element.none()
+    },
+  ])
 }

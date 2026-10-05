@@ -82,8 +82,8 @@ Instead because the configuration is fully scriptable it is expected to be imple
 The [overlay EYG package](../../eyg_packages/overlay/) has `policy` helpers, i.e. `read_only(roots)` and `allow_all`, and `skills` helpers to load `.agents/skills/*/SKILL.md` files.
 It is not yet published so import it by path.
 
-NOTE: in `overlay_web` The llm configuration is provided through the UI.
-The policy is provided through the UI but is still an textarea input that accepts a program
+NOTE: in `overlay_web` the llm configuration and the policy are provided through the UI.
+The policy is written in EYG, it is type checked against the browser effects when applied, without a policy every effect is allowed.
 
 ### Exporting chats
 

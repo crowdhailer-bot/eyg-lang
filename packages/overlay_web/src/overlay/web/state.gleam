@@ -1,10 +1,17 @@
+import eyg/analysis/inference/levels_j/contextual as infer
+import eyg/analysis/type_/binding/debug as analysis_debug
 import eyg/hub/cache
+import eyg/interpreter/expression
+import eyg/interpreter/simple_debug
 import eyg/interpreter/state as istate
+import eyg/ir/tree as ir
+import eyg/parser
 import eyg/parser/parser as _
 import gleam/http/response.{Response}
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/set
 import gleam/string
 import midas/continuation
@@ -14,6 +21,7 @@ import overlay/llm/chat
 import overlay/llm/provider
 import overlay/llm/provider/ollama
 import overlay/llm/tool
+import overlay/policy
 import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/tools
@@ -39,6 +47,10 @@ pub type State {
     cache: cache.Cache(tools.Meta),
     counter: Int,
     expanded: set.Set(Int),
+    /// The policy as written by the user, applied with `UserAppliedPolicy`.
+    policy_source: String,
+    policy: Option(policy.Policy(harness.Effect, tools.Meta)),
+    policy_error: Option(String),
   )
 }
 
@@ -75,6 +87,9 @@ pub fn new(config: Config) -> State {
     cache:,
     counter: 0,
     expanded: set.new(),
+    policy_source: "",
+    policy: None,
+    policy_error: None,
   )
 }
 
@@ -125,6 +140,8 @@ pub type Message {
   // run messages
   EffectHandled(task_id: Int, value: istate.Value(tools.Meta))
   CacheMessage(cache.ActionCompleted)
+  UserUpdatedPolicy(String)
+  UserAppliedPolicy
   Ignore
 }
 
@@ -295,6 +312,12 @@ pub fn update(
       }
     }
 
+    UserUpdatedPolicy(policy_source) -> #(State(..state, policy_source:), [])
+    UserAppliedPolicy ->
+      case load_policy(state.policy_source, state.cache) {
+        Ok(policy) -> #(State(..state, policy:, policy_error: None), [])
+        Error(reason) -> #(State(..state, policy_error: Some(reason)), [])
+      }
     Ignore -> #(state, [])
   }
 }
@@ -310,7 +333,13 @@ pub fn can_save_provider(state: State) {
 
 fn current_context(state: State) {
   let State(cache:, counter:, context:, ..) = state
-  tools.Context(cache:, counter:, effects: [], context: context.module(context))
+  tools.Context(
+    cache:,
+    counter:,
+    effects: [],
+    context: context.module(context),
+    policy: state.policy,
+  )
 }
 
 /// If a stream message is completed, and effect is handled or a cache message received then resolve calls sees what stage tool calls are in.
@@ -318,7 +347,7 @@ fn current_context(state: State) {
 fn run_effects_if_any_remain_to_do(return, state: State) {
   let #(ctx, calls) = return
 
-  let tools.Context(cache:, counter:, effects: inner, context: _) = ctx
+  let tools.Context(cache:, counter:, effects: inner, ..) = ctx
   let effects =
     list.map(
       inner,
@@ -379,12 +408,51 @@ fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
     provider.Context(
       system_prompt: agent.system_prompt(
         state.origin,
-        harness.effects(),
+        tools.effects(),
         context.readme(state.context),
-        False,
+        option.is_some(state.policy),
       ),
       tools: agent.tools(),
     )
   let history = list.append(messages, state.history) |> list.reverse
   provider.stream_completion_request(state.llm, context, history)
+}
+
+/// Parse, type check and evaluate a policy written by the user.
+/// An empty policy removes the policy so every effect is performed.
+pub fn load_policy(
+  source: String,
+  cache: cache.Cache(tools.Meta),
+) -> Result(Option(policy.Policy(harness.Effect, tools.Meta)), String) {
+  case string.trim(source) {
+    "" -> Ok(None)
+    code -> {
+      use source <- result.try(
+        parser.all_from_string(code)
+        |> result.map_error(fn(reason) { parser.format_error(reason, code) }),
+      )
+      let source = ir.map_annotation(source, fn(_) { [] })
+      // Each gate must accept its browser effect's input and decide Pass or Mock.
+      let analysis =
+        infer.pure()
+        |> infer.with_expected_type(policy.type_(tools.policy_rules()))
+        |> infer.check(source)
+        |> cache.infer_sync(cache)
+      use Nil <- result.try(case infer.all_errors(analysis) {
+        [] -> Ok(Nil)
+        errors ->
+          list.map(errors, fn(error) { analysis_debug.reason(error.1) })
+          |> string.join("\n")
+          |> Error
+      })
+      use value <- result.try(
+        expression.execute(source, [])
+        |> cache.static_loop(cache, expression.resume)
+        |> result.map_error(fn(debug) { simple_debug.describe(debug.0) }),
+      )
+      policy.decode_policy(tools.policy_rules(), value)
+      |> result.map(Some)
+      |> result.map_error(simple_debug.describe)
+    }
+  }
 }

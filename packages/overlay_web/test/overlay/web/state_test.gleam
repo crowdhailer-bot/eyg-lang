@@ -10,6 +10,7 @@ import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/result
 import gleam/string
 import multiformats/cid/v1
 import oas/generator/utils
@@ -728,4 +729,59 @@ pub fn package_context_test() {
   let assert state.Asking([chat.ToolResultMessage("abc", response, [])]) =
     state.status
   assert "hi" == response
+}
+
+/// A policy that passes every gated browser effect, except for the overridden fields.
+fn with_policy(overrides) {
+  let fields =
+    [
+      "alert", "copy", "download", "fetch", "now", "paste", "print", "prompt",
+      "visit",
+    ]
+    |> list.map(fn(field) {
+      let gate =
+        list.key_find(overrides, field)
+        |> result.unwrap("(lift) -> { Pass(lift) }")
+      field <> ": " <> gate
+    })
+  let code = "{" <> string.join(fields, ", ") <> "}"
+  let state = init_default()
+  let #(state, _) = state.update(state, state.UserUpdatedPolicy(code))
+  let #(state, _) = state.update(state, state.UserAppliedPolicy)
+  assert None == state.policy_error
+  state
+}
+
+pub fn policy_requires_every_gated_effect_test() {
+  let state = init_default()
+  let #(state, _) = state.update(state, state.UserUpdatedPolicy("{}"))
+  let #(state, _) = state.update(state, state.UserAppliedPolicy)
+  let assert Some(reason) = state.policy_error
+  assert string.contains(reason, "missing row 'alert'")
+  assert None == state.policy
+}
+
+pub fn policy_mocks_effect_test() {
+  let state = with_policy([#("now", "(_) -> { Mock(7) }")])
+  let status =
+    chat_completion("") |> with_code("abc", "perform Now({})") |> streaming
+  let #(state, _) =
+    state.update(State(..state, status:), state.LlmStreamFinished(Ok(Nil)))
+  assert state.Asking([chat.ToolResultMessage("abc", "7", [])]) == state.status
+}
+
+pub fn invalid_policy_is_reported_test() {
+  let state = init_default()
+  let #(state, _) =
+    state.update(state, state.UserUpdatedPolicy("{alert: (_) -> { Mock(1) }}"))
+  let #(state, _) = state.update(state, state.UserAppliedPolicy)
+  let assert Some(_) = state.policy_error
+  assert None == state.policy
+}
+
+pub fn service_effects_are_not_offered_test() {
+  let assert Error(_) =
+    list.find(tools.effects(), fn(effect) { effect.name == "GitHub" })
+  let assert Ok(_) =
+    list.find(tools.effects(), fn(effect) { effect.name == "Fetch" })
 }
