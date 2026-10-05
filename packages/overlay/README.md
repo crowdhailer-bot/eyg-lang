@@ -88,6 +88,7 @@ The policy is written in EYG, it is type checked against the browser effects whe
 ### Exporting chats
 
 Type `/export [path]` at the prompt to save the chat as JSON in the opencode session export format.
+In the web overlay use the Export button.
 Tool results are recorded in the state of the tool parts of the assistant message that called them.
 Overlay does not record when each message was sent so all timestamps are the export time.
 
@@ -176,5 +177,3 @@ Limit published reference loading to only trusted publisher, i.e. signatories or
 This is potentially not an overlay specific capability
 
 Publish the `overlay` EYG package so configs can use `@overlay.policy` and `@overlay.skills` rather than importing by path.
-
-Add an export button to the web overlay, downloading the chat with `overlay/export`.

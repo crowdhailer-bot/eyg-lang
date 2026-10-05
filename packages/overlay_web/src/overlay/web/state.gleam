@@ -9,6 +9,7 @@ import eyg/parser
 import eyg/parser/parser as _
 import gleam/http/response.{Response}
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -17,6 +18,7 @@ import gleam/string
 import midas/continuation
 import ogre/origin
 import overlay/agent
+import overlay/export
 import overlay/llm/chat
 import overlay/llm/provider
 import overlay/llm/provider/ollama
@@ -26,7 +28,9 @@ import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/tools
 import pal/system
+import touch_grass/download
 import touch_grass/harness/browser as harness
+import touch_grass/now
 
 pub type Config {
   Config(origin: origin.Origin, context: context.Source)
@@ -47,6 +51,8 @@ pub type State {
     cache: cache.Cache(tools.Meta),
     counter: Int,
     expanded: set.Set(Int),
+    /// Rounds of tool calls since the last prompt.
+    steps: Int,
     /// The policy as written by the user, applied with `UserAppliedPolicy`.
     policy_source: String,
     policy: Option(policy.Policy(harness.Effect, tools.Meta)),
@@ -87,6 +93,7 @@ pub fn new(config: Config) -> State {
     cache:,
     counter: 0,
     expanded: set.new(),
+    steps: 0,
     policy_source: "",
     policy: None,
     policy_error: None,
@@ -99,7 +106,20 @@ pub fn init(config) {
   let #(state, effects) = flush(state)
   let provider_effects =
     list.map(provider_effects, system.map(_, ProviderSetupMessage))
-  #(state, list.append(provider_effects, effects))
+  #(state, list.flatten([provider_effects, effects, [load_history()]]))
+}
+
+const history_key = "overlay.history"
+
+fn load_history() {
+  use stored <- system.GetSessionStorageItem(history_key)
+  system.Done(HistoryLoaded(stored))
+}
+
+fn save_history(history) {
+  let encoded = chat.history_to_json(history) |> json.to_string
+  use _ <- system.SetSessionStorageItem(history_key, encoded)
+  system.Done(Ignore)
 }
 
 pub type Effect(t) {
@@ -140,12 +160,31 @@ pub type Message {
   // run messages
   EffectHandled(task_id: Int, value: istate.Value(tools.Meta))
   CacheMessage(cache.ActionCompleted)
+  UserClickedStop
+  UserClickedNewChat
+  UserClickedExport
+  HistoryLoaded(Result(Option(String), String))
   UserUpdatedPolicy(String)
   UserAppliedPolicy
   Ignore
 }
 
+/// The most rounds of tool calls for one prompt, an agent that keeps failing is stopped.
+pub const max_steps = 25
+
+/// The history is saved for the tab whenever the agent finishes, so a reload keeps the conversation.
 pub fn update(
+  state: State,
+  message: Message,
+) -> #(State, List(system.Effect(Message))) {
+  let #(next, effects) = do_update(state, message)
+  case next.status, next.history != state.history {
+    Waiting, True -> #(next, [save_history(next.history), ..effects])
+    _, _ -> #(next, effects)
+  }
+}
+
+fn do_update(
   state: State,
   message: Message,
 ) -> #(State, List(system.Effect(Message))) {
@@ -198,7 +237,8 @@ pub fn update(
             input -> {
               let message = chat.UserMessage(text: input, images: [])
               let action = fetch_completion(state, [message])
-              let state = State(..state, status: Asking([message]), input: "")
+              let state =
+                State(..state, status: Asking([message]), input: "", steps: 0)
               #(state, [action])
             }
           }
@@ -312,6 +352,28 @@ pub fn update(
       }
     }
 
+    UserClickedStop -> #(stop(state, "Stopped."), [])
+    UserClickedNewChat ->
+      case state.status {
+        Waiting -> #(
+          State(
+            ..state,
+            history: [],
+            steps: 0,
+            input_error: None,
+            expanded: set.new(),
+          ),
+          [],
+        )
+        _ -> #(state, [])
+      }
+    HistoryLoaded(Ok(Some(stored))) ->
+      case state.history, json.parse(stored, chat.history_decoder()) {
+        [], Ok(history) -> #(State(..state, history:), [])
+        _, _ -> #(state, [])
+      }
+    HistoryLoaded(_) -> #(state, [])
+    UserClickedExport -> #(state, [export_history(state)])
     UserUpdatedPolicy(policy_source) -> #(State(..state, policy_source:), [])
     UserAppliedPolicy ->
       case load_policy(state.policy_source, state.cache) {
@@ -320,6 +382,27 @@ pub fn update(
       }
     Ignore -> #(state, [])
   }
+}
+
+/// Stop the agent, responses that arrive later are ignored as the status is waiting.
+/// Tool calls without results are given one, so the history is valid for the next request.
+fn stop(state: State, reason: String) -> State {
+  let history = case state.status {
+    Waiting -> state.history
+    Asking(messages) -> list.append(messages, state.history)
+    Streaming(completion:, ..) -> [
+      chat.from_completion(chat.Completion(..completion, tool_calls: [])),
+      ..state.history
+    ]
+    Executing(calls) ->
+      list.fold(calls, state.history, fn(history, progress: tools.Progress) {
+        [
+          chat.ToolResultMessage(progress.id, "stopped by the user", []),
+          ..history
+        ]
+      })
+  }
+  State(..state, status: Waiting, history:, input_error: Some(reason))
 }
 
 pub fn can_save_provider(state: State) {
@@ -362,15 +445,24 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
   let effects = list.append(cache_effects, effects)
 
   // I think here we do the switch on pulling. 
-  let #(status, effects) = case tools.all_returns(calls) {
-    Error(Nil) -> #(Executing(calls), effects)
-    Ok(messages) -> #(Asking(messages), [
-      fetch_completion(state, messages),
-      ..effects
-    ])
+  case tools.all_returns(calls) {
+    Error(Nil) -> #(State(..state, status: Executing(calls)), effects)
+    Ok(messages) ->
+      case state.steps >= max_steps {
+        True -> {
+          let reason =
+            "Stopped after "
+            <> int.to_string(max_steps)
+            <> " rounds of tool calls, send a message to continue."
+          #(stop(State(..state, status: Asking(messages)), reason), effects)
+        }
+        False -> {
+          let state =
+            State(..state, status: Asking(messages), steps: state.steps + 1)
+          #(state, [fetch_completion(state, messages), ..effects])
+        }
+      }
   }
-
-  #(State(..state, status:), effects)
 }
 
 fn fetch_completion(state, messages) {
@@ -455,4 +547,26 @@ pub fn load_policy(
       |> result.map_error(simple_debug.describe)
     }
   }
+}
+
+/// Download the chat in the opencode session export format.
+fn export_history(state: State) {
+  let time = now.sync()
+  let session =
+    export.Session(
+      id: "ses_" <> int.to_string(time),
+      directory: "browser",
+      provider_id: provider.id(state.llm.provider),
+      model_id: state.llm.model,
+      time:,
+    )
+  let content =
+    export.encode(session, list.reverse(state.history)) |> json.to_string
+  let input =
+    download.Input(
+      name: "overlay-session-" <> int.to_string(time) <> ".json",
+      content: <<content:utf8>>,
+    )
+  use <- system.Download(input)
+  system.Done(Ignore)
 }

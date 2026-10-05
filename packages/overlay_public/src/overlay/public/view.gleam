@@ -1,4 +1,5 @@
 import gleam/dict
+import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/set
@@ -48,6 +49,15 @@ pub fn render(model: state.State) {
       case model.input_error {
         Some(error) -> h.div([a.class("failure-message")], [h.text(error)])
         None -> element.none()
+      },
+      render_activity(model),
+      case messages, model.status {
+        [_, ..], state.Waiting ->
+          h.div([a.class("chat-actions")], [
+            action_button("Export", state.UserClickedExport),
+            action_button("New chat", state.UserClickedNewChat),
+          ])
+        _, _ -> element.none()
       },
       cache_status.render(model),
       input.render(
@@ -246,4 +256,38 @@ fn render_policy(model: state.State) {
       None -> element.none()
     },
   ])
+}
+
+/// What the agent is doing, with a button to stop it.
+fn render_activity(model: state.State) {
+  let activity = case model.status {
+    state.Waiting -> None
+    state.Asking(..) -> Some("Waiting for the model")
+    state.Streaming(..) -> Some("The model is replying")
+    state.Executing(..) -> Some("Running code")
+  }
+  case activity {
+    None -> element.none()
+    Some(activity) ->
+      h.div([a.class("activity")], [
+        h.span([a.class("activity-label")], [
+          h.text(activity <> ", step " <> int.to_string(model.steps + 1)),
+        ]),
+        h.button(
+          [
+            a.class("stop"),
+            a.type_("button"),
+            event.on_click(state.UserClickedStop),
+          ],
+          [h.text("Stop")],
+        ),
+      ])
+  }
+}
+
+fn action_button(label, message) {
+  h.button(
+    [a.class("chat-action"), a.type_("button"), event.on_click(message)],
+    [h.text(label)],
+  )
 }
