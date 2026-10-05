@@ -7,6 +7,7 @@ import eyg/interpreter/state as istate
 import eyg/ir/tree as ir
 import eyg/parser
 import eyg/parser/parser as _
+import gleam/bit_array
 import gleam/http/response.{Response}
 import gleam/int
 import gleam/json
@@ -155,6 +156,8 @@ pub type Message {
     remaining: BitArray,
   )
   LlmStreamFinished(Result(Nil, String))
+  /// The provider rejected the API token.
+  LlmTokenRejected(reason: String)
   UserClickedExpand(Int)
   UserClickedShrink(Int)
   // run messages
@@ -298,8 +301,18 @@ fn do_update(
       }
     }
     LlmStreamFinished(Error(reason)) -> {
-      let state = State(..state, status: Waiting, input_error: Some(reason))
+      // A prompt that was never answered is returned to the input to try again.
+      let input = case state.status, state.input {
+        Asking([chat.UserMessage(text:, ..)]), "" -> text
+        _, input -> input
+      }
+      let state =
+        State(..state, status: Waiting, input:, input_error: Some(reason))
       #(state, [])
+    }
+    LlmTokenRejected(reason) -> {
+      let provider_setup = provider_setup.token_rejected(state.provider_setup)
+      update(State(..state, provider_setup:), LlmStreamFinished(Error(reason)))
     }
     UserClickedExpand(index) -> {
       let expanded = set.insert(state.expanded, index)
@@ -469,16 +482,35 @@ fn fetch_completion(state, messages) {
   use response <- system.FetchStreamResponse(completion_request(state, messages))
 
   case response {
-    Ok(Response(200, body:, ..)) -> LlmStartedStreaming(body)
-    Ok(Response(status: 401, body: _, ..)) ->
-      LlmStreamFinished(Error("Provider rejected the API token (401)."))
-    Ok(Response(status:, body: _, ..)) ->
-      LlmStreamFinished(Error(
-        "Provider returned HTTP " <> int.to_string(status) <> ".",
-      ))
-    Error(reason) -> LlmStreamFinished(Error(string.inspect(reason)))
+    Ok(Response(200, body:, ..)) -> system.Done(LlmStartedStreaming(body))
+    Ok(Response(status:, body:, ..)) -> read_error(body, status, <<>>)
+    Error(reason) ->
+      system.Done(LlmStreamFinished(Error(string.inspect(reason))))
   }
-  |> system.Done
+}
+
+/// Read the body of a failed response, it explains the failure.
+fn read_error(reader, status, acc) {
+  use chunk <- system.ReadChunk(reader)
+  case chunk {
+    Ok(Some(bits)) -> read_error(reader, status, <<acc:bits, bits:bits>>)
+    _ ->
+      case status {
+        401 -> system.Done(LlmTokenRejected(http_error(status, acc)))
+        _ -> system.Done(LlmStreamFinished(Error(http_error(status, acc))))
+      }
+  }
+}
+
+fn http_error(status, body) {
+  let summary = case status {
+    401 -> "Provider rejected the API token (401)."
+    _ -> "Provider returned HTTP " <> int.to_string(status) <> "."
+  }
+  case bit_array.to_string(body) {
+    Ok("") | Error(Nil) -> summary
+    Ok(body) -> summary <> " " <> body
+  }
 }
 
 fn stream_next_chunk(provider, reader, remaining) {
@@ -501,7 +533,7 @@ fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
       system_prompt: agent.system_prompt(
         state.origin,
         tools.effects(),
-        context.readme(state.context),
+        context.instructions(state.context_source, state.context),
         option.is_some(state.policy),
       ),
       tools: agent.tools(),

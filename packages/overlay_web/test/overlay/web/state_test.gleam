@@ -211,11 +211,19 @@ pub fn denied_error_from_provider_test() {
   let assert [system.FetchStreamResponse(_request, resume)] = actions
   let response =
     Ok(response.new(401) |> response.set_body(new_reader([], Ok(Nil))))
-  let assert system.Done(message) = resume(response)
+  let assert system.ReadChunk(_, read) = resume(response)
+  let assert system.ReadChunk(_, read) =
+    read(Ok(Some(<<"{\"error\":\"unauthorized\"}":utf8>>)))
+  let assert system.Done(message) = read(Ok(None))
   let #(state, actions) = state.update(state, message)
   assert [] == actions
   assert state.Waiting == state.status
-  assert Some("Provider rejected the API token (401).") == state.input_error
+  assert Some(
+      "Provider rejected the API token (401). {\"error\":\"unauthorized\"}",
+    )
+    == state.input_error
+  // The prompt can be sent again
+  assert "hello" == state.input
 }
 
 pub fn stream_finished_while_not_streaming_test() {
@@ -529,13 +537,15 @@ pub fn invalid_source_code_test() {
     chat.ToolResultMessage(tool_call_id:, text:, images:),
   ]) = state.status
   assert id == tool_call_id
-  assert "invalid character '$' at position 0" == text
+  let expected =
+    "error: invalid character '$' at position 0\nhint: remove or replace this character — EYG does not use it"
+  assert expected == text
   assert [] == images
   let assert [system.FetchStreamResponse(request:, resume: _)] = actions
   assert "eyg.test" == request.host
   let assert Ok([_system, _agent_message, message]) =
     json.parse_bits(request.body, helpers.ollama_messages_decoder())
-  let assert #("tool", "invalid character '$' at position 0") = message
+  assert #("tool", expected) == message
 }
 
 pub fn malformed_tool_arguments_test() {
@@ -736,6 +746,24 @@ pub fn package_context_test() {
   assert "hi" == response
 }
 
+pub fn service_effects_are_not_offered_test() {
+  let assert Error(_) =
+    list.find(tools.effects(), fn(effect) { effect.name == "GitHub" })
+  let assert Ok(_) =
+    list.find(tools.effects(), fn(effect) { effect.name == "Fetch" })
+}
+
+pub fn rejected_token_is_shown_in_settings_test() {
+  let #(state, actions) = submit_first_prompt("hello")
+  let assert [system.FetchStreamResponse(_request, resume)] = actions
+  let response =
+    Ok(response.new(401) |> response.set_body(new_reader([], Ok(Nil))))
+  let assert system.ReadChunk(_, read) = resume(response)
+  let assert system.Done(message) = read(Ok(None))
+  let #(state, _actions) = state.update(state, message)
+  let assert Some(_) = state.provider_setup.error
+}
+
 pub fn stop_while_executing_test() {
   let status =
     chat_completion("")
@@ -817,13 +845,6 @@ pub fn invalid_policy_is_reported_test() {
   let #(state, _) = state.update(state, state.UserAppliedPolicy)
   let assert Some(_) = state.policy_error
   assert None == state.policy
-}
-
-pub fn service_effects_are_not_offered_test() {
-  let assert Error(_) =
-    list.find(tools.effects(), fn(effect) { effect.name == "GitHub" })
-  let assert Ok(_) =
-    list.find(tools.effects(), fn(effect) { effect.name == "Fetch" })
 }
 
 pub fn history_is_restored_test() {

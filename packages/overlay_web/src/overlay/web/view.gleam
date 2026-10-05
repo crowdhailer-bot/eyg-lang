@@ -5,6 +5,7 @@ import eyg/ir/tree as ir
 import gleam/dict
 import gleam/list
 import gleam/option
+import gleam/result
 import gleam/string
 import overlay/llm/chat
 import overlay/web/context
@@ -98,4 +99,16 @@ fn order_string(waiting: Waiting) -> String {
     Fetching(reference:) -> reference
     Blocked(reference:, on: _) -> reference
   }
+}
+
+/// One line to show for a collapsed tool result.
+/// For a result with printed output this is the final value, not the "Output:" heading.
+pub fn summary(text: String) -> String {
+  let text = case string.split_once(text, "\nResult:\n") {
+    Ok(#(_output, result)) -> "Result: " <> result
+    Error(Nil) -> text
+  }
+  string.split(text, "\n")
+  |> list.find(fn(line) { string.trim(line) != "" })
+  |> result.unwrap("")
 }

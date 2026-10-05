@@ -3,6 +3,7 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/set
+import gleam/string
 import lustre/attribute as a
 import lustre/element
 import lustre/element/html as h
@@ -123,16 +124,13 @@ fn render_chat(message: #(Int, chat.Message(tool.Call)), expanded) {
   let #(index, message) = message
   let expand = set.contains(expanded, index)
   case message {
-    chat.UserMessage(text:, images: _) -> {
-      let #(_front, doc) = pamphlet.parse(text)
-      [
-        h.div([a.class("message user")], [
-          lustre.to_lustre(doc, lustre.default())(fn(x) { x }),
-        ]),
-      ]
-    }
+    // The user writes plain text, rendering it as markup would drop characters.
+    chat.UserMessage(text:, images: _) -> [
+      h.div([a.class("message user")], [h.text(text)]),
+    ]
     chat.AssistantMessage(thinking:, text:, tool_calls:) -> {
-      let #(_front, doc) = pamphlet.parse(text)
+      // Models often write markdown, `**bold**` is `*bold*` in djot.
+      let #(_front, doc) = pamphlet.parse(string.replace(text, "**", "*"))
       [
         case thinking {
           "" -> element.none()
@@ -144,7 +142,7 @@ fn render_chat(message: #(Int, chat.Message(tool.Call)), expanded) {
                     a.class("message thinking"),
                     event.on_click(state.UserClickedExpand(index)),
                   ],
-                  [h.text("thinking...")],
+                  [h.text("Show the model's thinking")],
                 )
               True ->
                 h.div(
@@ -208,9 +206,7 @@ fn render_chat(message: #(Int, chat.Message(tool.Call)), expanded) {
               a.class("message tool-result one-line"),
               event.on_click(state.UserClickedExpand(index)),
             ],
-            [
-              h.text(first_line(text)),
-            ],
+            [h.text(view.summary(text))],
           )
       },
     ]
@@ -222,6 +218,33 @@ fn first_line(text) {
     splitter.new(["\r\n", "\n"])
     |> splitter.split(text)
   pre
+}
+
+/// What the agent is doing, with a button to stop it.
+fn render_activity(model: state.State) {
+  let activity = case model.status {
+    state.Waiting -> None
+    state.Asking(..) -> Some("Waiting for the model")
+    state.Streaming(..) -> Some("The model is replying")
+    state.Executing(..) -> Some("Running code")
+  }
+  case activity {
+    None -> element.none()
+    Some(activity) ->
+      h.div([a.class("activity")], [
+        h.span([a.class("activity-label")], [
+          h.text(activity <> ", step " <> int.to_string(model.steps + 1)),
+        ]),
+        h.button(
+          [
+            a.class("stop"),
+            a.type_("button"),
+            event.on_click(state.UserClickedStop),
+          ],
+          [h.text("Stop")],
+        ),
+      ])
+  }
 }
 
 /// The policy decides which effects the agent's code may perform.
@@ -256,33 +279,6 @@ fn render_policy(model: state.State) {
       None -> element.none()
     },
   ])
-}
-
-/// What the agent is doing, with a button to stop it.
-fn render_activity(model: state.State) {
-  let activity = case model.status {
-    state.Waiting -> None
-    state.Asking(..) -> Some("Waiting for the model")
-    state.Streaming(..) -> Some("The model is replying")
-    state.Executing(..) -> Some("Running code")
-  }
-  case activity {
-    None -> element.none()
-    Some(activity) ->
-      h.div([a.class("activity")], [
-        h.span([a.class("activity-label")], [
-          h.text(activity <> ", step " <> int.to_string(model.steps + 1)),
-        ]),
-        h.button(
-          [
-            a.class("stop"),
-            a.type_("button"),
-            event.on_click(state.UserClickedStop),
-          ],
-          [h.text("Stop")],
-        ),
-      ])
-  }
 }
 
 fn action_button(label, message) {

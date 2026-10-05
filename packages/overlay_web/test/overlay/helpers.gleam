@@ -114,7 +114,7 @@ pub fn init(context) {
     state,
     state.ProviderSetupMessage(provider_setup.SessionSettingsLoaded(
       "ollama",
-      "qwen3.5:397b",
+      "kimi-k2.6",
       "test-key",
     )),
   )

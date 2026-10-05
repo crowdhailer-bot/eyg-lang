@@ -10,7 +10,6 @@ import eyg/interpreter/value as v
 import eyg/ir/tree as ir
 import eyg/ir/utils.{push_new} as _
 import eyg/parser
-import eyg/parser/debug
 import eyg/parser/parser.{type Reason} as _
 import gleam/dict
 import gleam/dynamic/decode
@@ -46,7 +45,7 @@ pub type Meta =
 pub type Call {
   UnknownTool(name: String)
   BadArguments(List(decode.DecodeError))
-  InvalidCode(Reason)
+  InvalidCode(reason: Reason, code: String)
   Pulling(ir.Node(Meta))
   Fetching(cids: List(v1.Cid), source: ir.Node(Meta))
   Successful(state.Value(Meta))
@@ -116,7 +115,7 @@ fn run_code(ctx: Context, id: String, code: String) -> #(Context, Progress) {
         }
       }
     }
-    Error(reason) -> #(ctx, failed(id, InvalidCode(reason)))
+    Error(reason) -> #(ctx, failed(id, InvalidCode(reason, code)))
   }
 }
 
@@ -308,7 +307,7 @@ fn do_all_returns(
       let message = case call {
         UnknownTool(name:) -> Ok("unknown tool: " <> name)
         BadArguments(reasons) -> Ok(string.inspect(reasons))
-        InvalidCode(reason) -> Ok(debug.describe(reason))
+        InvalidCode(reason, code) -> Ok(parser.format_error(reason, code))
         Successful(value) -> Ok(agent.inspect_result(value))
         Errored(errors) -> {
           list.map(errors, fn(error) { analysis_debug.reason(error.1) })
