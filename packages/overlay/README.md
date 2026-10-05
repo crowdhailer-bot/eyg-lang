@@ -177,3 +177,4 @@ Limit published reference loading to only trusted publisher, i.e. signatories or
 This is potentially not an overlay specific capability
 
 Publish the `overlay` EYG package so configs can use `@overlay.policy` and `@overlay.skills` rather than importing by path.
+This needs a signatory with the package names.
