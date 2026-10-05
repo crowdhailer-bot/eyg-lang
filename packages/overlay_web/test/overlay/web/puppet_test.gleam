@@ -33,6 +33,7 @@ fn shown() {
       context: context.default(),
       artifacts: artifact.new(),
       policy: None,
+      workspace: None,
     )
   let #(ctx, _) =
     run(

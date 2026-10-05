@@ -127,6 +127,7 @@ fn fresh() {
     context: context.default(),
     artifacts: a.new(),
     policy: None,
+    workspace: None,
   )
 }
 
