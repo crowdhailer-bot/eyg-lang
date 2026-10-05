@@ -21,3 +21,4 @@ export function removeSignalListener(process, signal, callback) {
   try { return Result$Ok(process.removeListener(signal, callback)); }
   catch (error) { return Result$Error(String(error)); }
 }
+export const setExitCode = (process, code) => { process.exitCode = code; };

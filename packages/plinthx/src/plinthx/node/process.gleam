@@ -30,3 +30,7 @@ pub fn remove_signal_listener(
   signal: String,
   callback: fn() -> Nil,
 ) -> Result(Process, String)
+
+/// The code the process exits with once it has nothing left to do.
+@external(javascript, "./process_ffi.mjs", "setExitCode")
+pub fn set_exit_code(process: Process, code: Int) -> Nil
