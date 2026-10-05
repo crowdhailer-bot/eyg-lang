@@ -64,6 +64,8 @@ The [`tiling`](./eyg_packages/tiling/) modules arrange Overlay artifacts using
 dwindle and main-stack layouts.
 [`artifact_viewers`](./eyg_packages/artifact_viewers/) contains content-addressable
 carousel, video, and Bluesky viewer functions.
+[`playwright`](./eyg_packages/playwright/) checks and drives shown artifacts with the Playwright API.
+See the [artifact design and effect contract](./guides/overlay_artifacts.md).
 Other packages in this collection are for demo purposes i.e. `catfact`
 
 ### Previous experiments
