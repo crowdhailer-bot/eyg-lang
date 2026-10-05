@@ -11,9 +11,9 @@ import gleam/javascript/promise.{type Promise}
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/timestamp
-import input
 import kryptos/eddsa
 import loam/internal/crypto
+import loam/internal/prompt
 import midas/effect
 import shellout
 import simplifile
@@ -379,7 +379,7 @@ pub fn run(effect: Effect(a)) -> Promise(a) {
     SetPermissions(path, permissions, resume) ->
       run(resume(do_set_permissions(path, permissions)))
     Stdin(resume) -> run(resume(read_stdin()))
-    Prompt(text, resume) -> run(resume(input.input(text)))
+    Prompt(text, resume) -> run(resume(prompt.read_line(text)))
     Stdout(text, resume) -> run(resume(io.println(text)))
     Wait(duration, resume) -> {
       use response <- promise.await(promise.wait(duration))
