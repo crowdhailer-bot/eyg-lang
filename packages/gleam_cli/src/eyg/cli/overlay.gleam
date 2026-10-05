@@ -28,6 +28,7 @@ import gleam/dict
 import gleam/http/request
 import gleam/http/response
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
@@ -42,6 +43,7 @@ import midas/effect
 import overlay/agent
 import overlay/check as overlay_check
 import overlay/config as overlay_config
+import overlay/export
 import overlay/llm/chat
 import overlay/llm/provider
 import overlay/llm/tool
@@ -142,6 +144,10 @@ fn outer_loop(
   use read <- system.then(input(">>>", "send a message"))
   case read {
     Ok("") -> system.Done(Nil)
+    Ok("/export" <> path) -> {
+      use Nil <- system.then(export(session, history, string.trim(path)))
+      outer_loop(session, eyg_state, history)
+    }
     Ok(text) -> {
       use #(result, eyg_state) <- system.then(
         inner_loop(session, eyg_state, [chat.UserMessage(text, []), ..history]),
@@ -653,4 +659,40 @@ fn read_all(reader, acc) {
     Ok(#(Some(bits), reader)) -> read_all(reader, <<acc:bits, bits:bits>>)
     _ -> system.Done(acc)
   }
+}
+
+/// Write the chat in the opencode session export format.
+fn export(
+  session: Session,
+  history: List(chat.Message(tool.Call)),
+  path: String,
+) -> system.Effect(Nil) {
+  use time <- system.then(system.now())
+  let path = case path {
+    "" -> "overlay-session-" <> int.to_string(time) <> ".json"
+    path -> path
+  }
+  let exported =
+    export.encode(
+      export.Session(
+        id: "ses_" <> int.to_string(time),
+        directory: session.cwd,
+        provider_id: provider.id(session.llm.provider),
+        model_id: session.llm.model,
+        time:,
+      ),
+      list.reverse(history),
+    )
+    |> json.to_string
+  use resolved <- system.then(source.resolve_filepath(source.Pipe, path))
+  let path = result.unwrap(resolved, path)
+  use result <- system.then(system.write_file(path, exported))
+  system.stdout(case result {
+    Ok(Nil) -> "exported session to " <> path
+    Error(reason) ->
+      terminal.style(
+        ansi.red,
+        "failed to export session: " <> string.inspect(reason),
+      )
+  })
 }
