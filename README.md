@@ -66,6 +66,8 @@ The source for packages maintained as a standard library i.e. `standard` and `js
 The [`aok`](./eyg_packages/aok/) package provides assertions, ordered computer-effect
 expectations, and test runners.
 The [`overlay`](./eyg_packages/overlay/) package contains policy and skills helpers for overlay agents.
+The [`tiling`](./eyg_packages/tiling/) modules arrange Overlay artifacts using
+dwindle and main-stack layouts.
 Other packages in this collection are for demo purposes i.e. `catfact`
 
 ### Previous experiments
