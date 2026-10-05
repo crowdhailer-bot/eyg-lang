@@ -9,6 +9,8 @@ Included providers are:
   Streamed responses are buffered until the stream ends as tool call arguments arrive in fragments.
 - [Amazon Bedrock](https://aws.amazon.com/bedrock/) with the Converse API and signed requests.
   Responses are read once they have fully arrived.
+- Codex, a ChatGPT subscription through the Codex backend using a token from `~/.codex/auth.json`.
+  This is the backend the Codex CLI uses, it is not a documented public API.
 
 ## Development
 

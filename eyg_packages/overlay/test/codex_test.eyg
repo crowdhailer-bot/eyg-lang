@@ -1,0 +1,45 @@
+let {assert} = import "../../aok/index.eyg"
+let codex = import "../codex.eyg"
+
+let test_read = (_) -> {
+  let cwd = match perform CWD({}) {
+    Ok(cwd) -> { cwd }
+    Error(_) -> { perform Abort("no cwd") }
+  }
+  let path = !string_append(cwd, "/eyg_packages/overlay/fixtures/codex/auth.json")
+  let provider = assert.ok(codex.read(path))
+  let _ = assert.equal(Codex({access_token: "access", account_id: "account"}), provider)
+  let _ = assert.error(codex.read(!string_append(cwd, "/eyg_packages/overlay/fixtures/none.json")))
+  {}
+}
+
+let test_refresh_request = (_) -> {
+  let request = codex.refresh_request("r1")
+  let _ = assert.equal_string("auth.openai.com", request.host)
+  let _ = assert.equal_string("/oauth/token", request.path)
+  let body = assert.ok(!string_from_binary(request.body))
+  let _ = assert.equal_string(
+    "{\"client_id\":\"app_EMoamEEZ73f0CkXaXp7hrann\",\"grant_type\":\"refresh_token\",\"refresh_token\":\"r1\"}",
+    body
+  )
+  {}
+}
+
+let test_encode_auth = (_) -> {
+  let auth = {
+    auth_mode: "chatgpt",
+    last_refresh: "2026-10-04T00:00:00Z",
+    tokens: {id_token: "id", access_token: "access", refresh_token: "refresh", account_id: "account"}
+  }
+  let _ = assert.equal_string(
+    "{\"auth_mode\":\"chatgpt\",\"OPENAI_API_KEY\":null,\"tokens\":{\"id_token\":\"id\",\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"account_id\":\"account\"},\"last_refresh\":\"2026-10-04T00:00:00Z\"}",
+    codex.encode_auth(auth)
+  )
+  {}
+}
+
+[
+  {name: "codex read auth file", test: test_read},
+  {name: "codex refresh request", test: test_refresh_request},
+  {name: "codex encode auth file", test: test_encode_auth}
+]

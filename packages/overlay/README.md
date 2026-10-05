@@ -31,6 +31,7 @@ The `.overlay.eyg` file returns a record with the following fields:
   for any OpenAI compatible API, `path` is usually `"/v1/chat/completions"` and `headers` are added to every request.
   `Bedrock({region: String, access_key_id: String, secret_access_key: String, session_token: Option(String)})` uses Amazon Bedrock,
   the session token is needed for temporary credentials.
+  `Codex({access_token: String, account_id: String})` uses a ChatGPT subscription, `codex.read` in the overlay EYG package reads them from `~/.codex/auth.json`.
 - `policy` A record of gate functions for the fields required by the host's effect rules.
 - `context` A record with at least the field `readme`. The readme content is added as context to the agent. The agent is able to access the context by the `context` variable in any programs it runs.
 
