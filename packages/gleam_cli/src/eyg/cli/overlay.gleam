@@ -23,18 +23,22 @@ import eyg/interpreter/simple_debug
 import eyg/interpreter/state
 import eyg/interpreter/value
 import eyg/ir/tree as ir
+import gleam/bit_array
 import gleam/dict
+import gleam/http/request
 import gleam/http/response
+import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
+import gleam/uri
 import gleam_community/ansi
 import loam/execute
 import loam/platform/computer
 import loam/source
 import loam/system
-import midas/continuation.{type Continuation as K}
+import midas/effect
 import overlay/agent
 import overlay/check as overlay_check
 import overlay/config as overlay_config
@@ -187,15 +191,12 @@ pub fn inner_loop(
 ) -> system.Effect(
   #(Result(List(chat.Message(tool.Call)), String), execute.State),
 ) {
-  use completion <- system.then(provider.completion(
-    session.llm,
-    session.provider_context,
+  use completion <- system.then(stream_completion(
+    session,
     list.reverse(history),
-    fetch,
-  )(system.Done))
+  ))
   case completion {
     Ok(completion) -> {
-      use Nil <- system.then(system.stdout(completion.content))
       let history = [chat.from_completion(completion), ..history]
       case completion.tool_calls {
         [] -> system.Done(#(Ok(history), eyg_state))
@@ -242,14 +243,6 @@ pub fn result_to_message(
       )
   }
 }
-
-fn fetch(
-  request,
-) -> K(system.Effect(_), Result(response.Response(BitArray), _)) {
-  system.Fetch(request, _)
-}
-
-// ---------------------------- toools
 
 pub fn execute_call(
   session: Session,
@@ -593,4 +586,71 @@ pub fn policy_rules() {
     #("StandardOut", policy.PolicyField("standard_out")),
     #("WriteFile", policy.PolicyField("write_file")),
   ])
+}
+
+/// Request a completion and print its content as it arrives.
+fn stream_completion(
+  session: Session,
+  history: List(chat.Message(tool.Call)),
+) -> system.Effect(Result(chat.Completion(tool.Call), String)) {
+  let request =
+    provider.stream_completion_request(
+      session.llm,
+      session.provider_context,
+      history,
+    )
+  use response <- system.then(system.fetch_stream(request))
+  case response {
+    Ok(response.Response(status: 200, body: reader, ..)) ->
+      read_stream(session.llm.provider, reader, <<>>, chat.fresh())
+    Ok(response.Response(status:, body: reader, ..)) -> {
+      use body <- system.map(read_all(reader, <<>>))
+      Error(
+        "unexpected status: "
+        <> int.to_string(status)
+        <> case bit_array.to_string(body) {
+          Ok("") | Error(Nil) -> ""
+          Ok(body) -> " " <> body
+        },
+      )
+    }
+    Error(reason) ->
+      system.Done(Error(
+        "request to "
+        <> uri.to_string(request.to_uri(request))
+        <> " failed: "
+        <> effect.describe_fetch_error(reason),
+      ))
+  }
+}
+
+fn read_stream(llm_provider, reader, remaining, completion) {
+  use chunk <- system.then(system.read_chunk(reader))
+  case chunk {
+    Ok(#(Some(bits), reader)) -> {
+      let #(completions, remaining) =
+        provider.completion_chunk_parse(llm_provider, remaining, bits)
+      let text =
+        list.map(completions, fn(delta: chat.Completion(tool.Call)) {
+          delta.content
+        })
+        |> string.concat
+      use Nil <- system.then(system.write_stdout(text))
+      let completion = chat.append_chunks(completion, completions)
+      read_stream(llm_provider, reader, remaining, completion)
+    }
+    Ok(#(None, _)) -> {
+      use Nil <- system.then(system.stdout(""))
+      system.Done(Ok(completion))
+    }
+    Error(reason) -> system.Done(Error(effect.describe_fetch_error(reason)))
+  }
+}
+
+fn read_all(reader, acc) {
+  use chunk <- system.then(system.read_chunk(reader))
+  case chunk {
+    Ok(#(Some(bits), reader)) -> read_all(reader, <<acc:bits, bits:bits>>)
+    _ -> system.Done(acc)
+  }
 }

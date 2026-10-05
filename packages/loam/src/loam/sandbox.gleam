@@ -11,7 +11,7 @@ import gleam/dict.{type Dict}
 import gleam/http/request
 import gleam/http/response
 import gleam/list
-import gleam/option
+import gleam/option.{None, Some}
 import gleam/result
 import loam/internal/crypto.{generate_key} as _
 import loam/sandbox/fs
@@ -256,6 +256,23 @@ pub fn run(
       |> resume
       |> run(sandbox)
     }
+    // The whole response is read from the network and then given as one chunk.
+    system.FetchStream(request, resume) -> {
+      let #(response, state) = sandbox.network(request, sandbox.network_state)
+      let sandbox = Sandbox(..sandbox, network_state: state)
+      response
+      |> result.map(fn(response) {
+        response.set_body(response, system.Chunks([response.body]))
+      })
+      |> resume
+      |> run(sandbox)
+    }
+    system.ReadChunk(system.Chunks([]), resume) ->
+      run(resume(Ok(#(None, system.Chunks([])))), sandbox)
+    system.ReadChunk(system.Chunks([chunk, ..rest]), resume) ->
+      run(resume(Ok(#(Some(chunk), system.Chunks(rest)))), sandbox)
+    system.ReadChunk(system.Body(_), resume) ->
+      run(resume(Error(effect.UnableToReadBody)), sandbox)
     system.GenerateKey(resume) ->
       generate_key()
       |> resume
