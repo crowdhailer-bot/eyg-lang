@@ -62,6 +62,8 @@ The source for packages maintained as a standard library i.e. `standard` and `js
 The [`overlay`](./eyg_packages/overlay/) package contains policy and skills helpers for overlay agents.
 The [`tiling`](./eyg_packages/tiling/) modules arrange Overlay artifacts using
 dwindle and main-stack layouts.
+[`artifact_viewers`](./eyg_packages/artifact_viewers/) contains content-addressable
+carousel, video, and Bluesky viewer functions.
 Other packages in this collection are for demo purposes i.e. `catfact`
 
 ### Previous experiments
