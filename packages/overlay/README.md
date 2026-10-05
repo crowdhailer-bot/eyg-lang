@@ -90,6 +90,12 @@ It is not yet published so import it by path.
 NOTE: in `overlay_web` the llm configuration and the policy are provided through the UI.
 The policy is written in EYG, it is type checked against the browser effects when applied, without a policy every effect is allowed.
 
+### From a script
+
+Scripts can start an agent with the `Overlay` effect, see the [CLI effects reference](../../guides/cli_effects_reference.md#overlay).
+This keeps a project's scripts and agents in one `entry.eyg`.
+An agent implemented purely in EYG is blocked by EYG not having an `Eval` capability.
+
 ### Exporting chats
 
 Type `/export [path]` at the prompt to save the chat as JSON in the opencode session export format.
@@ -164,12 +170,6 @@ Add a helper that would check that all env files have the same type.
 If possible this would be built in EYG and added to an `entry.eyg` file.
 This might require an effect, like EYGParse, but that takes a flat AST and checks it.
 A flat representation of types would also be needed.
-
-Create an `Overlay({llm, policy, context})` effect available in the CLI.
-This would allow users to define scripts and agents of a project in the same `entry.eyg` file.
-Benefits are less files, EYG tries to make structuring using the file system optional.
-It is potentially not necessary as an Overlay agent could be implemented purely in EYG in the future.
-Implementing a pure EYG agent is blocked by their not being `Eval` capabilities.
 
 Build a full screen terminal UI for overlay. Prompts can be edited with history and Ctrl-C stops a turn,
 but output is a scrolling transcript with no panels for code, results or approvals.

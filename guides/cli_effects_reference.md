@@ -354,3 +354,40 @@ let request = {
 }
 perform GitHub(request)
 ```
+
+## Agents
+
+### `Overlay`
+
+Start an [overlay agent](../packages/overlay/README.md) session from a script, so a project's scripts and agents can live in one `entry.eyg`.
+The argument is the same record as an `.overlay.eyg` config, `{llm, policy, context}`.
+Prompts are read from the terminal until an empty line or end of input.
+
+```eyg
+match perform Overlay({llm, policy, context}) {
+  Ok(_) -> { 0 }
+  Error(reason) -> { let _ = perform StandardOut(reason) 1 }
+}
+```
+
+Returns `Result({}, String)`, an error when the config is invalid.
+The config is not type checked as it is with `eyg overlay`.
+The type of `context` is found by type checking the value, its functions are checked with the variables they captured, and the agent's code is checked against it.
+An error is returned if the context does not type check.
+
+## Code
+
+### `TypeCheck`
+
+Type check EYG source, i.e. to check that configuration files written by people have the expected shape.
+Relative imports in the source resolve from the working directory.
+
+```eyg
+match perform TypeCheck("{api_key: \"secret\"}") {
+  Ok(type_) -> { type_ }
+  Error(reason) -> { !never(perform Abort(reason)) }
+}
+// {api_key: String}
+```
+
+Returns `Result(String, String)`, the type rendered as text or the parse and type errors.

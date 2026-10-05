@@ -131,6 +131,27 @@ pub fn initialize(
   }
 }
 
+/// Start a session from an evaluated config, i.e. one given to the `Overlay` effect.
+/// The config has not been type checked so the type of the context is given.
+pub fn start(
+  user_config: execute.Value,
+  context_type: binding.Poly,
+  cwd: String,
+  state: execute.State,
+) -> system.Effect(Result(Nil, String)) {
+  case overlay_config.cast(user_config, policy_rules()) {
+    Ok(user_config) -> {
+      let #(session, state) = prepare(user_config, context_type, cwd, state)
+      use Nil <- system.map(outer_loop(session, state, []))
+      Ok(Nil)
+    }
+    Error(reason) ->
+      system.Done(Error(
+        "error: invalid overlay config: " <> simple_debug.describe(reason),
+      ))
+  }
+}
+
 /// The session for a decoded config and the state to start it with.
 fn prepare(
   user_config: overlay_config.Config(_, _),
