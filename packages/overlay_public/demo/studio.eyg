@@ -1,0 +1,202 @@
+// A context for Overlay sessions that build artifacts with a design system.
+// Programs run by the agent find this module in scope as `context`.
+
+let concat = (parts) -> { !list_fold(parts, "", (part, acc) -> { !string_append(acc, part) }) }
+let join = (parts, separator) -> {
+  let joined = !list_fold(parts, Error({}), (part, acc) -> {
+    match acc {
+      Ok(text) -> { Ok(concat([text, separator, part])) }
+      Error(_) -> { Ok(part) }
+    }
+  })
+  match joined {
+    Ok(text) -> { text }
+    Error(_) -> { "" }
+  }
+}
+let escape = (text) -> {
+  let text = !string_replace(text, "&", "&amp;")
+  let text = !string_replace(text, "<", "&lt;")
+  let text = !string_replace(text, ">", "&gt;")
+  let text = !string_replace(text, "'", "&#39;")
+  !string_replace(text, "\"", "&quot;")
+}
+
+// HTTPS GET returning the body, aborting unless the status is 200.
+let bytes = (host, path, query) -> {
+  let request = {method: GET({}), scheme: HTTPS({}), host, port: None({}), path, query, headers: [], body: !string_to_binary("")}
+  match perform Fetch(request) {
+    Ok(response) -> {
+      match !int_compare(response.status, 200) {
+        Eq(_) -> { response.body }
+        | (_) -> { !never(perform Abort(concat(["HTTP ", !int_to_string(response.status), " from ", host, path]))) }
+      }
+    }
+    Error(reason) -> { !never(perform Abort(reason)) }
+  }
+}
+let text = (host, path, query) -> {
+  match !string_from_binary(bytes(host, path, query)) {
+    Ok(text) -> { text }
+    Error(_) -> { !never(perform Abort(concat(["Response from ", host, path, " is not UTF-8"]))) }
+  }
+}
+
+let css = "
+@font-face { font-family: 'Inter'; src: url(fonts/inter.woff2) format('woff2'); font-weight: 100 900; font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; src: url(fonts/mono.woff2) format('woff2'); font-weight: 100 800; font-display: block; }
+
+:root {
+  color-scheme: dark;
+  --bg: #08090c;
+  --glow-1: rgba(122, 104, 255, 0.16);
+  --glow-2: rgba(40, 200, 230, 0.09);
+  --surface: rgba(255, 255, 255, 0.035);
+  --surface-raised: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #f3f4f7;
+  --text-muted: #9aa0ad;
+  --text-faint: #636a78;
+  --accent: #8f80ff;
+  --accent-text: #ffffff;
+  --accent-soft: rgba(143, 128, 255, 0.16);
+  --positive: #37d99a;
+  --warning: #ffc55c;
+  --critical: #ff6f6f;
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 24px 48px -28px rgba(0, 0, 0, 0.7);
+  --route-lightness: 66%;
+  --route-chroma: 0.15;
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+[data-theme=light] {
+  color-scheme: light;
+  --bg: #f4f5f8;
+  --glow-1: rgba(122, 104, 255, 0.10);
+  --glow-2: rgba(40, 200, 230, 0.08);
+  --surface: #ffffff;
+  --surface-raised: #f1f2f6;
+  --border: rgba(12, 14, 22, 0.08);
+  --border-strong: rgba(12, 14, 22, 0.16);
+  --text: #0d0f15;
+  --text-muted: #596070;
+  --text-faint: #8b91a0;
+  --accent: #5b45f0;
+  --accent-soft: rgba(91, 69, 240, 0.10);
+  --positive: #0f9d63;
+  --warning: #b7791f;
+  --critical: #d64545;
+  --chart-grid: rgba(12, 14, 22, 0.07);
+  --shadow: 0 1px 2px rgba(12, 14, 22, 0.05), 0 16px 40px -28px rgba(12, 14, 22, 0.35);
+  --route-lightness: 52%;
+  --route-chroma: 0.16;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  font: 14px/1.5 var(--font-sans);
+  font-feature-settings: 'cv11', 'ss03';
+  letter-spacing: -0.006em;
+  color: var(--text);
+  background:
+    radial-gradient(900px 480px at -10% -20%, var(--glow-1), transparent 65%),
+    radial-gradient(700px 420px at 115% 0%, var(--glow-2), transparent 60%),
+    var(--bg);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+button { font: inherit; color: inherit; }
+.app { display: flex; flex-direction: column; gap: 18px; min-height: 100vh; padding: 26px 28px; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+.title { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 650; letter-spacing: -0.03em; }
+.subtitle { margin: 6px 0 0; color: var(--text-muted); font-size: 13px; }
+.tabular { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0; }
+.muted { color: var(--text-muted); }
+.faint { color: var(--text-faint); }
+.card { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.live { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--positive); box-shadow: 0 0 0 0 var(--positive); animation: live 2s ease-out infinite; }
+@keyframes live { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--positive) 70%, transparent); } 80%, 100% { box-shadow: 0 0 0 7px transparent; } }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-muted); font-size: 12px; font-weight: 550; cursor: pointer; transition: all 0.18s ease; }
+.chip:hover { border-color: var(--border-strong); color: var(--text); }
+.chip[aria-pressed=true] { border-color: transparent; background: var(--text); color: var(--bg); }
+.chip .swatch { width: 8px; height: 8px; border-radius: 3px; background: var(--route); }
+.button { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 550; cursor: pointer; transition: all 0.18s ease; }
+.button:hover { background: var(--surface-raised); border-color: var(--border-strong); }
+.button svg { width: 14px; height: 14px; }
+.route { --route: oklch(var(--route-lightness) var(--route-chroma) var(--hue, 280)); }
+.badge { display: inline-grid; place-items: center; min-width: 46px; height: 30px; padding: 0 8px; border-radius: 9px; background: color-mix(in oklab, var(--route) 18%, transparent); color: var(--route); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--route) 38%, transparent); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+.footer { display: flex; justify-content: space-between; gap: 12px; margin-top: auto; color: var(--text-faint); font-size: 11px; }
+.fade-in { animation: fade-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+"
+
+// An artifact page using the design system, the fonts are fetched and bundled.
+let page = ({title, theme, styles, body, script, data}) -> {
+  let inter = bytes("cdn.jsdelivr.net", "/npm/@fontsource-variable/inter@5/files/inter-latin-wght-normal.woff2", None({}))
+  let mono = bytes("cdn.jsdelivr.net", "/npm/@fontsource-variable/jetbrains-mono@5/files/jetbrains-mono-latin-wght-normal.woff2", None({}))
+  let html = concat([
+    "<!doctype html><html lang='en' data-theme='", escape(theme), "'><head><meta charset='utf-8'>",
+    "<meta name='viewport' content='width=device-width, initial-scale=1'><title>", escape(title), "</title>",
+    "<link rel='stylesheet' href='studio.css'><style>", styles, "</style></head><body>", body,
+    "<script type='application/json' id='data'>", !string_replace(data, "<", "\\u003c"), "</script>",
+    "<script>", script, "</script></body></html>"
+  ])
+  [
+    {path: "index.html", media_type: "text/html", content: !string_to_binary(html)},
+    {path: "studio.css", media_type: "text/css", content: !string_to_binary(css)},
+    {path: "fonts/inter.woff2", media_type: "font/woff2", content: inter},
+    {path: "fonts/mono.woff2", media_type: "font/woff2", content: mono}
+  ]
+}
+
+let guidelines = "# Studio design system
+Every artifact must look like a polished, modern product: calm, crisp and confident. Build pages with context.studio.page, never write a bare page.
+
+## Principles
+- One idea per artifact. Lead with the answer: the headline list, number or chart comes first, explanation second.
+- Typography does the work. Inter only. Titles 28px weight 650 tracking -0.03em, body 14px, eyebrow labels 11px uppercase tracking 0.12em. Numbers are always tabular.
+- Dark first. Support light with [data-theme=light] on html and switch with a visible, labelled toggle.
+- Colour is information. Neutrals for structure, --accent for emphasis, --positive --warning --critical only for status. Categories use .route with a --hue between 0 and 360, keep the same hue for the same category in every artifact.
+- Space on a 4px grid: 4 8 12 16 24. Radius 18px for cards, 12px for rows, 999px for chips.
+- Quiet surfaces: .card with a 1px --border. No heavy shadows, no borders on text, no gradients except the page glow.
+- Controls are real buttons with text labels, toggles expose aria-pressed.
+- Motion is subtle: .fade-in for new rows, 180ms transitions, .live pulsing dot beside live data.
+- Fit any panel from 400x300 to full width: flex columns, scrolling lists, and media queries at max-width 620px and max-height 460px.
+- Always cite the source and time of the data in a .footer.
+- Never invent data. Fetch in EYG with context.network, pass the JSON as data, render with textContent in the script.
+
+## Components
+.app page column, .header, .eyebrow, .title, .subtitle, .card, .chips and .chip, .button, .badge, .route with --hue, .live, .footer, .tabular, .muted, .faint, .fade-in
+Tokens: --bg --surface --surface-raised --border --border-strong --text --text-muted --text-faint --accent --accent-soft --positive --warning --critical --chart-grid --radius-lg --radius-md --radius-sm --font-sans --font-mono
+
+## API
+- context.studio.page({title, theme, styles, body, script, data}) returns a bundle for Artifact. theme is dark or light, styles is CSS for this page, body is HTML, script is JavaScript run at the end of the body, data is JSON text readable with JSON.parse(document.getElementById('data').textContent). It fetches Inter and JetBrains Mono and bundles studio.css.
+- context.network.text(host, path, query) and context.network.bytes(host, path, query) perform an HTTPS GET, query is None({}) or Some(text), and abort unless the status is 200.
+- context.concat(parts), context.join(parts, separator), context.escape(text) for building HTML.
+- context.dwindle and context.main_stack place artifacts, each has a readme.
+- context.playwright checks and drives shown artifacts, read its readme.
+
+## Workflow
+1. Fetch the data and save the artifact with Artifact, then Show it.
+2. Check it with context.playwright: count the key elements, read a value and take a screenshot.
+3. Describe what the person sees in one or two sentences."
+
+{
+  readme: guidelines,
+  studio: {page, css},
+  network: {text, bytes},
+  concat, join, escape,
+  dwindle: import "../../../eyg_packages/tiling/dwindle.eyg",
+  main_stack: import "../../../eyg_packages/tiling/main_stack.eyg",
+  playwright: import "../../../eyg_packages/playwright/index.eyg"
+}

@@ -1,0 +1,46 @@
+let aok = import "../../../eyg_packages/aok/index.eyg"
+let {assert, expect} = aok
+let context = import "./studio.eyg"
+
+let reply = (status, body) -> {
+  (request, resume) -> { resume(Ok({status, headers: [], body: !string_to_binary(body)})) }
+}
+let text = (file) -> {
+  match !string_from_binary(file.content) {
+    Ok(text) -> { text }
+    Error(_) -> { !never(perform Abort("not UTF-8")) }
+  }
+}
+let includes = (whole, part) -> { assert.false(!equal(!string_replace(whole, part, ""), whole)) }
+
+let tests = [
+  {name: "studio page bundles fonts, styles and escaped data", test: (_) -> {
+    let requests = handle Fetch((request, resume) -> {
+      let rest = resume(Ok({status: 200, headers: [], body: !string_to_binary(request.path)}))
+      {paths: [request.path, ..rest.paths], bundle: rest.bundle}
+    }, (_) -> {
+      let bundle = context.studio.page({title: "<Buses>", theme: "dark", styles: "p{}", body: "<p>hi</p>", script: "go()", data: "{\"a\":\"</script>\"}"})
+      {paths: [], bundle}
+    })
+    let _ = assert.equal(2, !list_fold(requests.paths, 0, (_, n) -> { !int_add(n, 1) }))
+    let {head: index, tail: files} = assert.ok(!list_pop(requests.bundle))
+    let _ = assert.equal_string("index.html", index.path)
+    let html = text(index)
+    let _ = includes(html, "<title>&lt;Buses&gt;</title>")
+    let _ = includes(html, "<link rel='stylesheet' href='studio.css'>")
+    let _ = includes(html, "{\"a\":\"\\u003c/script>\"}")
+    let reversed = !list_fold(files, [], (file, acc) -> { [file.path, ..acc] })
+    assert.equal(["fonts/mono.woff2", "fonts/inter.woff2", "studio.css"], reversed)
+  }},
+  {name: "studio network helpers decode bodies and reject failures", test: (_) -> {
+    let _ = assert.equal_string("hello", handle Fetch(reply(200, "hello"), (_) -> { context.network.text("example.com", "/", None({})) }))
+    let {lift: reason} = expect.abort((_) -> { handle Fetch(reply(404, ""), (_) -> { context.network.text("example.com", "/missing", None({})) }) }, {})
+    assert.equal_string("HTTP 404 from example.com/missing", reason)
+  }},
+  {name: "studio string helpers", test: (_) -> {
+    let _ = assert.equal_string("a, b, c", context.join(["a", "b", "c"], ", "))
+    let _ = assert.equal_string("", context.join([], ", "))
+    assert.equal_string("&lt;a href=&#39;x&#39;&gt;&amp;&quot;", context.escape("<a href='x'>&\""))
+  }}
+]
+{tests, script: (_) -> { match !equal(aok.all(tests).failed, 0) { True(_) -> { 0 } False(_) -> { 1 } } }}

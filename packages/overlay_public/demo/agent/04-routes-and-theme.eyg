@@ -1,0 +1,9 @@
+// Show only the 24 and 88 in light mode, changing the running board
+let pw = context.playwright
+let board = pw.page("departures")
+let _ = pw.click(pw.locator(board, "#routes [data-line='24']"))
+let _ = pw.click(pw.locator(board, "#routes [data-line='88']"))
+let _ = pw.click(pw.get_by_role(board, "button", "Light"))
+let _ = pw.expect(pw.locator(board, "html")).to_have_attribute("data-theme", "light")
+let _ = pw.screenshot(board)
+{routes: pw.all_text_contents(pw.locator(board, "[data-arrival] .badge"))}
