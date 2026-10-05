@@ -11,14 +11,39 @@ done
 ```
 To test all the packages on the JavaScript environment.
 ```sh
-for pkg in packages/{gleam_analysis,gleam_cli,gleam_compiler,gleam_hub,gleam_interpreter,gleam_ir,gleam_parser,gleam_x,intelligence,morph,overlay_llm,topological,touch_grass,untethered,website}; do
+for pkg in packages/{gleam_analysis,gleam_cli,gleam_compiler,gleam_hub,gleam_interpreter,gleam_ir,gleam_parser,gleam_x,intelligence,morph,overlay_llm,overlay,overlay_eval,html_parser,plinthx,overlay_public,overlay_web,pal,topological,touch_grass,untethered,website}; do
   ( cd "$pkg" && gleam format --check src test && gleam build --target javascript --warnings-as-errors && gleam test --target javascript --runtime bun )
 done
 ```
-Test all the eyg packages.
+Test all the eyg packages with the CLI built from the current checkout. CI builds
+this version as well, rather than downloading a previously released CLI.
 ```sh
 eyg script entry.eyg
 ```
+
+## Overlay evaluations and browser tests
+
+The deterministic eval checks need no API key:
+
+```sh
+cd packages/overlay_eval
+gleam test --target javascript --runtime bun
+gleam run -m overlay/eval -- validate suites/programs.eyg
+gleam run -m overlay/eval -- validate suites/fibonacci.eyg
+gleam run -m overlay/eval -- validate suites/contexts.eyg
+```
+
+See the [eval guide](./guides/overlay_evals.md) for live model runs and replay.
+To test browser sessions and artifacts, put the current `eyg` CLI on `PATH`, then:
+
+```sh
+cd packages/overlay_public
+bun install --frozen-lockfile
+bunx playwright install chromium
+bun run test:browser
+```
+
+Set `OVERLAY_PORT` if the default development port is already in use.
 
 ## Writing EYG packages
 
