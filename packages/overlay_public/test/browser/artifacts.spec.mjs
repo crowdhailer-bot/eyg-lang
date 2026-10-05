@@ -92,7 +92,8 @@ test('wrapper attribute escaping prevents artifact markup breaking out', async (
   await expect(page.locator('body')).not.toHaveAttribute('data-escaped');
   const wrapper = page.frameLocator('iframe.artifact-preview');
   await expect(wrapper.locator('body > iframe')).toHaveCount(1);
-  await expect(wrapper.locator('script')).toHaveCount(0);
+  // Only the relay, the artifact markup stays in the srcdoc attribute.
+  await expect(wrapper.locator('script')).toHaveCount(1);
 });
 
 test('preparation rejects missing files without requesting application URLs', async ({ page }) => {

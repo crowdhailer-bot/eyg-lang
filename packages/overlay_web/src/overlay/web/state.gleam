@@ -28,6 +28,7 @@ import overlay/policy
 import overlay/web/artifact
 import overlay/web/context
 import overlay/web/provider_setup
+import overlay/web/puppet
 import overlay/web/tools
 import pal/system
 import touch_grass/download
@@ -549,7 +550,8 @@ fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
         state.origin,
         tools.effects(),
         context.instructions(state.context_source, state.context)
-          <> artifact.instructions,
+          <> artifact.instructions
+          <> puppet.instructions,
         option.is_some(state.policy),
       ),
       tools: agent.tools(),

@@ -834,7 +834,7 @@ fn with_policy(overrides) {
   let fields =
     [
       "alert", "artifact", "copy", "download", "fetch", "now", "paste", "print",
-      "prompt", "show", "visit",
+      "prompt", "puppet", "show", "visit",
     ]
     |> list.map(fn(field) {
       let gate =
