@@ -23,7 +23,8 @@ pub type Decision {
   CannotTell(reasoning: String)
 }
 
-pub const system = "You grade transcripts of Overlay, an agent that helps people by writing and running programs in EYG, a scripting language with managed effects.
+pub const system =
+  "You grade transcripts of Overlay, an agent that helps people by writing and running programs in EYG, a scripting language with managed effects.
 You decide one criterion at a time and nothing else. Judge only what the transcript shows, never assume work that is not in it.
 Longer replies are not better, a short reply that meets the criterion passes."
 

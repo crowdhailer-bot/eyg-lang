@@ -8,7 +8,8 @@
 //// An artifact can interfere with its own puppet, but not the application or
 //// another artifact, so replies are only ever data about that artifact.
 
-pub const script = "
+pub const script =
+  "
 (() => {
   // The application is two frames up, past the wrapper that relays its requests.
   const host = parent.parent;

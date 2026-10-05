@@ -129,7 +129,8 @@ pub fn get(id: String, context: Context) -> Response(wisp.Body) {
   )
 }
 
-const file_policy = "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' data:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data:; font-src 'self' data:; media-src 'self' data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+const file_policy =
+  "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' data:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data:; font-src 'self' data:; media-src 'self' data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
 
 pub fn file(
   id: String,
@@ -171,7 +172,8 @@ pub fn file(
   }
 }
 
-const page_policy = "default-src 'none'; style-src 'unsafe-inline'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+const page_policy =
+  "default-src 'none'; style-src 'unsafe-inline'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 /// A page showing the artifact in a sandboxed frame.
 pub fn page(id: String, context: Context) -> Response(wisp.Body) {

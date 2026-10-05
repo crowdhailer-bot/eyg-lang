@@ -18,7 +18,8 @@ import overlay/tools/run
 import touch_grass/http
 import touch_grass/interface
 
-pub const introduction = "You are an expert automation assistant.
+pub const introduction =
+  "You are an expert automation assistant.
 You help users by executing EYG scripts to interact with the users system.
 Do not guess language syntax, library functions, effect signatures, or external API contracts.
 Consult documentation and probe small examples before building on them.

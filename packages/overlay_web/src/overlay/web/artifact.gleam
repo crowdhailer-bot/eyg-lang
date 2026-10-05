@@ -353,7 +353,8 @@ pub fn diff(before: Bundle, after: Bundle) -> List(Change) {
   list.append(changes, added)
 }
 
-pub const instructions = "
+pub const instructions =
+  "
 # Artifacts and workspace
 Artifact({name, bundle}) saves a complete snapshot and returns Ok(version) or Error(reason).
 bundle is a list of {path: String, media_type: String, content: Binary}; it must include index.html (text/html, UTF-8).

@@ -11,7 +11,8 @@ import overlay/web/artifact/inline
 
 /// Every artifact runs under this policy, set by the wrapper before any artifact content.
 /// It can only be restricted further by the artifact.
-pub const policy = "default-src 'none'; script-src 'unsafe-inline' data:; style-src 'unsafe-inline' data:; img-src data:; font-src data:; media-src data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+pub const policy =
+  "default-src 'none'; script-src 'unsafe-inline' data:; style-src 'unsafe-inline' data:; img-src data:; font-src data:; media-src data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
 
 /// The source of a wrapper frame showing the bundle.
 /// A bundle that cannot be prepared shows the reason instead.

@@ -433,7 +433,8 @@ fn css_string(value) {
   "\"" <> escaped <> "\""
 }
 
-pub const instructions = "
+pub const instructions =
+  "
 # Checking and controlling artifacts
 Puppet({page, locator, action, timeout}) drives a shown preview like Playwright and returns Ok(reply) or Error(reason).
 page is Artifact(name) or Revision({name, version}) and must already be shown. timeout is in milliseconds, 5000 is typical.

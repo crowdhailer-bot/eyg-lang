@@ -31,7 +31,8 @@ import overlay/llm/tool
 import overlay/tools/run
 import simplifile
 
-pub const fibonacci = "Calculate the sum of the first 20 Fibonacci numbers, starting with 1, 1. Use an EYG program to calculate the sum and return it as an integer."
+pub const fibonacci =
+  "Calculate the sum of the first 20 Fibonacci numbers, starting with 1, 1. Use an EYG program to calculate the sum and return it as an integer."
 
 /// Parse and type-check before evaluating. There is no effect handler.
 pub fn evaluate(code: String) -> Result(interpreter.Value(Nil), String) {

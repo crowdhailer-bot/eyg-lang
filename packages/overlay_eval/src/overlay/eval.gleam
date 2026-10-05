@@ -63,7 +63,8 @@ pub fn main() -> Promise(Nil) {
   }
 }
 
-const usage = "Run evals of Overlay agents and contexts.
+const usage =
+  "Run evals of Overlay agents and contexts.
 
   gleam run -m overlay/eval -- run <suite.eyg> [options]
   gleam run -m overlay/eval -- validate <suite.eyg> [options]
