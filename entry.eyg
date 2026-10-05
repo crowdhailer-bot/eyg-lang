@@ -3,6 +3,7 @@ let list = @standard.list
 let aok = import "eyg_packages/aok/index.eyg"
 
 let tests = list.flatten([
+  import "./eyg_packages/overlay_librarian/entry.eyg".tests,
   import "./eyg_packages/aok/entry.eyg".tests,
   import "./eyg_packages/standard/test.eyg",
   // import "./eyg_packages/eyg/entry.eyg".tests,
