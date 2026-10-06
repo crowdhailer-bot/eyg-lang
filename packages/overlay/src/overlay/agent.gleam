@@ -19,10 +19,12 @@ import touch_grass/http
 import touch_grass/interface
 
 /// Construct the system prompt for an agent
+/// `policed` is true when the effects are checked by a policy.
 pub fn system_prompt(
   origin: Origin,
   effects: List(interface.Interface(a, b)),
   readme: String,
+  policed: Bool,
 ) -> String {
   let scheme = http.scheme_to_eyg(origin.scheme)
   let host = v.String(origin.host)
@@ -34,6 +36,7 @@ Do not guess language syntax, library functions, effect signatures, or external 
 Consult documentation and probe small examples before building on them.
 
 ALWAYS use djot syntax for your responses.
+If none of the programs you ran produced an answer, say so, DO NOT estimate or invent results.
 DO NOT write code blocks in your responses unless explicitly asked.
 All code execution uses the 'run' tool.
 Every program has the variable context in scope, it is the module described in the Context section at the end of this prompt.
@@ -89,6 +92,13 @@ This environment has the following effects
   ) <> "
 
 Remember to always use perform to call an effect.
+`perform Abort(reason)` stops the program, it returns Never so where a value is expected write `!never(perform Abort(reason))`.
+" <> case policed {
+    True ->
+      "Effects are checked by a policy set by the user. If an effect is denied report it to the user, DO NOT try to work around the policy.
+"
+    False -> ""
+  } <> "
 
 # Context
 
