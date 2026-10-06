@@ -113,6 +113,7 @@ pub fn execute(input, config: config.Config) {
                   config.client.origin,
                   policy.harness(user_config.policy),
                   user_config.readme,
+                  True,
                 ),
                 tools: agent.tools(),
               ),
