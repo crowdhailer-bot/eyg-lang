@@ -235,6 +235,10 @@ fn keyword_or_name(buffer) {
     "deep" -> t.Deep
     "handle" -> t.Handle
     "import" -> t.Import
+    "fact" -> t.Fact
+    "rule" -> t.Rule
+    "var" -> t.Var
+    "resolve" -> t.Resolve
     _ -> t.Name(buffer)
   }
 }

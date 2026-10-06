@@ -20,6 +20,10 @@ pub const basic =
 
 pub fn render(exp: ir.Node(Nil), handler: String) -> String {
   let used = ir.list_builtins(exp)
+  let used = case needs_query_runtime(exp) {
+    True -> ["equal", "$query", ..list.filter(used, fn(x) { x != "equal" })]
+    False -> used
+  }
   let #(definitions, program) = case needs_effect_runtime(exp) {
     False -> #(list.map(used, render_builtin), do_render(exp))
     True -> {
@@ -38,6 +42,13 @@ pub fn render(exp: ir.Node(Nil), handler: String) -> String {
   |> list.filter(fn(x) { x != "" })
   |> list.intersperse(";\n")
   |> string.concat
+}
+
+fn needs_query_runtime(node: ir.Node(Nil)) {
+  case node.0 {
+    ir.Query(_) -> True
+    _ -> list.any(ir.children(node), needs_query_runtime)
+  }
 }
 
 fn needs_effect_runtime(node: ir.Node(Nil)) {
@@ -59,6 +70,14 @@ fn do_render(source) {
       let #(items, tail) = gather_items(tail, [value])
       render_list(list.reverse(items), do_render(tail))
     }
+    ir.Query(operation) ->
+      case operation {
+        ir.EmptyTable -> "$query.empty()"
+        ir.Fact(label) -> "$query.fact(\"" <> escape_js(label) <> "\")"
+        ir.Rule -> "$query.rule"
+        ir.Merge -> "$query.merge"
+        ir.Resolve(label) -> "$query.resolve(\"" <> escape_js(label) <> "\")"
+      }
     ir.Tail -> "[]"
     ir.Apply(#(ir.Apply(#(ir.Extend(label), _), value), _), rest) -> {
       // Do string in render_fields
@@ -214,6 +233,50 @@ fn render_branches(label, branch, otherwise, acc: String) {
 
 fn render_builtin(identifier) {
   case identifier {
+    "$query" ->
+      "const $query = (() => {
+  class Table {
+    constructor(facts = new Map(), rules = []) { this.facts = facts; this.rules = rules; }
+  }
+  const check = value => {
+    if (!(value instanceof Table)) throw {eygBreak: {IncorrectTerm: 'Table'}};
+    return value;
+  };
+  const combine = (left, right) => {
+    const result = new Map(left);
+    for (const [label, rows] of right) {
+      const merged = [...(result.get(label) || [])];
+      for (const row of rows) if (!merged.some(old => equal(old)(row).$T === 'True')) merged.push(row);
+      result.set(label, merged);
+    }
+    return result;
+  };
+  return {
+    empty: () => new Table(),
+    fact: label => row => new Table(new Map([[label, [row]]])),
+    rule: rule => new Table(new Map(), [rule]),
+    merge: a => b => new Table(combine(check(a).facts, check(b).facts), [...a.rules, ...b.rules]),
+    resolve: label => table => {
+      check(table);
+      let facts = table.facts;
+      for (;;) {
+        const snapshot = new Table(facts);
+        let next = facts;
+        for (const rule of table.rules) {
+          const derived = rule(snapshot);
+          if (typeof Eff !== 'undefined' && derived instanceof Eff) throw {eygBreak: {ImpureQuery: derived.label}};
+          check(derived);
+          if (derived.rules.length) throw {eygBreak: {IncorrectTerm: 'facts returned by a rule'}};
+          next = combine(next, derived.facts);
+        }
+        let changed = false;
+        for (const [name, rows] of next) if (rows.length !== (facts.get(name) || []).length) changed = true;
+        facts = next;
+        if (!changed) return (facts.get(label) || []).reduceRight((tail, head) => [head, tail], []);
+      }
+    }
+  };
+})()"
     "bind" ->
       "function Eff(label, value, k) {
   this.label = label;

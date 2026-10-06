@@ -39,8 +39,23 @@ pub type Expression(m) {
   Perform(label: String)
   Handle(label: String)
 
+  Query(operation: QueryOperation)
   Builtin(identifier: String)
   Reference(reference: Reference)
+}
+
+/// Query operations are atoms, like record extension and variant selection.
+/// Rules contain ordinary pure EYG closures; the parser lowers joins to folds.
+pub type QueryOperation {
+  EmptyTable
+  Fact(label: String)
+  Rule
+  Merge
+  Resolve(label: String)
+}
+
+pub fn query(operation) {
+  #(Query(operation), Nil)
 }
 
 /// A reference to another eyg module.
@@ -446,6 +461,7 @@ pub fn map_children(
     NoCases -> return(NoCases)
     Perform(label:) -> return(Perform(label:))
     Handle(label:) -> return(Handle(label:))
+    Query(operation) -> return(Query(operation))
     Builtin(identifier:) -> return(Builtin(identifier:))
     Reference(reference:) -> return(Reference(reference:))
   }
@@ -556,6 +572,7 @@ pub fn map_children_with(
     NoCases -> return(#(acc, NoCases))
     Perform(label:) -> return(#(acc, Perform(label:)))
     Handle(label:) -> return(#(acc, Handle(label:)))
+    Query(operation) -> return(#(acc, Query(operation)))
     Builtin(identifier:) -> return(#(acc, Builtin(identifier:)))
     Reference(reference:) -> return(#(acc, Reference(reference:)))
   }
