@@ -168,10 +168,10 @@ Benefits are less files, EYG tries to make structuring using the file system opt
 It is potentially not necessary as an Overlay agent could be implemented purely in EYG in the future.
 Implementing a pure EYG agent is blocked by their not being `Eval` capabilities.
 
-Replace the non interactive terminal implementation with an interactive one.
-This could be built in Gleam with existing TUI libraries but this might not give the control performance required.
-Another option would be to rebuild the the CLI on another technology, opentui is a prefered direction here.
-This would allow a rich Overlay agent UI in the terminal but would also allow reimplementing the structured editor as a TUI.
+Build a full screen terminal UI for overlay. Prompts can be edited with history and Ctrl-C stops a turn,
+but output is a scrolling transcript with no panels for code, results or approvals.
+Rebuilding the CLI on another technology, opentui is a prefered direction, would allow a rich Overlay agent UI in the terminal
+and reimplementing the structured editor as a TUI.
 
 Limit published reference loading to only trusted publisher, i.e. signatories or trusted content i.e. specific hashes for modules.
 This is potentially not an overlay specific capability

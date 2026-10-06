@@ -13,3 +13,11 @@ export function setRawMode(stream, mode) {
   try { stream.setRawMode(mode); return Result$Ok(undefined); }
   catch (error) { return Result$Error(String(error)); }
 }
+export function onSignal(process, signal, callback) {
+  try { return Result$Ok(process.on(signal, callback)); }
+  catch (error) { return Result$Error(String(error)); }
+}
+export function removeSignalListener(process, signal, callback) {
+  try { return Result$Ok(process.removeListener(signal, callback)); }
+  catch (error) { return Result$Error(String(error)); }
+}

@@ -15,3 +15,18 @@ pub fn env(process: Process) -> List(#(String, String))
 
 @external(javascript, "./process_ffi.mjs", "stdin")
 pub fn stdin(process: Process) -> Stream
+
+/// Listen for a signal such as `SIGINT`, the process is no longer stopped by it.
+@external(javascript, "./process_ffi.mjs", "onSignal")
+pub fn on_signal(
+  process: Process,
+  signal: String,
+  callback: fn() -> Nil,
+) -> Result(Process, String)
+
+@external(javascript, "./process_ffi.mjs", "removeSignalListener")
+pub fn remove_signal_listener(
+  process: Process,
+  signal: String,
+  callback: fn() -> Nil,
+) -> Result(Process, String)

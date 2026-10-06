@@ -67,6 +67,8 @@ pub type Session {
     context: execute.Value,
     /// The type of the context, the agent's code is checked against it.
     context_type: binding.Poly,
+    /// Ctrl-C stops a turn rather than the session.
+    interrupt: terminal.Interrupt,
   )
 }
 
@@ -121,6 +123,7 @@ pub fn execute(input, config: config.Config) {
               policy: user_config.policy,
               context: user_config.context,
               context_type:,
+              interrupt: terminal.interrupt(),
             )
           use Nil <- system.then(outer_loop(session, state, []))
           Ok(0) |> system.Done
@@ -150,9 +153,11 @@ fn outer_loop(
       outer_loop(session, eyg_state, history)
     }
     Ok(text) -> {
+      terminal.start_turn(session.interrupt)
       use #(result, eyg_state) <- system.then(
         inner_loop(session, eyg_state, [chat.UserMessage(text, []), ..history]),
       )
+      terminal.end_turn(session.interrupt)
       // A failed completion is reported and the session continues from the
       // history before the failed message, so the user can try again.
       use history <- system.then(case result {
@@ -198,6 +203,7 @@ pub fn inner_loop(
 ) -> system.Effect(
   #(Result(List(chat.Message(tool.Call)), String), execute.State),
 ) {
+  use <- stopped(session.interrupt, eyg_state)
   use completion <- system.then(stream_completion(
     session,
     list.reverse(history),
@@ -609,7 +615,13 @@ fn stream_completion(
   use response <- system.then(system.fetch_stream(request))
   case response {
     Ok(response.Response(status: 200, body: reader, ..)) ->
-      read_stream(session.llm.provider, reader, <<>>, chat.fresh())
+      read_stream(
+        session.llm.provider,
+        session.interrupt,
+        reader,
+        <<>>,
+        chat.fresh(),
+      )
     Ok(response.Response(status:, body: reader, ..)) -> {
       use body <- system.map(read_all(reader, <<>>))
       Error(
@@ -631,10 +643,14 @@ fn stream_completion(
   }
 }
 
-fn read_stream(llm_provider, reader, remaining, completion) {
+fn read_stream(llm_provider, interrupt, reader, remaining, completion) {
   use chunk <- system.then(system.read_chunk(reader))
-  case chunk {
-    Ok(#(Some(bits), reader)) -> {
+  case chunk, terminal.interrupted(interrupt) {
+    _, True -> {
+      use Nil <- system.then(system.stdout(""))
+      system.Done(Error(stopped_message))
+    }
+    Ok(#(Some(bits), reader)), False -> {
       let #(completions, remaining) =
         provider.completion_chunk_parse(llm_provider, remaining, bits)
       let text =
@@ -644,13 +660,24 @@ fn read_stream(llm_provider, reader, remaining, completion) {
         |> string.concat
       use Nil <- system.then(system.write_stdout(text))
       let completion = chat.append_chunks(completion, completions)
-      read_stream(llm_provider, reader, remaining, completion)
+      read_stream(llm_provider, interrupt, reader, remaining, completion)
     }
-    Ok(#(None, _)) -> {
+    Ok(#(None, _)), False -> {
       use Nil <- system.then(system.stdout(""))
       system.Done(Ok(completion))
     }
-    Error(reason) -> system.Done(Error(effect.describe_fetch_error(reason)))
+    Error(reason), False ->
+      system.Done(Error(effect.describe_fetch_error(reason)))
+  }
+}
+
+const stopped_message = "Stopped, send a message to continue."
+
+/// Stop the turn if the user pressed Ctrl-C.
+fn stopped(interrupt, runtime, then) {
+  case terminal.interrupted(interrupt) {
+    True -> system.Done(#(Error(stopped_message), runtime))
+    False -> then()
   }
 }
 
