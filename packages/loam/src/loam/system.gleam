@@ -306,6 +306,11 @@ pub fn try(
 }
 
 pub fn run(effect: Effect(a)) -> Promise(a) {
+  do_run([], effect)
+}
+
+/// `history` is the prompts entered so far, recalled at a terminal.
+fn do_run(history: List(String), effect: Effect(a)) -> Promise(a) {
   case effect {
     Done(value) -> promise.resolve(value)
     Exit(status) -> {
@@ -313,38 +318,39 @@ pub fn run(effect: Effect(a)) -> Promise(a) {
       panic as "the process did not stop"
     }
     AppendFileBits(path, bytes, resume) ->
-      run(resume(simplifile.append_bits(path, bytes)))
-    DeleteFile(path, resume) -> run(resume(simplifile.delete(path)))
-    Env(name, resume) -> run(resume(envoy.get(name) |> option.from_result))
+      do_run(history, resume(simplifile.append_bits(path, bytes)))
+    DeleteFile(path, resume) -> do_run(history, resume(simplifile.delete(path)))
+    Env(name, resume) ->
+      do_run(history, resume(envoy.get(name) |> option.from_result))
     FileInfo(path, resume) -> {
       let result =
         simplifile.file_info(path)
         |> result.map(fn(info) {
           Metadata(simplifile.file_info_type(info), info.size)
         })
-      run(resume(result))
+      do_run(history, resume(result))
     }
     Now(resume) -> {
       let #(seconds, nanos) =
         timestamp.system_time() |> timestamp.to_unix_seconds_and_nanoseconds
-      run(resume(seconds * 1000 + nanos / 1_000_000))
+      do_run(history, resume(seconds * 1000 + nanos / 1_000_000))
     }
-    Random(max, resume) -> run(resume(int.random(max)))
+    Random(max, resume) -> do_run(history, resume(int.random(max)))
     ReadFileRange(path, offset, limit, resume) -> {
       let result = case offset < 0 || limit < 0 {
         True -> Error(simplifile.Einval)
         False -> read_at_offset(path, offset, limit)
       }
-      run(resume(result))
+      do_run(history, resume(result))
     }
     WriteFileBits(path, bytes, resume) ->
-      run(resume(simplifile.write_bits(path, bytes)))
-    WriteStdout(text, resume) -> run(resume(io.print(text)))
-    WriteStderr(text, resume) -> run(resume(io.print_error(text)))
-    GenerateKey(resume) -> run(resume(crypto.generate_key()))
+      do_run(history, resume(simplifile.write_bits(path, bytes)))
+    WriteStdout(text, resume) -> do_run(history, resume(io.print(text)))
+    WriteStderr(text, resume) -> do_run(history, resume(io.print_error(text)))
+    GenerateKey(resume) -> do_run(history, resume(crypto.generate_key()))
     Fetch(request, resume) -> {
       use response <- promise.await(do_fetch(request))
-      run(resume(response))
+      do_run(history, resume(response))
     }
     FetchStream(request, resume) -> {
       use response <- promise.await(fetch.send_bits(request))
@@ -354,12 +360,13 @@ pub fn run(effect: Effect(a)) -> Promise(a) {
           |> result.map(fn(reader) { response.set_body(response, Body(reader)) })
         })
         |> result.map_error(fetch_error)
-      run(resume(response))
+      do_run(history, resume(response))
     }
     ReadChunk(Chunks(chunks), resume) ->
       case chunks {
-        [] -> run(resume(Ok(#(None, Chunks([])))))
-        [chunk, ..rest] -> run(resume(Ok(#(Some(chunk), Chunks(rest)))))
+        [] -> do_run(history, resume(Ok(#(None, Chunks([])))))
+        [chunk, ..rest] ->
+          do_run(history, resume(Ok(#(Some(chunk), Chunks(rest)))))
       }
     ReadChunk(Body(reader) as body, resume) -> {
       use chunk <- promise.await(fetch.read_chunk(reader))
@@ -367,23 +374,29 @@ pub fn run(effect: Effect(a)) -> Promise(a) {
         chunk
         |> result.map(fn(chunk) { #(chunk, body) })
         |> result.map_error(fetch_error)
-      run(resume(chunk))
+      do_run(history, resume(chunk))
     }
-    CreateDirectory(path, resume) -> run(resume(do_create_directory(path)))
-    Cwd(resume) -> run(resume(do_cwd()))
-    Hash(algorithm, bytes, resume) -> run(resume(do_hash(algorithm, bytes)))
-    ReadDirectory(path, resume) -> run(resume(simplifile.read_directory(path)))
-    ReadFile(path, resume) -> run(resume(do_read_file(path)))
+    CreateDirectory(path, resume) ->
+      do_run(history, resume(do_create_directory(path)))
+    Cwd(resume) -> do_run(history, resume(do_cwd()))
+    Hash(algorithm, bytes, resume) ->
+      do_run(history, resume(do_hash(algorithm, bytes)))
+    ReadDirectory(path, resume) ->
+      do_run(history, resume(simplifile.read_directory(path)))
+    ReadFile(path, resume) -> do_run(history, resume(do_read_file(path)))
     WriteFile(path, contents, resume) ->
-      run(resume(do_write_file(path, contents)))
+      do_run(history, resume(do_write_file(path, contents)))
     SetPermissions(path, permissions, resume) ->
-      run(resume(do_set_permissions(path, permissions)))
-    Stdin(resume) -> run(resume(read_stdin()))
-    Prompt(text, resume) -> run(resume(prompt.read_line(text)))
-    Stdout(text, resume) -> run(resume(io.println(text)))
+      do_run(history, resume(do_set_permissions(path, permissions)))
+    Stdin(resume) -> do_run(history, resume(read_stdin()))
+    Prompt(text, resume) -> {
+      let #(line, history) = prompt.read_line(text, history)
+      do_run(history, resume(line))
+    }
+    Stdout(text, resume) -> do_run(history, resume(io.println(text)))
     Wait(duration, resume) -> {
       use response <- promise.await(promise.wait(duration))
-      run(resume(response))
+      do_run(history, resume(response))
     }
   }
 }
