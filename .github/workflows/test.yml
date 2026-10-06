@@ -160,6 +160,7 @@ jobs:
         if: matrix.package == 'overlay_eval'
         working-directory: packages/overlay_eval
         run: |
+          gleam run -m overlay/eval -- validate suites/programs.eyg
           gleam run -m overlay/eval -- validate suites/fibonacci.eyg
           gleam run -m overlay/eval -- validate suites/contexts.eyg
   test-eyg-packages:
