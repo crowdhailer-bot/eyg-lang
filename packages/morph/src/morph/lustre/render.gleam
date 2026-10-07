@@ -289,7 +289,23 @@ pub fn expression(exp, rev, errors) {
         h.span([a.class(keyword)], [text("handle ")]),
         h.span([a.class(effect), exp_key(rev)], [text(label)]),
       ])
-    e.Query(operation) -> frame.Inline([text(string.inspect(operation))])
+    e.Query(operation) -> {
+      let #(word, label) = case operation {
+        ir.EmptyTable -> #("@{}", "")
+        ir.Fact(label) -> #("fact ", label)
+        ir.Rule -> #("rule", "")
+        ir.Merge -> #("merge", "")
+        ir.Resolve(label) -> #("resolve ", label)
+        ir.Match(label, keys) -> #(
+          "match ",
+          label <> "{" <> string.join(keys, ", ") <> "}",
+        )
+      }
+      frame.Inline([
+        h.span([a.class(keyword), exp_key(rev)], [text(word)]),
+        h.span([a.class(tag)], [text(label)]),
+      ])
+    }
     e.Builtin(identifier) ->
       frame.Inline([
         h.span([a.class(builtin), exp_key(rev)], [text("!"), text(identifier)]),
