@@ -43,3 +43,47 @@ pub fn malformed_queries_test() {
   parser.all_from_string("resolve out @{}") |> should.be_error()
   parser.all_from_string("rule Out(x) { Input(x) var x }") |> should.be_error()
 }
+
+pub fn known_fields_become_the_match_key_test() {
+  let assert Ok(source) =
+    parser.all_from_string(
+      "rule Out(t) { var m var t Movie({year: 1987, id: m}), Title({id: m, title: t}) }",
+    )
+  let assert #(
+    ir.Apply(#(ir.Query(ir.Rule), _), #(ir.Lambda("$db", body), _)),
+    _,
+  ) = ir.clear_annotation(source)
+  let assert #(
+    ir.Apply(
+      #(
+        ir.Apply(
+          #(ir.Apply(#(ir.Query(ir.Match("Movie", ["year"])), _), _), _),
+          _,
+        ),
+        _,
+      ),
+      #(ir.Lambda("$row0", #(ir.Let("m", _, inner), _)), _),
+    ),
+    _,
+  ) = body
+  let assert #(
+    ir.Apply(
+      #(
+        ir.Apply(
+          #(ir.Apply(#(ir.Query(ir.Match("Title", ["id"])), _), _), _),
+          _,
+        ),
+        _,
+      ),
+      _,
+    ),
+    _,
+  ) = inner
+}
+
+pub fn variables_bind_inside_tags_test() {
+  parser.all_from_string(
+    "rule Out(t) { var t Triple({a: \"movie/title\", v: S(t)}) }",
+  )
+  |> should.be_ok()
+}
