@@ -12,6 +12,16 @@ pub fn to_js(
   refs: dict.Dict(v1.Cid, binding.Poly),
   handler: String,
 ) -> String {
+  prepare(program, refs) |> js.render(handler)
+}
+
+/// Compile to a JavaScript expression, including its local runtime definitions.
+/// Embedders can assign the returned value without using JavaScript `eval`.
+pub fn to_js_expression(program, refs, handler) -> String {
+  prepare(program, refs) |> js.render_expression(handler)
+}
+
+fn prepare(program, refs) {
   program
   |> infer_purity(refs)
   |> ir.alpha
@@ -19,7 +29,6 @@ pub fn to_js(
   |> ir.unnest
   |> monadic()
   |> tree.clear_annotation()
-  |> js.render(handler)
 }
 
 fn infer_purity(program, refs) {
