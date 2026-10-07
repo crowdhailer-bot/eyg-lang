@@ -14,6 +14,8 @@ import touch_grass/file_system/append_file
 import touch_grass/file_system/read_file
 import touch_grass/file_system/write_file
 import touch_grass/interface
+import touch_grass/sqlite
+import touch_grass/sqlite_query
 
 /// The case effect requested before any processing.
 /// 
@@ -39,6 +41,8 @@ pub type Effect {
   ReadFile(read_file.Input)
   Sign(sign.Request)
   Sleep(Int)
+  Sqlite(sqlite.Input)
+  SqliteQuery(sqlite_query.Input)
   StandardError(String)
   StandardIn
   StanardOut(String)
@@ -66,6 +70,8 @@ pub fn effects() -> interface.Harness(Effect, meta) {
     tg.read_file() |> tg.map(ReadFile),
     tg.sign() |> tg.map(Sign),
     tg.sleep() |> tg.map(Sleep),
+    tg.sqlite() |> tg.map(Sqlite),
+    tg.sqlite_query() |> tg.map(SqliteQuery),
     tg.standard_error() |> tg.map(StandardError),
     tg.standard_in() |> tg.replace(StandardIn),
     tg.standard_out() |> tg.map(StanardOut),

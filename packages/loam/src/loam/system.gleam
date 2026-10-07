@@ -19,6 +19,18 @@ import shellout
 import simplifile
 import untethered/keypair
 
+pub type SqlValue {
+  SqlInteger(Int)
+  SqlText(String)
+  SqlBlob(BitArray)
+  SqlNull
+}
+
+/// Rows returned by the statement and the number of rows it changed.
+pub type SqlResult {
+  SqlResult(columns: List(String), rows: List(List(SqlValue)), changes: Int)
+}
+
 pub type Metadata {
   Metadata(kind: simplifile.FileType, size: Int)
 }
@@ -71,6 +83,14 @@ pub type Effect(a) {
   )
   WriteStdout(String, fn(Nil) -> Effect(a))
   WriteStderr(String, fn(Nil) -> Effect(a))
+  /// Run one statement on a SQLite database file, created if missing.
+  /// Connections are kept open so temporary tables last between statements.
+  Sql(
+    database: String,
+    sql: String,
+    params: List(SqlValue),
+    resume: fn(Result(SqlResult, String)) -> Effect(a),
+  )
 }
 
 pub fn append_file_bits(path, contents) {
@@ -117,6 +137,10 @@ pub fn write_stdout(text) {
 }
 
 /// Write exact text to standard error without adding a newline.
+pub fn sql(database, sql, params) {
+  Sql(database, sql, params, Done)
+}
+
 pub fn write_stderr(text) {
   WriteStderr(text, Done)
 }
@@ -211,6 +235,8 @@ pub fn then(effect: Effect(a), func: fn(a) -> Effect(b)) -> Effect(b) {
       WriteFileBits(path, bytes, fn(result) { then(resume(result), func) })
     WriteStdout(text, resume) ->
       WriteStdout(text, fn(value) { then(resume(value), func) })
+    Sql(database, sql, params, resume) ->
+      Sql(database, sql, params, fn(result) { then(resume(result), func) })
     WriteStderr(text, resume) ->
       WriteStderr(text, fn(value) { then(resume(value), func) })
     GenerateKey(resume) ->
@@ -322,6 +348,8 @@ pub fn run(effect: Effect(a)) -> Promise(a) {
       run(resume(simplifile.write_bits(path, bytes)))
     WriteStdout(text, resume) -> run(resume(io.print(text)))
     WriteStderr(text, resume) -> run(resume(io.print_error(text)))
+    Sql(database, sql, params, resume) ->
+      run(resume(run_sql(database, sql, params)))
     GenerateKey(resume) -> run(resume(crypto.generate_key()))
     Fetch(request, resume) -> {
       use response <- promise.await(do_fetch(request))
@@ -422,3 +450,11 @@ fn read_at_offset(
   offset: Int,
   limit: Int,
 ) -> Result(BitArray, simplifile.FileError)
+
+/// Run a statement now, outside an effect, for tests and tools.
+@external(javascript, "./system_ffi.mjs", "runSql")
+pub fn run_sql(
+  database: String,
+  sql: String,
+  params: List(SqlValue),
+) -> Result(SqlResult, String)
