@@ -1,0 +1,15 @@
+{
+  "name": "opencode-eyg",
+  "version": "0.1.0",
+  "description": "Run EYG in opencode, every effect is checked by a policy.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "dist/eyg.js",
+  "files": ["dist"],
+  "scripts": {
+    "build": "gleam build && bun build plugin/eyg.ts --outfile dist/eyg.js --target bun"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "*"
+  }
+}
