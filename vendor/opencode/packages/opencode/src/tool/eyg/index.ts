@@ -197,7 +197,7 @@ export async function describe(input: {
     "## Effects available",
     available || "(none, only pure computation)",
     fields.has("task")
-      ? "`Task` takes an optional `policy` field, a record of gate functions, i.e. `{read: Pass, grep: Pass}`. The subagent's policy is yours, or its agent's own policy, restricted by it. Effects without a field are removed. A gate returns `Pass(lift)` to allow an effect or `Mock(lower)` to return a value instead. Fields are effect names in snake case."
+      ? "`Task` takes an optional `policy` field, a record of gate functions, i.e. `{read: Pass, grep: Pass}`. The subagent's policy is yours, or its agent's own policy, restricted by it. Effects without a field are removed. A gate returns `Pass(lift)` to allow an effect or `Mock(lower)` to return a value instead. Fields are effect names in snake case. File paths are absolute when a gate sees them."
       : "",
     fields.has("task") && agents.length ? `Agents with their own policy: ${agents.join(", ")}` : "",
     tools.length ? `## Opencode tools\n${tools.join("\n\n")}` : "",
