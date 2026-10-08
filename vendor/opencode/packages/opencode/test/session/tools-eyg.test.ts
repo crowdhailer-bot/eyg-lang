@@ -22,13 +22,14 @@ import { Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 
 const directory = mkdtempSync(path.join(tmpdir(), "opencode-eyg-"))
-// The `timing` tool is mocked, `shout` is allowed and `secret` has no gate so it is unavailable.
+// The `timing` tool is mocked, `shout` and `task` are allowed and `secret` has no gate so it is unavailable.
 writeFileSync(
   path.join(directory, "eyg.eyg"),
   `{
   policy: {
     shout: Pass,
-    timing: (_) -> { Mock(Ok("mocked")) }
+    timing: (_) -> { Mock(Ok("mocked")) },
+    task: Pass
   }
 }`,
 )
@@ -55,7 +56,7 @@ const tool = (id: string, execute: Tool.Def["execute"]): Tool.Def => ({
 })
 
 const registry = ToolRegistry.Service.of({
-  ids: () => Effect.succeed(["shout", "timing", "secret"]),
+  ids: () => Effect.succeed(["shout", "timing", "secret", "task"]),
   all: () => Effect.succeed([]),
   named: () => Effect.die("unused"),
   tools: () =>
@@ -65,6 +66,12 @@ const registry = ToolRegistry.Service.of({
       ),
       tool("timing", () => Effect.succeed({ title: "timing", metadata: {}, output: "performed" })),
       tool("secret", () => Effect.succeed({ title: "secret", metadata: {}, output: "leaked" })),
+      // The task tool reports the session it starts, as opencode's does.
+      tool("task", (_args, ctx) =>
+        ctx
+          .metadata({ metadata: { sessionId: "ses_child" } })
+          .pipe(Effect.as({ title: "task", metadata: {}, output: "started" })),
+      ),
     ]),
 })
 
@@ -125,19 +132,26 @@ const processor = {
     providerID: ProviderV2.ID.make("test"),
     time: { created: 1 },
   } satisfies SessionV1.Assistant,
-  updateToolCall: () => Effect.die("unused"),
+  updateToolCall: () => Effect.void,
   completeToolCall: () => Effect.void,
 } as unknown as Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
 
-const resolve = SessionTools.resolve({
-  agent,
-  model,
-  session: { id: SessionID.make("ses_eyg"), permission: [], directory } as unknown as Session.Info,
-  processor,
-  bypassAgentCheck: false,
-  messages: [],
-  promptOps: {} as never,
-})
+const resolveFor = (session: { id: string; parentID?: string }) =>
+  SessionTools.resolve({
+    agent,
+    model,
+    session: {
+      id: SessionID.make(session.id),
+      parentID: session.parentID ? SessionID.make(session.parentID) : undefined,
+      permission: [],
+      directory,
+    } as unknown as Session.Info,
+    processor,
+    bypassAgentCheck: false,
+    messages: [],
+    promptOps: {} as never,
+  })
+const resolve = resolveFor({ id: "ses_eyg" })
 
 const options = { toolCallId: "call-eyg", abortSignal: new AbortController().signal, messages: [] }
 
@@ -161,10 +175,30 @@ testEffect(layer("only")).effect("eyg is the only tool and other tools are effec
 testEffect(layer("gate")).effect("calls to other tools are checked by the policy", () =>
   Effect.gen(function* () {
     const tools = yield* resolve
-    expect(Object.keys(tools).toSorted()).toEqual(["eyg", "secret", "shout", "timing"])
+    expect(Object.keys(tools).toSorted()).toEqual(["eyg", "secret", "shout", "task", "timing"])
     const call = (id: string, args: Record<string, unknown>) => Effect.promise(() => tools[id]!.execute!(args, options))
     expect((yield* call("shout", { textValue: "hi" })).output).toBe("HI")
     expect((yield* call("timing", {})).output).toBe("mocked")
     expect((yield* call("secret", {})).output).toContain("not allowed by your policy")
+  }),
+)
+
+testEffect(layer("only")).effect("a subagent started by Task has the policy it was given", () =>
+  Effect.gen(function* () {
+    const tools = yield* resolve
+    const started = yield* Effect.promise(() =>
+      tools.eyg.execute!(
+        {
+          code: `perform Task({description: "shout", prompt: "shout", subagent_type: "general", policy: {shout: Pass}})`,
+        },
+        options,
+      ),
+    )
+    expect(started.output).toBe(`Ok("started")`)
+    const child = yield* resolveFor({ id: "ses_child", parentID: "ses_eyg" })
+    const description = child.eyg.description ?? ""
+    expect(description).toContain("Shout:")
+    expect(description).not.toContain("Timing:")
+    expect(description).not.toContain("Task:")
   }),
 )
