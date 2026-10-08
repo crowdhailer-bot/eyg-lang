@@ -1,0 +1,468 @@
+---
+name: EYG syntax guide
+description: Syntax reference for the EYG text representation.
+---
+# EYG Syntax Guide
+
+EYG is a type-safe scripting language with managed effects.
+It has a minimal surface area: everything is an expression, there are no statements, and effects are explicit.
+
+---
+
+## Comments
+
+Lines beginning with `//` are comments. They are ignored by the parser.
+
+```eyg
+// This is a comment
+let x = 5
+// x is now 5
+x
+```
+
+### Blocks
+
+Multiple `let` statements form a block.
+EYG is expression based and bare statements (without a `let`) are not support.
+
+---
+
+## Literals
+
+### Integers
+
+Integers are written as sequences of digits. Negative integers use a leading `-`.
+
+```eyg
+let x = 42
+let y = -7
+0
+```
+
+### Strings
+
+Strings are enclosed in double quotes. Supported escape sequences:
+
+| Escape | Meaning |
+|--------|---------|
+| `\n`   | Newline |
+| `\t`   | Tab |
+| `\r`   | Carriage return |
+| `\"`   | Double quote |
+| `\\`   | Backslash |
+
+```eyg
+let a = "hello, world"
+let b = "line one\nline two"
+"she said \"hi\""
+```
+
+---
+
+## Variables
+
+A variable is any lowercase identifier (letters, digits, and underscores, starting with a letter or underscore).
+
+```eyg
+let _ = x
+let _ = my_value
+counter1
+```
+
+---
+
+## Let Bindings
+
+`let` binds a value to a name. In a block (at the top level or inside a function body), multiple `let` bindings are written on successive lines and their scope extends to the end of the block.
+
+```eyg
+let x = 5
+let y = 10
+x
+```
+
+In expression position (nested), `let` takes two expressions: the value and the continuation.
+
+```eyg
+let x = 5 x
+```
+
+### Destructuring Records
+
+`let` can destructure a record into its fields. Each field is extracted by name.
+
+```eyg
+let {name: first, age: n} = {name: "Bob", age: 25, admin: True({})}
+first
+```
+
+Any unlisted fields in the pattern are ignored, there is no rest or spread syntax.
+
+If the variable name matches the field name, the `: variable` part can be omitted:
+
+```eyg
+let {name, age} = person
+name
+```
+
+An empty destructuring pattern `{}` is valid and binds nothing:
+
+```eyg
+let {} = record
+result
+```
+
+---
+
+## Functions (Lambdas)
+
+Functions are written with a parameter list in parentheses, `->`, an opening `{`, a body expression, and a closing `}`.
+
+```eyg
+(x) -> { x }
+```
+
+Multiple parameters are separated by commas. Multiple-argument functions are curried — each parameter produces a nested single-argument function.
+
+```eyg
+(x, y) -> { x }
+```
+
+### Destructuring Parameters
+
+Function parameters can be record patterns:
+
+```eyg
+({name, age}) -> { name }
+```
+
+### Zero-Argument Functions
+
+Functions always require at least one parameter, it can be discarded using `_`:
+
+```eyg
+// incorrect, no parameters
+() -> { perform StandardOut("hello\n") }
+```
+
+```eyg
+// correct, at least one parameter
+(_) -> { perform StandardOut("hello\n") }
+```
+
+### Calling Functions
+
+Apply a function by appending a parenthesised argument list:
+
+```eyg
+let double = (x) -> { !int_multiply(x, 2) }
+double(5)
+```
+
+Multiple arguments are written separated by commas. Since functions are curried, `f(a, b)` is syntactic sugar for `f(a)(b)`.
+
+```eyg
+let add = (x, y) -> { !int_add(x, y) }
+add(3, 4)
+```
+
+**EYG has no loop or each construct, instead use !fix, !list_fold or libraries.**
+
+### Recursion
+
+To write a recursive function use the `!fix` builtin.
+`!fix` passes the function itself as the first argument to the function.
+
+```eyg
+let factorial = !fix((self, n) -> {
+  match !int_compare(n, 0) {
+    Eq(_) -> { 1 }
+    | (_) -> { !int_multiply(n, self(!int_subtract(n, 1))) }
+  }
+})
+factorial(5)
+```
+
+### Fold
+
+To iterate the items of a list use `!list_fold`.
+All iteration patterns can be built on `!list_fold`, use an effect for early return.
+
+---
+
+## Function Application (Calling)
+
+Any expression followed by `(args)` applies it as a function. Chained calls are left-associative.
+
+```eyg
+let _ = f(x)
+let _ = f(x)(y)
+outer(inner(value))
+```
+
+---
+
+## Records
+
+Records are ordered collections of named fields, written with `{}`.
+
+```eyg
+let _ = {}
+{name: "Alice", age: 30}
+```
+
+### Field Access
+
+Fields are accessed with `.`:
+
+```eyg
+person.name
+```
+
+### Record Update (Overwrite)
+
+`{..record}` passes a record through unchanged. Prepending field assignments with `..record` overwrites those fields in the existing record:
+
+```eyg
+{age: 31, ..person}
+```
+
+Only fields already in the record can be overwritten, `{new_field: 1, ..person}` fails with a missing field.
+To add fields build a new record listing every field.
+
+### Record Shorthand
+
+When the field name and variable have the same name, you can omit the `: value`:
+
+```eyg
+let name = "Alice"
+{name}
+// equivalent to {name: name}
+```
+
+---
+
+## Lists
+
+Lists are written with `[]`. Items are separated by commas. A trailing comma is allowed.
+
+```eyg
+let l1 = []
+let l2 = [1, 2, 3]
+["a", "b",]
+```
+
+### Spread
+
+`..expr` spreads an existing list as the tail:
+
+```eyg
+let list = [1, ..rest]
+```
+
+---
+
+## Tags (Variants)
+
+Tags create tagged values (like union variants). A tag name starts with an uppercase letter.
+
+```eyg
+let _ = Ok
+let _ = Error
+let _ = True
+False
+```
+
+Tags are applied as functions:
+
+```eyg
+let _ = Ok(value)
+Error("something went wrong")
+```
+
+---
+
+## Match
+
+`match` deconstructs tagged values. Cases are written as `TagName variable -> { expression }`.
+
+```eyg
+match result {
+  Ok(value) -> { value }
+  Error(msg) -> { 0 }
+}
+```
+
+The match expression can be written inline (with the subject before the `{}`):
+
+```eyg
+match Ok(5) {
+  Ok(n) -> { n }
+  Error(_) -> { 0 }
+}
+```
+
+*`_` is the conventional placeholder when a value is discarded.*
+
+Or in "function" form (without a subject), producing a function that takes the value to match:
+
+```eyg
+let handle_result = match {
+  Ok(value) -> { value }
+  Error(_) -> { -1 }
+}
+handle_result(Ok(42))
+```
+
+### Else Branch
+
+An else branch catches any tag not handled by previous cases. It is written with `|`:
+
+```eyg
+match x {
+  Ok(value) -> { value }
+  | (other) -> { -1 }
+}
+```
+
+### What `match` does NOT support
+
+`match` only deconstructs tagged values.
+
+| Unsupported                         | Use instead                                                                              |
+|-------------------------------------|------------------------------------------------------------------------------------------|
+| `match n { 2 -> { ... } }`          | Dispatch on a tag via `!int_compare` returning `Lt({}) | Eq({}) | Gt({})`.             |
+| `match x { _ -> { ... } }`          | An else branch: `| (_) -> { ... }`.                                                     |
+| `match xs { [] -> { 0 } }`          | `!list_pop(xs)` returns `Ok({head, tail}) | Error({})`; match on that tag.              |
+| `Ok(Some(v)) -> ...`                | Match outer tag, then `match` on the inner value inside the branch.                      |
+| `Ok({pre: "", post}) -> ...`       | Patterns only bind variables, compare a field value with `!equal` inside the branch.     |
+
+If a branch ignores the payload entirely, the conventional placeholder
+is `_`:
+
+---
+
+## Effects
+
+EYG separates the description of an effect from its implementation. Scripts declare effects they need; the runner decides what to do with them.
+
+### Perform
+
+`perform EffectName` sends an effect. The effect name must start with an uppercase letter.
+
+```eyg
+perform Log("hello")
+```
+
+### Handle
+
+`handle EffectName` returns a handler function for the named effect:
+
+```eyg
+handle Log
+```
+
+`handle` is used to install custom effect handlers in advanced embedding scenarios.
+
+---
+
+## Builtins
+
+Builtins call built-in runtime operations. They start with `!` followed by a lowercase identifier.
+
+```eyg
+let seven = !int_add(3, 4)
+let product = !int_multiply(x, y)
+!string_append("hello", " world")
+```
+
+See [`builtins_reference.md`](./builtins_reference.md) for the full list.
+
+---
+
+## References
+
+Reference another module.
+
+### Content Reference
+
+A reference is an immutable content-addressed module identifier.
+It starts with `#` followed by a valid base32-encoded CID.
+
+```eyg
+#bafyreigdmqpykrgxyahdnfmfzmc5j4bkwci6wf6fkdbapq7hfpmg2j3yqy
+```
+
+---
+
+### Package reference
+
+A package reference starts with `@`. Three forms are accepted:
+
+| Syntax            | Meaning                                                              |
+|-------------------|----------------------------------------------------------------------|
+| `@standard`            | Latest published version (resolved at evaluation time).              |
+| `@standard:3`          | Exactly version `3`. The hash is whatever the registry has for it.   |
+| `@standard:3:bafyrei…` | Exactly version `3`, pinned to a specific module CID.                |
+
+The version is a positive integer. The pinned hash, when given, must be a valid base32-encoded CID.
+
+A bare `@standard` references the latest pulled release of that package.
+The shorthand forms `@standard` and `@standard:3` are conveniences for testing and shell use.
+
+**Every release reference in a shared or published module must be fully pinned:**
+
+---
+
+### Relative references
+
+`import` loads a module by path.
+The path must be a string literal.
+Relative paths are resolved from the directory of the source file that contains the import.
+
+`eyg share` bundles local imports and replaces their paths with content references.
+
+```eyg
+let fs = import "../eyg_packages/fs/index.eyg"
+let {list} = import "../eyg_packages/standard/index.eyg.json"
+```
+
+The imported value is the module's exported value (usually a record of functions).
+
+---
+
+## Vacant
+
+`vacant` (shown as `?` in the structural editor) is a placeholder for an expression that has not yet been written. It has no textual syntax but appears in the IR. The parser produces `Vacant` when a `let` binding is the last line of a block with no following expression.
+
+---
+
+## Complete Example: Filtering Files
+
+```eyg
+let fs = import "../eyg_packages/fs/index.eyg"
+let {list} = import "../eyg_packages/standard/index.eyg.json"
+
+let files = fs.list_files({root: ".", ignore: [".git"]})
+let gleam_files = list.filter(
+  (path) -> { !string_ends_with(path, ".gleam") },
+  files
+)
+gleam_files
+```
+
+## Complete Example: Pattern Matching
+
+```eyg
+let parse_age = (s) -> {
+  match !int_parse(s) {
+    Ok(n) -> { Ok(n) }
+    Error(_) -> { Error("not a number") }
+  }
+}
+
+match parse_age("42") {
+  Ok(age) -> { perform StandardOut(!int_to_string(age)) }
+  Error(msg) -> { perform StandardOut(msg) }
+}
+```
