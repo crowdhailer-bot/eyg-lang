@@ -6,6 +6,8 @@ import { MCP } from "@/mcp"
 import { McpCatalog } from "@/mcp/catalog"
 import { Permission } from "@/permission"
 import { Tool } from "@/tool/tool"
+import { Eyg } from "@/tool/eyg"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
@@ -17,7 +19,7 @@ import { Effect } from "effect"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
-import { PartID } from "./schema"
+import { PartID, SessionID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -89,49 +91,169 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         .pipe(Effect.orDie),
   })
 
-  for (const item of yield* registry.tools({
+  const executeItem = Effect.fn("SessionTools.executeItem")(function* (
+    item: Tool.Def,
+    args: Record<string, unknown>,
+    options: ToolExecutionOptions,
+    ctx: Tool.Context,
+  ) {
+    yield* plugin.trigger(
+      "tool.execute.before",
+      { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
+      { args },
+    )
+    const result = yield* item.execute(args, ctx)
+    const output = {
+      ...result,
+      attachments: result.attachments?.map((attachment) => ({
+        ...attachment,
+        id: PartID.ascending(),
+        sessionID: ctx.sessionID,
+        messageID: input.processor.message.id,
+      })),
+    }
+    yield* plugin.trigger(
+      "tool.execute.after",
+      { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+      output,
+    )
+    if (options.abortSignal?.aborted) {
+      yield* input.processor.completeToolCall(options.toolCallId, output)
+    }
+    return output
+  })
+
+  const items = yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
     permission: input.session.permission,
-  })) {
+  })
+  for (const item of items) {
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
     tools[item.id] = tool({
       description: item.description,
       inputSchema: jsonSchema(schema),
       execute(args, options) {
-        return run.promise(
-          Effect.gen(function* () {
-            const ctx = context(args, options)
-            yield* plugin.trigger(
-              "tool.execute.before",
-              { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
-              { args },
-            )
-            const result = yield* item.execute(args, ctx)
-            const output = {
-              ...result,
-              attachments: result.attachments?.map((attachment) => ({
-                ...attachment,
-                id: PartID.ascending(),
-                sessionID: ctx.sessionID,
-                messageID: input.processor.message.id,
-              })),
-            }
-            yield* plugin.trigger(
-              "tool.execute.after",
-              { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
-              output,
-            )
-            if (options.abortSignal?.aborted) {
-              yield* input.processor.completeToolCall(options.toolCallId, output)
-            }
-            return output
-          }),
-        )
+        return run.promise(executeItem(item, args, options, context(args, options)))
       },
     })
   }
+
+  // Every tool becomes an effect that EYG programs perform under the user's policy, see tool/eyg.
+  const eygTools = Effect.fn("SessionTools.eygTools")(function* () {
+    const sessions = yield* Session.Service
+    const toSession = (info: Session.Info): Eyg.Session => ({
+      id: info.id,
+      parentID: info.parentID,
+      directory: info.directory,
+      agent: info.agent ?? input.agent.name,
+    })
+    const parent = (id: string) =>
+      run.promise(
+        sessions.get(SessionID.make(id)).pipe(
+          Effect.map(toSession),
+          Effect.catchCause(() => Effect.succeed(undefined)),
+        ),
+      )
+    const others = yield* Effect.forEach(
+      Object.entries(tools).filter((entry) => !items.some((item) => item.id === entry[0])),
+      ([key, other]) =>
+        Effect.promise(() => Promise.resolve(asSchema(other.inputSchema).jsonSchema)).pipe(
+          Effect.map((schema) => ({ key, other, schema: schema as JSONSchema7 })),
+        ),
+    )
+    const effects = (options?: ToolExecutionOptions, code?: Record<string, unknown>): Eyg.Effect[] => [
+      ...items.map((item) => ({
+        id: item.id,
+        description: item.description,
+        schema: ToolJsonSchema.fromTool(item),
+        execute: (args: Record<string, unknown>, started: (sessionID: string) => void) => {
+          if (!options) return Promise.reject(new Error("not running"))
+          // Progress is shown on the eyg tool call, which keeps its own input.
+          const ctx = context(code ?? args, options)
+          const metadata: Tool.Context["metadata"] = (value) => {
+            if (typeof value.metadata?.sessionId === "string") started(value.metadata.sessionId)
+            return ctx.metadata(value)
+          }
+          return run.promise(
+            executeItem(item, args, options, { ...ctx, metadata }).pipe(Effect.map((result) => result.output)),
+          )
+        },
+      })),
+      ...others.map((entry) => ({
+        id: entry.key,
+        description: entry.other.description ?? "",
+        schema: entry.schema,
+        execute: async (args: Record<string, unknown>) => {
+          if (!options || !entry.other.execute) throw new Error("not running")
+          const result = await entry.other.execute(args, options)
+          return typeof result?.output === "string" ? result.output : JSON.stringify(result)
+        },
+      })),
+    ]
+    const session = toSession(input.session)
+    const runEyg = (code: string, args: Record<string, unknown>, options: ToolExecutionOptions, id: string) =>
+      Effect.gen(function* () {
+        const ctx = context(args, options)
+        yield* plugin.trigger(
+          "tool.execute.before",
+          { tool: id, sessionID: ctx.sessionID, callID: ctx.callID },
+          { args },
+        )
+        const result = yield* Effect.promise(() =>
+          Eyg.execute({ code, session, effects: effects(options, args), parent }),
+        )
+        const truncated = yield* truncate.output(result.output, {}, input.agent)
+        const output = {
+          ...result,
+          output: truncated.content,
+          metadata: {
+            ...result.metadata,
+            truncated: truncated.truncated,
+            ...(truncated.truncated && { outputPath: truncated.outputPath }),
+          },
+        }
+        yield* plugin.trigger(
+          "tool.execute.after",
+          { tool: id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+          output,
+        )
+        return output
+      })
+    const description = yield* Effect.promise(() =>
+      Eyg.describe({ session, effects: effects(), parent }).catch((error: Error) => error.message),
+    )
+    const eyg = tool({
+      description,
+      inputSchema: jsonSchema(
+        ProviderTransform.schema(input.model, {
+          type: "object",
+          properties: { code: { type: "string", description: "EYG source code to run" } },
+          required: ["code"],
+          additionalProperties: false,
+        }),
+      ),
+      execute(args, options) {
+        return run.promise(runEyg(String(args.code), args, options, Eyg.id))
+      },
+    })
+    if (flags.eyg === "only") return { [Eyg.id]: eyg }
+    // Opencode's tools stay visible but a call is the program `perform Tool(args)`, checked by the same policy.
+    return {
+      ...Object.fromEntries(
+        Object.entries(tools).map(([key, other]) => [
+          key,
+          {
+            ...other,
+            execute: (args: Record<string, unknown>, options: ToolExecutionOptions) =>
+              run.promise(runEyg(Eyg.single(key, args), args, options, key)),
+          },
+        ]),
+      ),
+      [Eyg.id]: eyg,
+    }
+  })
 
   const hasMcpResourceServer = Object.values(yield* mcp.clients()).some(
     (client) => !!client.getServerCapabilities()?.resources,
@@ -385,7 +507,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
-  if (flags.experimentalCodeMode) return tools
+  if (flags.experimentalCodeMode) return flags.eyg === "off" ? tools : yield* eygTools()
 
   for (const [key, entry] of Object.entries(yield* mcp.tools())) {
     const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
@@ -489,7 +611,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     tools[key] = item
   }
 
-  return tools
+  return flags.eyg === "off" ? tools : yield* eygTools()
 })
 
 function toRecord(value: unknown) {

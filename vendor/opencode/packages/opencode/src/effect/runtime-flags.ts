@@ -46,6 +46,8 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalOxfmt: enabledByExperimental("OPENCODE_EXPERIMENTAL_OXFMT"),
   experimentalPlanMode: enabledByExperimental("OPENCODE_EXPERIMENTAL_PLAN_MODE"),
   experimentalCodeMode: enabledByExperimental("OPENCODE_EXPERIMENTAL_CODE_MODE"),
+  // "only": EYG is the only tool. "gate": opencode's tools are also listed, each call is checked by the EYG policy. "off": no EYG.
+  eyg: Config.literals(["only", "gate", "off"], "OPENCODE_EYG").pipe(Config.withDefault("only" as const)),
   experimentalEventSystem: enabledByExperimental("OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"),
   experimentalWorkspaces: enabledByExperimental("OPENCODE_EXPERIMENTAL_WORKSPACES"),
   experimentalIconDiscovery: enabledByExperimental("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY"),
@@ -68,7 +70,8 @@ export const layer = (overrides: Partial<Info> = {}) =>
     Service,
     Effect.gen(function* () {
       const flags = yield* Service
-      return Service.of({ ...flags, ...overrides })
+      // Tests of opencode's tools expect them to be listed, tests of EYG ask for it.
+      return Service.of({ ...flags, eyg: "off", ...overrides })
     }),
   ).pipe(Layer.provide(emptyConfigLayer))
 
