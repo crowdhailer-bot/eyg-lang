@@ -7,7 +7,7 @@
   "main": "dist/eyg.js",
   "files": ["dist"],
   "scripts": {
-    "build": "gleam build && bun build plugin/eyg.ts --outfile dist/eyg.js --target bun"
+    "build": "gleam build && bun build plugin/eyg.ts --outfile dist/eyg.js --target bun && bun build plugin/core.ts --outfile dist/core.js --target bun"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "*"

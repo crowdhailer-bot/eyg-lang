@@ -14,6 +14,7 @@ bun run build
 ```
 
 This builds the Gleam package and bundles it, with the plugin, into a single file `dist/eyg.js`.
+`dist/core.js` is the EYG runtime without the plugin, it is vendored by [opencode](../../vendor/opencode/packages/opencode/src/tool/eyg/) where EYG is the only tool.
 
 ## Install
 
