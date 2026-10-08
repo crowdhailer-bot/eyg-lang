@@ -24,3 +24,13 @@ Fields of a tool's arguments are snake case in EYG, `filePath` is `file_path`.
 
 `runtime.js` is `dist/core.js` built by `bun run build` in `packages/opencode_plugin` of [eyg-lang](https://github.com/CrowdHailer/eyg-lang).
 `syntax.md` and `builtins.md` are copies of the syntax and builtins guides from the same repository, they are included in the tool description.
+
+## Running from source
+
+Run the TUI from `packages/opencode` so its `bunfig.toml` is used, and pass the project directory.
+A build from source reports its version as `local`, OpenCode Zen's free models refuse that, define a released version.
+
+```sh
+cd packages/opencode
+OPENCODE_EYG=gate bun run --define 'OPENCODE_VERSION="1.18.35"' src/index.ts /path/to/project
+```
