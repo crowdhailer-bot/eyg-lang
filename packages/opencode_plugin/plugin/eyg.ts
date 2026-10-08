@@ -152,7 +152,7 @@ export const EygPlugin: Plugin = async (input) => {
         [
           "# EYG",
           "Use the `eyg` tool to act on the system, write EYG programs and do not guess syntax, follow the guides below.",
-          "A policy is a record of gate functions, one field per effect named in snake case, `ReadFile` is decided by `read_file`. A gate returns `Pass(lift)` to perform the effect, possibly with a changed lift, or `Mock(lower)` to return a value without performing it, `Pass` alone is a gate that allows everything. DecodeJSON, EYGParse, Flip, Hash, Random, StandardOut and StandardError are always available unless a gate is given.",
+          "A policy is a record of gate functions, one field per effect named in snake case, `ReadFile` is decided by `read_file`. A gate returns `Pass(lift)` to perform the effect, possibly with a changed lift, or `Mock(lower)` to return a value without performing it, `Pass` alone is a gate that allows everything. File paths are absolute when a gate sees them, relative paths are resolved from the project directory. DecodeJSON, EYGParse, Flip, Hash, Random, StandardOut and StandardError are always available unless a gate is given.",
           "The effects allowed by your policy are listed here, any other effect is unavailable:",
           effects || "(none, only pure computation)",
           effects.includes("Task:")
