@@ -247,7 +247,8 @@ pub fn run(
           Report(
             False,
             output,
-            execute.render_error(reason, location, k, directory),
+            denied(reason, policy, hosts)
+              <> execute.render_error(reason, location, k, directory),
             effects,
           )
       }
@@ -464,4 +465,29 @@ fn do_lookup(reference, meta: source.Location, run: Run) {
 /// Names of the agents that have a policy in the configuration.
 pub fn agent_names(config: Config) -> List(String) {
   dict.keys(config.agents) |> list.sort(string.compare)
+}
+
+/// Explain an effect the policy does not allow, the interpreter only knows it was not handled.
+fn denied(reason, policy, hosts: List(Host)) {
+  case reason {
+    break.UnhandledEffect(label, _) ->
+      case available(policy, label) {
+        True -> ""
+        False -> {
+          let known =
+            list.any(computer.effects(), fn(i) { i.name == label })
+            || list.any(hosts, fn(h) { h.label == label })
+          case known {
+            True ->
+              "The effect "
+              <> label
+              <> " is not allowed by your policy, it has no `"
+              <> policy.field(label)
+              <> "` gate.\n"
+            False -> "There is no effect called " <> label <> ".\n"
+          }
+        }
+      }
+    _ -> ""
+  }
 }

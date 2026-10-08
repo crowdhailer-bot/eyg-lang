@@ -76,7 +76,10 @@ pub fn effect_without_field_is_unavailable_test() {
   let policy = opencode_plugin.config_policy(config)
   use report <- promise.map(run("perform Env(\"HOME\")", policy, config))
   assert !opencode_plugin.report_ok(report)
-  assert string.contains(opencode_plugin.report_text(report), "Env")
+  assert string.contains(
+    opencode_plugin.report_text(report),
+    "The effect Env is not allowed by your policy, it has no `env` gate.",
+  )
 }
 
 pub fn standard_out_is_captured_test() {
