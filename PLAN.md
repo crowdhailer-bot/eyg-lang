@@ -54,5 +54,5 @@ The top level coding agent has hard rules but is not able to reach untrusted con
 
 ## Harnesses
 
-- [ ] [Opencode](https://github.com/anomalyco/opencode)
+- [x] [Opencode](https://github.com/anomalyco/opencode), levels 1 to 4 with the [plugin](./packages/opencode_plugin/) and a change to [opencode](./vendor/opencode/) itself, see the [blog post](./blog/eyg-in-opencode/README.md)
 - [ ] [Openhands](https://www.openhands.dev)
