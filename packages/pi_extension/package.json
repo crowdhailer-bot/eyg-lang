@@ -1,0 +1,12 @@
+{
+  "name": "pi-eyg",
+  "version": "0.1.0",
+  "description": "Run EYG in pi, every effect is checked by a policy and pi's tools are effects.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "files": ["dist"],
+  "pi": { "extensions": ["./dist/index.js"] },
+  "scripts": {
+    "build": "cd ../opencode_plugin && gleam build && cd ../pi_extension && bun build src/index.ts --outfile dist/index.js --target node --external '@earendil-works/*' --external typebox"
+  }
+}
