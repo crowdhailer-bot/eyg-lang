@@ -23,6 +23,7 @@ const configs = mkdtempSync(join(tmpdir(), "pi-eyg-"))
 const CONFIG = `{
   policy: {
     read: Pass,
+    edit: Pass,
     write: (args) -> {
       match !string_ends_with(args.path, "notes.md") {
         True(_) -> { Pass(args) }
@@ -89,6 +90,17 @@ describe("eyg extension", () => {
     expect(fruit).toBe(`Error("only notes.md can be written")`)
     expect(readFileSync(join(harness.tempDir, "fruit.txt"), "utf8")).toBe("apples\npears\n")
     expect(bash).toContain("The effect Bash is not allowed by your policy, it has no `bash` gate.")
+  })
+
+  it("maps snake case fields back to the tool's schema, in nested arrays too", async () => {
+    const harness = await setup()
+    harness.setResponses([
+      call(`perform Edit({path: "fruit.txt", edits: [{old_text: "pears", new_text: "figs"}]})`),
+      fauxAssistantMessage("done"),
+    ])
+    await harness.session.prompt("go")
+    expect(text(results(harness)[0]!)).toContain("Ok(")
+    expect(readFileSync(join(harness.tempDir, "fruit.txt"), "utf8")).toBe("apples\nfigs\n")
   })
 
   it("lists the effects the policy allows in the tool description", async () => {
