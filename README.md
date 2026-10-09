@@ -56,6 +56,11 @@ Another reason could be to imagine your own syntax, or even visual editor, and r
 - [vscode-eyg](./packages/vscode-eyg/) VS Code extension and canonical TextMate grammar, also used by the web guides.
 - [website](./packages/website/) Website for documentation, guides and introduction on [eyg.run](https://eyg.run).
 
+## Vendored
+
+[vendor](./vendor/) holds projects EYG is integrated with, [opencode](./vendor/opencode/) and [pi](./vendor/pi-mono/).
+Each was added unchanged in one commit, changes to it are later commits.
+
 ## EYG packages
 [eyg_packages](./eyg_packages/)
 
