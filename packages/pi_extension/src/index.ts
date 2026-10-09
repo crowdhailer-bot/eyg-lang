@@ -3,6 +3,7 @@
 // and pi's other tools are effects too, i.e. `perform Read({path: "README.md"})`.
 // With `--eyg-only` the model is given only the `eyg` tool. See ../README.md.
 import { Agent, type AgentTool, type AgentToolResult } from "@earendil-works/pi-agent-core"
+import type { Usage } from "@earendil-works/pi-ai"
 import type { ExtensionAPI, ExtensionContext, ExtensionToolContext } from "@earendil-works/pi-coding-agent"
 import { Type } from "typebox"
 import { statSync } from "node:fs"
@@ -16,6 +17,27 @@ import { argument, label, result, type } from "./tools.ts"
 type Policy = unknown
 type Config = unknown
 type Callable = { name: string; description: string; parameters: unknown }
+// Usage of the model calls made by subagents during one eyg call.
+type Spent = { usage?: Usage }
+
+function add(a: Usage | undefined, b: Usage | undefined): Usage | undefined {
+  if (!a || !b) return a ?? b
+  const cost = (key: keyof Usage["cost"]) => a.cost[key] + b.cost[key]
+  return {
+    input: a.input + b.input,
+    output: a.output + b.output,
+    cacheRead: a.cacheRead + b.cacheRead,
+    cacheWrite: a.cacheWrite + b.cacheWrite,
+    totalTokens: a.totalTokens + b.totalTokens,
+    cost: {
+      input: cost("input"),
+      output: cost("output"),
+      cacheRead: cost("cacheRead"),
+      cacheWrite: cost("cacheWrite"),
+      total: cost("total"),
+    },
+  }
+}
 
 const NAME = "eyg"
 const TASK_LIFT = "{agent: String, prompt: String, policy: {..gates}}"
@@ -108,7 +130,13 @@ export default async function (pi: ExtensionAPI) {
   }
 
   // Run a program under a policy. Subagents started by it get their own eyg tool with their policy.
-  async function execute(code: string, policy: Policy, ctx: ExtensionToolContext, signal?: AbortSignal) {
+  async function execute(
+    code: string,
+    policy: Policy,
+    ctx: ExtensionToolContext,
+    spent: Spent,
+    signal?: AbortSignal,
+  ) {
     const cfg = await config()
     const start = async (task: { agent: string; prompt: string }, raw: unknown, escalate: boolean) => {
       const requested = core.field(raw, "policy")
@@ -130,7 +158,7 @@ export default async function (pi: ExtensionAPI) {
         child = core.restrict(own.isOk() ? own[0] : policy, requested[0])
         if (!child.isOk()) throw new Error(child[0])
       }
-      return subagent(String(task.agent), String(task.prompt), child[0], ctx, signal)
+      return subagent(String(task.agent), String(task.prompt), child[0], ctx, spent, signal)
     }
     const hosts = core.toList([
       ...toolHosts(ctx.tools, (name, args) => runTool(ctx, name, args, signal)),
@@ -149,6 +177,7 @@ export default async function (pi: ExtensionAPI) {
     prompt: string,
     policy: Policy,
     ctx: ExtensionToolContext,
+    spent: Spent,
     signal?: AbortSignal,
   ): Promise<string> {
     const model = ctx.model
@@ -160,7 +189,7 @@ export default async function (pi: ExtensionAPI) {
       description: describe(policy, ctx.tools, cfg),
       parameters: Type.Object({ code: Type.String({ description: "EYG source code to run" }) }),
       execute: async (_id, params: { code: string }, toolSignal) => {
-        const outcome = await execute(params.code, policy, ctx, toolSignal ?? signal)
+        const outcome = await execute(params.code, policy, ctx, spent, toolSignal ?? signal)
         if (!outcome.ok) throw new Error(outcome.text)
         return { content: [{ type: "text", text: outcome.text }], details: { effects: outcome.effects } }
       },
@@ -180,6 +209,8 @@ export default async function (pi: ExtensionAPI) {
     } finally {
       signal?.removeEventListener("abort", abort)
     }
+    // Nested model calls are reported in the eyg tool result so session totals stay accurate.
+    for (const message of agent.state.messages) if (message.role === "assistant") spent.usage = add(spent.usage, message.usage)
     const last = agent.state.messages.findLast((message) => message.role === "assistant")
     if (!last || last.role !== "assistant") return ""
     if (last.stopReason === "error") throw new Error(last.errorMessage ?? "the subagent failed")
@@ -210,9 +241,14 @@ export default async function (pi: ExtensionAPI) {
     },
     async execute(_toolCallId, params, signal, _onUpdate, ctx): Promise<AgentToolResult<{ effects: string[] }>> {
       const cfg = await config()
-      const outcome = await execute(params.code, core.config_policy(cfg), ctx, signal)
+      const spent: Spent = {}
+      const outcome = await execute(params.code, core.config_policy(cfg), ctx, spent, signal)
       if (!outcome.ok) throw new Error(outcome.text)
-      return { content: [{ type: "text", text: outcome.text }], details: { effects: outcome.effects } }
+      return {
+        content: [{ type: "text", text: outcome.text }],
+        details: { effects: outcome.effects },
+        ...(spent.usage ? { usage: spent.usage } : {}),
+      }
     },
   })
 }
