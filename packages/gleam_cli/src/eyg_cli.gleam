@@ -13,6 +13,7 @@ import eyg/cli/publish
 import eyg/cli/record
 import eyg/cli/replay
 import eyg/cli/run
+import eyg/cli/sandbox
 import eyg/cli/script
 import eyg/cli/share
 import eyg/cli/shell
@@ -93,6 +94,33 @@ fn with_config(parsed) {
     args.Replay(path) -> replay.execute(path, config)
     args.Inspect(path, step) -> inspect.execute(path, step, config)
     args.Upload(path) -> upload.execute(path, config)
+    args.SandboxPrepare(directory, entry, output) ->
+      sandbox.prepare(directory, entry, output, config)
+    args.SandboxRun(environment, entry, output, hosts) ->
+      sandbox.execute(
+        environment,
+        entry,
+        output,
+        sandbox.Block,
+        [],
+        hosts,
+        config,
+      )
+    args.SandboxOverlay(environment, entry, output, prompt, hosts) ->
+      sandbox.execute(
+        environment,
+        entry,
+        output,
+        sandbox.Agent,
+        [prompt],
+        hosts,
+        config,
+      )
+    args.SandboxStart(config_path, output, prompt, authorities) ->
+      sandbox.start(config_path, output, prompt, authorities, config)
+    args.SandboxReplay(path) -> sandbox.replay(path, config)
+    args.SandboxExport(path, output) -> sandbox.export(path, output)
+    args.SandboxSnapshot(path, output) -> sandbox.snapshot(path, output)
     args.Overlay(input:) -> overlay.execute(input, config)
   }
 }
