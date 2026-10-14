@@ -39,6 +39,31 @@ fn parse(chars, events, flush) {
       parse(rest, [Key("Home"), ..events], flush)
     ["\u{1b}", "[", "F", ..rest] | ["\u{1b}", "O", "F", ..rest] ->
       parse(rest, [Key("End"), ..events], flush)
+    ["\u{1b}", "[", "1", "~", ..rest] | ["\u{1b}", "[", "7", "~", ..rest] ->
+      parse(rest, [Key("Home"), ..events], flush)
+    ["\u{1b}", "[", "4", "~", ..rest] | ["\u{1b}", "[", "8", "~", ..rest] ->
+      parse(rest, [Key("End"), ..events], flush)
+    ["\u{1b}", "[", "3", "~", ..rest] ->
+      parse(rest, [Key("Delete"), ..events], flush)
+    ["\u{1b}", "[", "2", "~", ..rest] ->
+      parse(rest, [Key("Insert"), ..events], flush)
+    ["\u{1b}", "[", "5", "~", ..rest] ->
+      parse(rest, [Key("PageUp"), ..events], flush)
+    ["\u{1b}", "[", "6", "~", ..rest] ->
+      parse(rest, [Key("PageDown"), ..events], flush)
+    ["\u{1b}", "[", digit]
+      if !flush
+      && {
+        digit == "1"
+        || digit == "2"
+        || digit == "3"
+        || digit == "4"
+        || digit == "5"
+        || digit == "6"
+        || digit == "7"
+        || digit == "8"
+      }
+    -> #(Decoder(string.join(chars, "")), list.reverse(events))
     ["\u{1b}"] | ["\u{1b}", "["] | ["\u{1b}", "O"] if !flush -> #(
       Decoder(string.join(chars, "")),
       list.reverse(events),

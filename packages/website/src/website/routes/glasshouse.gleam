@@ -36,6 +36,8 @@ pub fn route() {
   let assert Ok(terminal_overlay) =
     simplifile.read_bits("../tracing/recordings/terminal-overlay.mp4")
   let assert Ok(pi_recording) = simplifile.read_bits("../eyg_pi/docs/pong.mp4")
+  let assert Ok(prompt_recording) =
+    simplifile.read_bits("../tracing/recordings/cli-prompts.mp4")
   Route(index: route.Page(home.page()), items: [
     #("runtime-acquisition.html", Route(route.Static(article), [])),
     #("trajectories.webm", Route(route.Static(recording), [])),
@@ -46,6 +48,7 @@ pub fn route() {
     #("terminal-repl.mp4", Route(route.Static(terminal_recording), [])),
     #("terminal-overlay.mp4", Route(route.Static(terminal_overlay), [])),
     #("pi-pong.mp4", Route(route.Static(pi_recording), [])),
+    #("cli-prompts.mp4", Route(route.Static(prompt_recording), [])),
     #(
       "documentation",
       Route(index: route.Page(documentation.page()), items: []),

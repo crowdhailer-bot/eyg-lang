@@ -31,3 +31,11 @@ pub fn unknown_sequences_preserve_their_characters_and_interrupts_test() {
   let #(_, events) = keys.feed(keys.new(), "\u{1b}x\u{3}")
   assert events == [keys.Key("Escape"), keys.Key("x"), keys.Interrupt]
 }
+
+pub fn numeric_console_sequences_can_arrive_in_separate_chunks_test() {
+  let #(decoder, events) = keys.feed(keys.new(), "\u{1b}[3")
+  assert events == []
+  let #(decoder, events) = keys.feed(decoder, "~\u{1b}[1~\u{1b}[4~")
+  assert events == [keys.Key("Delete"), keys.Key("Home"), keys.Key("End")]
+  assert decoder == keys.new()
+}

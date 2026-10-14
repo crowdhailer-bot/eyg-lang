@@ -387,13 +387,13 @@ pub fn run_with_environment(
 }
 
 fn run_traced(effect: Effect(a), trace: tracing.Context) -> Promise(a) {
-  let reader = keys.new()
+  let reader = Input(keys.new(), prompt.new())
   use #(outcome, trace) <- promise.await(run_effect(
     fn() { effect },
     trace,
     reader,
   ))
-  keys.release(reader)
+  keys.release(reader.keys)
   let error = case outcome {
     Ok(_) -> option.None
     Error(reason) ->
@@ -414,10 +414,14 @@ type Driver(a) {
   NextEffect(fn() -> Effect(a), tracing.Context)
 }
 
+type Input {
+  Input(keys: keys.Reader, history: prompt.History)
+}
+
 fn run_effect(
   work: fn() -> Effect(a),
   trace: tracing.Context,
-  reader: keys.Reader,
+  reader: Input,
 ) -> Promise(#(Result(a, Dynamic), tracing.Context)) {
   // Catch one step at a time, releasing its old context before driving the next.
   // Otherwise pending exception handlers retain already-exported span batches.
@@ -445,7 +449,7 @@ fn continue(
 fn run_step(
   effect: Effect(a),
   trace: tracing.Context,
-  reader: keys.Reader,
+  reader: Input,
 ) -> Promise(Driver(a)) {
   case effect {
     Acquire(_, resume) ->
@@ -470,7 +474,7 @@ fn run_step(
       continue(Nil, resume, trace)
     }
     Exit(status) -> {
-      keys.release(reader)
+      keys.release(reader.keys)
       let error = case status {
         0 -> option.None
         _ -> option.Some("process exited with status " <> int.to_string(status))
@@ -552,16 +556,16 @@ fn run_step(
     SetPermissions(path, permissions, resume) ->
       continue(do_set_permissions(path, permissions), resume, trace)
     Stdin(resume) -> {
-      keys.release(reader)
+      keys.release(reader.keys)
       continue(read_stdin(), resume, trace)
     }
     Prompt(text, resume) -> {
-      keys.release(reader)
-      use value <- promise.await(prompt.read_line(text))
+      keys.release(reader.keys)
+      use value <- promise.await(prompt.read_line(text, reader.history))
       continue(value, resume, trace)
     }
     ReadKey(milliseconds, resume) -> {
-      use key <- promise.await(keys.read(reader, milliseconds))
+      use key <- promise.await(keys.read(reader.keys, milliseconds))
       continue(key, resume, trace)
     }
     Stdout(text, resume) -> continue(io.println(text), resume, trace)
@@ -583,7 +587,7 @@ pub fn step(effect: Effect(a)) -> Promise(Effect(a)) {
       use next <- promise.map(run_step(
         effect,
         tracing.configured([]),
-        keys.new(),
+        Input(keys.new(), prompt.new()),
       ))
       case next {
         Finished(value, _) -> Done(value)

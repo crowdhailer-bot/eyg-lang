@@ -1,0 +1,12 @@
+corin@assistance-bot:~/mono/repos/eyg-lang$ '/tmp/eyg-roadmap-pi-host/eyg'
+type /help for shell commands
+> let answer = 41
+> answer
+41
+> answer
+41
+> "é🌿"
+"é🌿"
+> /t answer
+Integer
+>
