@@ -1,0 +1,34 @@
+  {
+    example: "let {decode: d, parse} = @json\nlet person = d.object((json) -> {\n  let name = d.field(\"name\"
+, d.string)(json)\n  let age = d.field(\"age\", d.integer)(json)\n  {name, age}\n})\nmatch parse(\"{\\\"name\\
+\":\\\"Ada\\\",\\\"age\\\":36}\", person) {\n  Ok(person) -> { person.name }\n  Error(reason) -> { reason }\n}
+",
+    keywords: "json decode encode parse serialize api response body object field array",
+    name: "json",
+    reference: "@json",
+    summary: "Parse JSON text or bytes into EYG values with decoders, and encode EYG values as JSON text.",
+  },
+]
+corin@assistance-bot:~/mono/repos/eyg-lang$ '/tmp/eyg-roadmap-pi-host/eyg' eval -c 'let context = import "./ey
+g_packages/overlay_librarian/index.eyg" context.guides.search("write match expression")'
+[
+  {
+    keywords: "syntax let function record union match list effect perform handle import",
+    slug: "eyg-syntax-guide",
+    summary: "Syntax of EYG: values, functions, records, unions, match, effects and imports.",
+    title: "EYG syntax guide",
+  },
+  {
+    keywords: "script scripts run shebang cli hello",
+    slug: "writing-scripts",
+    summary: "Write scripts to run on your computer.",
+    title: "Writing scripts",
+  },
+  {
+    keywords: "effects cli file read write directory env standard out cwd sleep random",
+    slug: "cli-effects-reference",
+    summary: "Effects of the eyg CLI: files, directories, environment, standard out and more.",
+    title: "CLI effects reference",
+  },
+]
+corin@assistance-bot:~/mono/repos/eyg-lang$
