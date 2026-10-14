@@ -7,6 +7,7 @@ import gleam/bit_array
 import gleam/crypto
 import gleam/dict
 import gleam/int
+import gleam/io
 import gleam/javascript/promise
 import gleam/json
 import gleam/list
@@ -25,6 +26,12 @@ import untethered/substrate
 
 pub type Fixture {
   Fixture(server: server.Server, count: fn() -> Int, reference: String)
+}
+
+pub fn main() {
+  let assert Ok(fixture) = start()
+  io.println("Repository package fixture listening on http://127.0.0.1:7207")
+  io.println("Standard reference: " <> fixture.reference)
 }
 
 pub fn start() {
