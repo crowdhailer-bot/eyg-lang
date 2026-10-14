@@ -253,3 +253,11 @@ pub fn nested_block_keeps_its_braces_test() {
   assert drawn(editable.open_all(exp))
     == "f(\n  {\n    let a = 1\n    a\n  },\n  2,\n)"
 }
+
+pub fn runaway_evaluation_stops_at_the_reduction_limit_test() {
+  let source = "let forever = (f) -> { f(f) } forever(forever)"
+  use #(_, progress) <- promise.map(advanced(shell.evaluate(started(), source)))
+  let assert shell.Finished(evaluated) = progress
+  let assert [Error(reason)] = evaluated.results
+  assert string.contains(reason, "ExecutionLimit")
+}
