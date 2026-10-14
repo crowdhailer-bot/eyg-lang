@@ -35,8 +35,9 @@ shows observed filesystem changes at that zero-based effect position.
 This records observations of the host. Unobserved files and external service
 state are not a full environment snapshot. Complete environment replay belongs
 to the sandbox workflow. Legacy `.env.eyg` imports are intentionally unstored
-and need a matching local source for replay. Credential-like `Env` values are
-redacted and locked by hash; changed credentials use placeholders and can make
+and need a matching local source for replay. Credential-like `Env` values and
+credential strings in JSON file reads or OAuth responses are registered before
+the reply enters the store. They are redacted and locked by hash; changed credentials use placeholders and can make
 an execution that depends on secret contents diverge.
 
 ## Local agent and shell

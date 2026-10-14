@@ -18,12 +18,94 @@ import gleam/string
 import loam/sandbox
 import loam/sandbox/fs
 import loam/source
+import overlay/policy
+import touch_grass/harness/computer
+import touch_grass/interface
 
 const fields = [
   "append_file", "create_key", "cwd", "delete_file", "env", "exit", "fetch",
   "flip", "make_directory", "now", "random", "read_directory", "read_file",
   "sleep", "standard_error", "standard_in", "standard_out", "write_file",
 ]
+
+pub fn credential_file_and_oauth_reply_are_redacted_and_replay_test() {
+  let code =
+    "
+let text_token = (bytes) -> {
+  let flat = match perform DecodeJSON(bytes) {
+    Ok(flat) -> { flat }
+    Error(_) -> { [] }
+  }
+  !list_fold(flat, \"\", (item, acc) -> {
+    match item.term { String(value) -> { value } | (_) -> { acc } }
+  })
+}
+let bytes = match perform ReadFile({path: \"/credentials/auth.json\", offset: 0, limit: 10000}) {
+  Ok(bytes) -> { bytes }
+  Error(_) -> { !string_to_binary(\"{}\") }
+}
+let old = text_token(bytes)
+let reply = match perform Fetch({
+  scheme: HTTPS({}), host: \"auth.example.com\", port: None({}), path: \"/oauth/token\",
+  query: None({}), method: POST({}), headers: [],
+  body: !string_to_binary(old)
+}) {
+  Ok(reply) -> { reply }
+  Error(_) -> { {body: !string_to_binary(\"{}\"), headers: [], status: 500} }
+}
+let token = text_token(reply.body)
+{
+  llm: {provider: Mistral({api_key: token}), model: \"fixture\"},
+  policy: {read_file: (x) -> { Pass(x) }, fetch: (x) -> { Pass(x) }, now: (x) -> { Pass(x) }},
+  context: {}
+}"
+  let host =
+    sandbox.sandbox()
+    |> sandbox.with_files([
+      #(
+        "/credentials/auth.json",
+        "{\"access_token\":\"fixture-original-token-123\"}",
+      ),
+    ])
+    |> sandbox.save_and_return(
+      response.new(200)
+      |> response.set_body(<<
+        "{\"access_token\":\"fixture-rotated-token-123\"}",
+      >>),
+    )
+    |> sandbox.with_now(100)
+  let harness =
+    computer.effects()
+    |> interface.take(["ReadFile", "Fetch", "DecodeJSON", "Now"])
+  let rules = [
+    #("ReadFile", policy.PolicyField("read_file")),
+    #("Fetch", policy.PolicyField("fetch")),
+    #("DecodeJSON", policy.Unchecked),
+    #("Now", policy.PolicyField("now")),
+  ]
+  let assert #(sandbox.Returned(#(Ok(session), _)), _) =
+    overlay.setup(
+      source.Code(code),
+      helpers.config,
+      harness,
+      rules,
+      helpers.state(),
+    )
+    |> sandbox.run(host)
+  let saved =
+    overlay.to_archive(
+      session,
+      overlay.start_trace("credential-json", session),
+      101,
+    )
+  assert archive.missing(saved) == []
+  let text = archive.to_string(saved)
+  assert !string.contains(text, "fixture-original-token-123")
+  assert !string.contains(text, "fixture-rotated-token-123")
+  assert list.all(rerun.session(saved.session, saved.store), fn(report) {
+    report.problem == None
+  })
+}
 
 fn config() {
   let policy =
