@@ -1,0 +1,14 @@
+name = "gleam_phoenix"
+version = "0.1.0"
+target = "javascript"
+description = "Native Phoenix LiveView client and hook bindings"
+
+[dependencies]
+gleam_stdlib = ">= 1.0.0 and < 2.0.0"
+plinthx = { path = "../plinthx" }
+
+[dev_dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"
+
+[javascript]
+runtime = "bun"
