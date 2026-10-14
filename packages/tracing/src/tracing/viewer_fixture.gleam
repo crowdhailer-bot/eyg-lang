@@ -7,6 +7,7 @@ import eyg/interpreter/simple_debug
 import gleam/bit_array
 import gleam/javascript/promise
 import gleam/json
+import gleam/option
 import gleam/result
 import gleam/string
 import loam/execute
@@ -25,7 +26,7 @@ pub fn render(code) {
   let effect =
     execute.pure_loop(
       expression.execute(tree, []),
-      execute.State(origin.https("unused.invalid"), cache.ready()),
+      execute.State(origin.https("unused.invalid"), cache.ready(), option.None),
     )
   use rendered <- promise.map(system.run(effect))
   let assert #(Ok(bundle), _) = rendered
@@ -241,7 +242,7 @@ pub fn layout(kind) {
   use rendered <- promise.map(
     system.run(execute.pure_loop(
       expression.execute(tree, []),
-      execute.State(origin.https("unused.invalid"), cache.ready()),
+      execute.State(origin.https("unused.invalid"), cache.ready(), option.None),
     )),
   )
   let assert #(Ok(placements), _) = rendered

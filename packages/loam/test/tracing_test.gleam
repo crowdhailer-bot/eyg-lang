@@ -51,7 +51,7 @@ pub fn observed_blocks_retain_runtime_spans_and_effect_order_test() {
   let observed = ref.new([])
   let assert Ok(program) =
     source.parse("let first = perform Now({}) perform Now({})", source.Inline)
-  let state = execute.State(origin.https("unused.invalid"), cache.ready())
+  let state = execute.State(origin.https("unused.invalid"), cache.ready(), None)
   let workflow =
     execute.block_observed(program, [], state, fn(label, _, reply) {
       let _ = ref.update(observed, fn(entries) { [#(label, reply), ..entries] })
