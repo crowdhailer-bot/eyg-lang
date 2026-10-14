@@ -79,3 +79,7 @@ The [maintainer recording](../packages/tracing/recordings/overlay-maintainer.mp4
 reads a pinned source file, writes and indexes this note in an isolated directory,
 then removes the sample. Recheck from `packages/tracing` with
 `EYG_BIN=/absolute/path/to/eyg gleam run -m tracing/maintainer_demo`.
+
+The [session evaluation guide](./session_evals.md#check-contexts) validates the
+16 context tasks against the default, librarian and maintainer contexts. Use
+repeated `--context` options with a model to measure their effect on agent work.

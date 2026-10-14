@@ -65,3 +65,22 @@ four model requests are recorded, the fixture stops, and strict replay passes
 with no further HTTP requests. It checks report files and saves the evidence in
 `evidence/session-protocol`. Model-quality evidence remains separate in the
 [pure evaluation guide](./pure_model_evals.md).
+
+## Check contexts
+
+`suites/contexts.eyg` contains 16 tasks covering package and guide discovery,
+source diagnosis, program correction and workspace notes. Validate their
+reference and empty-agent controls against each [context](./overlay_contexts.md):
+
+```sh
+gleam run -m overlay/eval -- validate suites/contexts.eyg \
+  --context none \
+  --context ../../eyg_packages/overlay_librarian/index.eyg \
+  --context ../../eyg_packages/overlay_maintainer/index.eyg
+gleam run -m overlay/eval -- validate suites/programs.eyg
+```
+
+The programs suite checks four computed outcomes without requiring a particular
+solution. Neither validation measures model quality. Context tasks with Judged
+checks still need a judge and calibration in a model run; validation checks
+their deterministic criteria only.
