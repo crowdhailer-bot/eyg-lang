@@ -14,12 +14,29 @@ import overlay/eval/fixture/hub
 import overlay/eval/model
 import overlay/eval/module
 import overlay/eval/session
+import overlay/eval/suite
 import overlay/eval/transcript
 import simplifile
 
 const librarian = "../../eyg_packages/overlay_librarian/index.eyg"
 
 const maintainer = "../../eyg_packages/overlay_maintainer/index.eyg"
+
+pub fn context_tasks_have_working_references_and_reject_empty_agents_test() {
+  let assert Ok(environment) = eval.environment("../..")
+  let assert Ok(suite) = suite.load("suites/contexts.eyg", environment.hub)
+  assert list.length(suite.tasks) == 16
+  list.fold(suite.tasks, promise.resolve(Nil), fn(done, task) {
+    use Nil <- promise.await(done)
+    use checked <- promise.map(eval.validate_task(
+      environment,
+      session.NoContext,
+      task,
+    ))
+    assert checked == []
+    Nil
+  })
+}
 
 fn setup(path) {
   let assert Ok(environment) = eval.environment("../..")
