@@ -31,6 +31,7 @@ Projects in this repo introduce extra contraints, over regular programming langu
 - Effect spans and named function profiles are explained in [`guides/tracing.md`](./guides/tracing.md).
 - Portable recording, replay and telemetry export are explained in [`guides/trajectories.md`](./guides/trajectories.md).
 - Updating JSON while retaining unknown fields is covered in [`guides/json_documents.md`](./guides/json_documents.md).
+- Model-written pure programs can be checked with the [evaluation guide](./guides/pure_model_evals.md).
 - Immutable acquisition, private sandboxes and offline evaluation are explained in [`guides/sandbox.md`](./guides/sandbox.md).
 - To install from source see [`./guides/install_from_source.md`](./guides/install_from_source.md).
 - Embedding guides cover [Erlang](./guides/embedding_erlang.md),
