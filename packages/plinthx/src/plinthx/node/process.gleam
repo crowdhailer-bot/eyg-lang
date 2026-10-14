@@ -78,3 +78,6 @@ pub fn remove_signal_listener(
 
 @external(javascript, "./process_ffi.mjs", "setExitCode")
 pub fn set_exit_code(process: Process, code: Int) -> Nil
+
+@external(javascript, "./process_ffi.mjs", "signalSelf")
+pub fn signal_self(process: Process, signal: String) -> Result(Nil, String)

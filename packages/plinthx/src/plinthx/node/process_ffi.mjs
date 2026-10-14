@@ -64,3 +64,8 @@ export function removeSignalListener(process, signal, callback) {
 }
 
 export const setExitCode = (process, code) => { process.exitCode = code; };
+
+export function signalSelf(process, signal) {
+  try { process.kill(process.pid, signal); return Result$Ok(undefined); }
+  catch (error) { return Result$Error(String(error)); }
+}
