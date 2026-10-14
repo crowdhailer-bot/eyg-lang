@@ -1,0 +1,27 @@
+import { chromium } from "playwright";
+import { expect } from "playwright/test";
+import { Result$Ok, Result$Error } from "./gleam.mjs";
+
+const result = task => Promise.resolve().then(task).then(Result$Ok, error => Result$Error(String(error)));
+const done = task => result(async () => { await task(); });
+export const launch = (executablePath, slowMo) => result(() => chromium.launch({ executablePath: executablePath || undefined, slowMo, headless: true, args: ["--no-sandbox"] }));
+export const context = (browser, dir, width, height) => result(() => browser.newContext({ viewport: { width, height }, recordVideo: { dir, size: { width, height } } }));
+export const page = context => result(() => context.newPage());
+export const goto = (page, url) => done(() => page.goto(url));
+export const locator = (page, selector) => page.locator(selector);
+export const fill = (locator, value) => done(() => locator.fill(value));
+export const selectOption = (locator, value) => done(() => locator.selectOption(value));
+export const onError = (page, handler) => { page.on("pageerror", error => handler(String(error))); };
+export const content = page => page.content();
+export const onConsole = (page, handler) => { page.on("console", message => handler(message.text())); };
+export const press = (locator, key) => done(() => locator.press(key));
+export const click = locator => done(() => locator.click());
+export const contains = (locator, text) => done(() => expect(locator).toContainText(text, { timeout: 15000 }));
+export const download = page => result(() => page.waitForEvent("download"));
+export const saveDownload = (download, path) => done(() => download.saveAs(path));
+export const setInputFiles = (locator, path) => done(() => locator.setInputFiles(path));
+export const video = page => page.video();
+export const saveVideo = (video, path) => done(() => video.saveAs(path));
+export const screenshot = (page, path) => done(() => page.screenshot({ path }));
+export const closeContext = context => done(() => context.close());
+export const closeBrowser = browser => done(() => browser.close());
