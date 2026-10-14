@@ -45,8 +45,18 @@ pub type State {
   State(origin: origin.Origin, cache: Cache(source.Location))
 }
 
-pub fn block(source, scope, state) {
-  loop(block.execute(source, scope), state)
+pub fn block(source: ir.Node(source.Location), scope, state) {
+  system.span(
+    "eyg.eval",
+    trace_attributes(source.1.origin),
+    fn() { loop(block.execute(source, scope), state) },
+    fn(output) {
+      case output.0 {
+        Ok(_) -> None
+        Error(#(reason, _, _, _)) -> Some(simple_debug.describe(reason))
+      }
+    },
+  )
 }
 
 /// Rebuild a failed reason back into full debug information
@@ -75,7 +85,7 @@ pub fn loop(
         break.UnhandledEffect(label, lift) ->
           case computer.cast(label, lift) {
             Ok(effect) -> {
-              use value <- system.then(computer.extrinsic(effect, meta.origin))
+              use value <- system.then(traced_effect(label, effect, meta.origin))
               loop(block.resume(value, env, k), state)
             }
 
@@ -95,6 +105,29 @@ pub fn loop(
         _ -> system.Done(#(Error(#(reason, meta, env, k)), state))
       }
   }
+}
+
+/// Shared by ordinary execution and profiling so effect status and timing agree.
+pub fn traced_effect(label, effect, origin) {
+  system.span(
+    "eyg.effect." <> label,
+    [#("eyg.profile.kind", "effect"), ..trace_attributes(origin)],
+    fn() { computer.extrinsic(effect, origin) },
+    fn(value) {
+      case value {
+        v.Tagged("Error", reason) -> Some(simple_debug.inspect(reason))
+        _ -> None
+      }
+    },
+  )
+}
+
+fn trace_attributes(origin: source.Origin) -> List(#(String, String)) {
+  let label = case origin {
+    source.Disk(path) -> path
+    _ -> origin_label(origin, "")
+  }
+  [#("eyg.source", label)]
 }
 
 fn update(state: State) -> system.Effect(State) {

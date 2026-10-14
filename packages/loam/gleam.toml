@@ -27,6 +27,8 @@ kryptos = ">= 1.5.0 and < 2.0.0"
 midas = ">= 3.1.0 and < 4.0.0"
 multiformats = ">= 4.0.0 and < 5.0.0"
 ogre = ">= 1.1.0 and < 2.0.0"
+otel = { path = "../otel" }
+plinthx = { path = "../plinthx" }
 shellout = ">= 1.8.0 and < 2.0.0"
 simplifile = ">= 2.7.0 and < 3.0.0"
 touch_grass = { path = "../touch_grass" }
@@ -35,3 +37,4 @@ untethered = { path = "../untethered" }
 [dev_dependencies]
 birdie = ">= 2.0.0 and < 3.0.0"
 gleeunit = ">= 1.0.0 and < 2.0.0"
+javascript_mutable_reference = ">= 1.0.0 and < 2.0.0"
