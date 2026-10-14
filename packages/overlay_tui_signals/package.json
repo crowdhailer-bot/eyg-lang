@@ -1,0 +1,7 @@
+{
+  "name": "@eyg/tui-signals",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "gleam build --warnings-as-errors", "dev": "gleam run", "test": "gleam test" },
+  "dependencies": { "@opentui/core": "0.5.14" }
+}
