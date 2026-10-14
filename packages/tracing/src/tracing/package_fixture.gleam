@@ -35,6 +35,11 @@ pub fn main() {
 }
 
 pub fn start() {
+  start_with_modules([])
+}
+
+/// Add pure application modules to the same real hub protocol fixture.
+pub fn start_with_modules(extra) {
   let assert Ok(text) =
     simplifile.read("../../eyg_packages/standard/index.eyg.json")
   let assert Ok(tree) = json.parse(text, dag_json.decoder(Nil))
@@ -53,7 +58,16 @@ pub fn start() {
     ))
     |> json.to_string
   let entries = [schema.ArchivedEntry(1, id, payload, id, 1, None, "release")]
-  let modules = dict.from_list([#(v1.to_string(id), body)])
+  let additional =
+    list.map(extra, fn(tree) {
+      let cid =
+        cid.from_tree(tree, fn(bytes) {
+          continuation.return(sha256.hash(bytes))
+        })(fn(value) { value })
+      let assert Ok(body) = dag_json.to_block(tree) |> bit_array.to_string
+      #(v1.to_string(cid), body)
+    })
+  let modules = dict.from_list([#(v1.to_string(id), body), ..additional])
   let count = cell.new(0)
   let assert Ok(bun) = runtime.get()
   let assert Ok(response) = fetch.get_response()
