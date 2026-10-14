@@ -7,6 +7,7 @@ import eyg/cli/fetch
 import eyg/cli/internal/config
 import eyg/cli/overlay
 import eyg/cli/parse
+import eyg/cli/profile
 import eyg/cli/publish
 import eyg/cli/run
 import eyg/cli/script
@@ -69,6 +70,7 @@ fn with_config(parsed) {
     args.Shell(input) -> shell.execute(input, config)
     args.Tui(_) -> system.Done(Error("the tui runs from the eyg command"))
     args.Run(input:) -> run.execute(input, config)
+    args.Profile(input:) -> profile.execute(input, config)
     args.Script(input:, arguments:) -> script.execute(input, arguments, config)
     args.Eval(input:) -> eval.execute(input, config)
     args.Check(input:) -> check.execute(input, config)
