@@ -2,6 +2,7 @@
 
 import filepath
 import gleam/dynamic/decode
+import gleam/int
 import gleam/javascript/promise
 import gleam/result
 import gleam/string
@@ -48,8 +49,20 @@ pub fn run(name, steps) {
 }
 
 fn failure(reason) {
+  let location = {
+    use file <- decode.optional_field("file", "", decode.string)
+    use line <- decode.optional_field("line", 0, decode.int)
+    use message <- decode.optional_field("message", "", decode.string)
+    decode.success(#(file, line, message))
+  }
   let value = decode.field("value", decode.dynamic, decode.success)
-  decode.run(reason, value)
-  |> result.map(string.inspect)
-  |> result.unwrap(string.inspect(reason))
+  let details =
+    decode.run(reason, value)
+    |> result.map(string.inspect)
+    |> result.unwrap(string.inspect(reason))
+  case decode.run(reason, location) {
+    Ok(#(file, line, message)) ->
+      file <> ":" <> int.to_string(line) <> ": " <> message <> " " <> details
+    Error(_) -> details
+  }
 }
