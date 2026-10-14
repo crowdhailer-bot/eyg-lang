@@ -28,6 +28,7 @@ morph = { path = "../morph" }
 midas = ">= 3.0.0 and < 4.0.0"
 multiformats = ">= 4.0.0 and < 5.0.0"
 ogre = ">= 1.1.0 and < 2.0.0"
+oas_generator_utils = ">= 1.1.0 and < 2.0.0"
 overlay = { path = "../overlay" }
 overlay_llm = { path = "../overlay_llm" }
 otel = { path = "../otel" }
