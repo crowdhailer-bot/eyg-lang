@@ -12,10 +12,10 @@ import gleam/javascript/promise.{type Promise}
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/timestamp
-import input
 import kryptos/eddsa
 import loam/internal/crypto
 import loam/internal/keys
+import loam/internal/prompt
 import loam/internal/tracing
 import midas/effect
 import plinthx/javascript/promise as native_promise
@@ -601,7 +601,8 @@ fn run_step(
       case interactions {
         None -> {
           keys.release(reader)
-          continue(input.input(text), resume, trace)
+          use value <- promise.await(prompt.read_line(text))
+          continue(value, resume, trace)
         }
         Some(custom) -> {
           use value <- promise.await(custom.input(text))
