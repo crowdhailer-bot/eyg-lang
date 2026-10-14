@@ -40,6 +40,9 @@ pub fn locator(page: Page, selector: String) -> Locator
 @external(javascript, "./playwright_ffi.mjs", "fill")
 pub fn fill(locator: Locator, value: String) -> Promise(Result(Nil, String))
 
+@external(javascript, "./playwright_ffi.mjs", "inputValue")
+pub fn input_value(locator: Locator) -> Promise(Result(String, String))
+
 @external(javascript, "./playwright_ffi.mjs", "selectOption")
 pub fn select_option(
   locator: Locator,

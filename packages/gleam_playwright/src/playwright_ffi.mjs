@@ -10,6 +10,7 @@ export const page = context => result(() => context.newPage());
 export const goto = (page, url) => done(() => page.goto(url));
 export const locator = (page, selector) => page.locator(selector);
 export const fill = (locator, value) => done(() => locator.fill(value));
+export const inputValue = locator => result(() => locator.inputValue());
 export const selectOption = (locator, value) => done(() => locator.selectOption(value));
 export const onError = (page, handler) => { page.on("pageerror", error => handler(String(error))); };
 export const content = page => page.content();
