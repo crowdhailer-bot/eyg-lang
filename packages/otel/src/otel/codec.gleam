@@ -15,7 +15,9 @@ fn time() -> decode.Decoder(clock.Time) {
   }
 }
 
-fn attribute() -> decode.Decoder(#(String, span.Attribute)) {
+fn attribute_value() -> decode.Decoder(span.Attribute) {
+  // Delay construction until decoding, allowing nested AnyValue arrays.
+  use _ <- decode.then(decode.dynamic)
   let text = {
     use value <- decode.field("stringValue", decode.string)
     decode.success(span.Text(value))
@@ -35,8 +37,29 @@ fn attribute() -> decode.Decoder(#(String, span.Attribute)) {
     )
     decode.success(span.Integer(value))
   }
+  let boolean =
+    decode.field("boolValue", decode.bool, fn(value) {
+      decode.success(span.Boolean(value))
+    })
+  let real =
+    decode.field("doubleValue", decode.float, fn(value) {
+      decode.success(span.Real(value))
+    })
+  let array =
+    decode.field(
+      "arrayValue",
+      {
+        use values <- decode.field("values", decode.list(attribute_value()))
+        decode.success(span.Array(values))
+      },
+      decode.success,
+    )
+  decode.one_of(text, [integer, boolean, real, array])
+}
+
+fn attribute() -> decode.Decoder(#(String, span.Attribute)) {
   use key <- decode.field("key", decode.string)
-  use value <- decode.field("value", decode.one_of(text, [integer]))
+  use value <- decode.field("value", attribute_value())
   decode.success(#(key, value))
 }
 

@@ -1,7 +1,10 @@
+import gleam/json
 import gleam/option.{None, Some}
 import gleeunit
 import otel
 import otel/clock
+import otel/codec
+import otel/span
 
 pub fn main() {
   gleeunit.main()
@@ -47,4 +50,20 @@ pub fn partial_acceptance_and_invalid_responses_test() {
   assert otel.acceptance("{\"partialSuccess\":{\"rejectedSpans\":\"1\"}}")
     == Error("collector partially accepted traces: 1")
   let assert Error(_) = otel.acceptance("invalid")
+}
+
+pub fn all_supported_attribute_types_roundtrip_test() {
+  let span = otel.start_span(otel.trace_id(), None, "typed attributes", [])
+  let span =
+    span.Span(..span, attributes: [
+      #("text", span.Text("hello")),
+      #("integer", span.Integer(42)),
+      #("flag", span.Boolean(True)),
+      #("cost", span.Real(0.25)),
+      #("tags", span.Array([span.Text("a"), span.Array([span.Integer(7)])])),
+    ])
+  let body =
+    otel.encode(otel.configure([], "test", "scope", []), [span])
+    |> json.to_string
+  assert json.parse(body, codec.spans()) == Ok([span])
 }
