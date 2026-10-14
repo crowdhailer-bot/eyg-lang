@@ -1,0 +1,1 @@
+../../overlay_tui_core/test/core_test.gleam
