@@ -4,18 +4,23 @@ import eyg/cli/check
 import eyg/cli/compile
 import eyg/cli/eval
 import eyg/cli/fetch
+import eyg/cli/inspect
 import eyg/cli/internal/config
 import eyg/cli/overlay
 import eyg/cli/parse
 import eyg/cli/profile
 import eyg/cli/publish
+import eyg/cli/record
+import eyg/cli/replay
 import eyg/cli/run
 import eyg/cli/script
 import eyg/cli/share
 import eyg/cli/shell
 import eyg/cli/signatory
 import eyg/cli/tui
+import eyg/cli/upload
 import eyg/cli/version
+import gleam/option
 import gleam/result
 import loam/system
 
@@ -82,6 +87,16 @@ fn with_config(parsed) {
     args.SignatoryInitial(name:) -> signatory.initial(name, config)
     args.SignatoryList -> signatory.list(config)
     args.SignatoryShow(alias:) -> signatory.show(alias, config)
+    args.Record(input, arguments) -> {
+      let mode = case arguments {
+        option.None -> record.Block
+        option.Some(arguments) -> record.Script(arguments)
+      }
+      record.execute(input, mode, config)
+    }
+    args.Replay(path) -> replay.execute(path, config)
+    args.Inspect(path, step) -> inspect.execute(path, step, config)
+    args.Upload(path) -> upload.execute(path, config)
     args.Overlay(input:) -> overlay.execute(input, config)
   }
 }
