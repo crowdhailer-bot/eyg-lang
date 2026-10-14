@@ -17,6 +17,18 @@ export const onConsole = (page, handler) => { page.on("console", message => hand
 export const press = (locator, key) => done(() => locator.press(key));
 export const click = locator => done(() => locator.click());
 export const contains = (locator, text) => done(() => expect(locator).toContainText(text, { timeout: 15000 }));
+export const count = (locator, expected) => done(() => expect(locator).toHaveCount(expected, { timeout: 15000 }));
+export const attribute = (locator, name) => result(() => locator.getAttribute(name).then(value => { if(value === null) throw new Error('Missing attribute '+name); return value; }));
+export const frameLocator = (page, selector, inner) => page.frameLocator(selector).locator(inner);
+export const nestedFrameLocator = (page, outer, inner, selector) => page.frameLocator(outer).frameLocator(inner).locator(selector);
+export const contextOf = page => page.context();
+export const closePage = page => done(() => page.close());
+export const numericProperty = (locator, property) => result(() => locator.evaluate((node, key) => Number(node[key]), property));
+export const hasAttribute = (locator, name, expected) => done(() => expect(locator).toHaveAttribute(name, expected, {timeout:15000}));
+export const onRequest = (page, handle) => { page.on('request', request => handle(request.url())); };
+export const route = (page, pattern, handle) => done(() => page.route(pattern, handle));
+export const routeUrl = route => route.request().url();
+export const fulfill = (route, status, body) => done(() => route.fulfill({status,body}));
 export const download = page => result(() => page.waitForEvent("download"));
 export const saveDownload = (download, path) => done(() => download.saveAs(path));
 export const setInputFiles = (locator, path) => done(() => locator.setInputFiles(path));

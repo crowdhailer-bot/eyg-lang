@@ -41,7 +41,10 @@ pub fn locator(page: Page, selector: String) -> Locator
 pub fn fill(locator: Locator, value: String) -> Promise(Result(Nil, String))
 
 @external(javascript, "./playwright_ffi.mjs", "selectOption")
-pub fn select_option(locator: Locator, value: String) -> Promise(Result(Nil, String))
+pub fn select_option(
+  locator: Locator,
+  value: String,
+) -> Promise(Result(Nil, String))
 
 @external(javascript, "./playwright_ffi.mjs", "onError")
 pub fn on_error(page: Page, handler: fn(String) -> Nil) -> Nil
@@ -60,6 +63,67 @@ pub fn click(locator: Locator) -> Promise(Result(Nil, String))
 
 @external(javascript, "./playwright_ffi.mjs", "contains")
 pub fn contains(locator: Locator, text: String) -> Promise(Result(Nil, String))
+
+@external(javascript, "./playwright_ffi.mjs", "count")
+pub fn count(locator: Locator, expected: Int) -> Promise(Result(Nil, String))
+
+@external(javascript, "./playwright_ffi.mjs", "attribute")
+pub fn attribute(
+  locator: Locator,
+  name: String,
+) -> Promise(Result(String, String))
+
+@external(javascript, "./playwright_ffi.mjs", "frameLocator")
+pub fn frame_locator(page: Page, selector: String, inner: String) -> Locator
+
+@external(javascript, "./playwright_ffi.mjs", "nestedFrameLocator")
+pub fn nested_frame_locator(
+  page: Page,
+  outer: String,
+  inner: String,
+  selector: String,
+) -> Locator
+
+@external(javascript, "./playwright_ffi.mjs", "contextOf")
+pub fn context_of(page: Page) -> Context
+
+@external(javascript, "./playwright_ffi.mjs", "closePage")
+pub fn close_page(page: Page) -> Promise(Result(Nil, String))
+
+@external(javascript, "./playwright_ffi.mjs", "numericProperty")
+pub fn numeric_property(
+  locator: Locator,
+  property: String,
+) -> Promise(Result(Float, String))
+
+@external(javascript, "./playwright_ffi.mjs", "hasAttribute")
+pub fn has_attribute(
+  locator: Locator,
+  name: String,
+  expected: String,
+) -> Promise(Result(Nil, String))
+
+@external(javascript, "./playwright_ffi.mjs", "onRequest")
+pub fn on_request(page: Page, handle: fn(String) -> Nil) -> Nil
+
+pub type Route
+
+@external(javascript, "./playwright_ffi.mjs", "route")
+pub fn route(
+  page: Page,
+  pattern: String,
+  handle: fn(Route) -> Promise(Nil),
+) -> Promise(Result(Nil, String))
+
+@external(javascript, "./playwright_ffi.mjs", "routeUrl")
+pub fn route_url(route: Route) -> String
+
+@external(javascript, "./playwright_ffi.mjs", "fulfill")
+pub fn fulfill(
+  route: Route,
+  status: Int,
+  body: String,
+) -> Promise(Result(Nil, String))
 
 @external(javascript, "./playwright_ffi.mjs", "download")
 pub fn download(page: Page) -> Promise(Result(Download, String))
