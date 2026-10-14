@@ -8,7 +8,9 @@
 import eyg/interpreter/value as v
 import gleam/bit_array
 import gleam/dict
+import gleam/dynamic/decode
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/string
 
@@ -58,6 +60,60 @@ pub fn is_credential_variable(name: String) -> Bool {
 /// The name a secret read from an environment variable is recorded under.
 pub fn variable_name(name: String) -> String {
   "env:" <> name
+}
+
+/// Credential strings in JSON files and OAuth replies, including a nested token set.
+/// Other fields and values are left alone; callers supply a stable source name.
+pub fn in_json(bytes: BitArray, source: String) -> List(Secret) {
+  let fields = decode.dict(decode.string, decode.dynamic)
+  case json.parse_bits(bytes, fields) {
+    Error(_) -> []
+    Ok(values) -> {
+      let nested =
+        ["tokens", "credentials"]
+        |> list.flat_map(fn(key) {
+          case dict.get(values, key) {
+            Error(Nil) -> []
+            Ok(value) ->
+              case decode.run(value, fields) {
+                Error(_) -> []
+                Ok(values) -> json_fields(values, source <> ":" <> key)
+              }
+          }
+        })
+      list.append(json_fields(values, source), nested)
+    }
+  }
+}
+
+fn json_fields(values, source) {
+  dict.to_list(values)
+  |> list.filter_map(fn(field) {
+    let #(key, value) = field
+    case
+      list.contains(
+        [
+          "access_token",
+          "refresh_token",
+          "id_token",
+          "secret_access_key",
+          "api_key",
+          "password",
+          "token",
+          "client_secret",
+        ],
+        string.lowercase(key),
+      )
+      || key == "OPENAI_API_KEY"
+    {
+      False -> Error(Nil)
+      True ->
+        case decode.run(value, decode.string) {
+          Ok("") | Error(_) -> Error(Nil)
+          Ok(value) -> Ok(Secret("json:" <> source <> ":" <> key, value))
+        }
+    }
+  })
 }
 
 /// Does a string contain any of the secret values.

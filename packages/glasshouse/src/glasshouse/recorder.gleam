@@ -12,6 +12,7 @@ import glasshouse/secret.{type Secret, Secret}
 import glasshouse/store.{type Sha256, type Store}
 import glasshouse/value
 import gleam/bit_array
+import gleam/dict
 import gleam/list
 import gleam/option.{type Option}
 import gleam/string
@@ -80,6 +81,20 @@ pub fn record(
       case secret.is_credential_variable(name) {
         True -> add_secret(recorder, Secret(secret.variable_name(name), secret))
         False -> recorder
+      }
+    "ReadFile", _, v.Tagged("Ok", v.Binary(bytes)) ->
+      secret.in_json(bytes, "file:" <> option.unwrap(path, "unknown"))
+      |> list.fold(recorder, add_secret)
+    "Fetch", v.Record(request), v.Tagged("Ok", v.Record(response)) ->
+      case
+        dict.get(response, "body"),
+        dict.get(request, "host"),
+        dict.get(request, "path")
+      {
+        Ok(v.Binary(bytes)), Ok(v.String(host)), Ok(v.String(path)) ->
+          secret.in_json(bytes, "http:" <> host <> path)
+          |> list.fold(recorder, add_secret)
+        _, _, _ -> recorder
       }
     _, _, _ -> recorder
   }

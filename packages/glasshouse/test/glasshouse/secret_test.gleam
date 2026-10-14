@@ -1,10 +1,15 @@
 import eyg/interpreter/value as v
 import glasshouse/helpers.{sha256}
+import glasshouse/journal
 import glasshouse/lock
 import glasshouse/recorder
 import glasshouse/secret.{Secret}
+import glasshouse/value
+import gleam/bit_array
 import gleam/dict
 import gleam/json
+import gleam/list
+import gleam/option.{Some}
 import gleam/string
 
 const token = Secret("github", "ghp_s3cr3t")
@@ -86,4 +91,103 @@ pub fn locks_without_secrets_still_decode_test() {
       lock.decoder(),
     )
   assert lock == lock.empty()
+}
+
+pub fn credential_json_discovery_keeps_unrelated_fields_test() {
+  let bytes = <<
+    "{\"OPENAI_API_KEY\":null,\"tokens\":{\"access_token\":\"fixture-access-123\",\"refresh_token\":\"fixture-refresh-123\",\"id_token\":\"fixture-id-123\",\"account_id\":\"account\"},\"public\":\"keep\"}",
+  >>
+  let secrets = secret.in_json(bytes, "file:/cache/auth.json")
+  assert list.length(secrets) == 3
+  assert secret.reveals(
+    "fixture-access-123 fixture-refresh-123 fixture-id-123",
+    secrets,
+  )
+  assert !secret.reveals("account keep", secrets)
+  assert secret.in_json(<<255>>, "file") == []
+  assert secret.in_json(<<"not JSON">>, "file") == []
+}
+
+pub fn file_and_rotated_oauth_credentials_are_redacted_before_capture_test() {
+  let file = <<
+    "{
+    \"tokens\":{\"access_token\":\"fixture-old-access-123\",\"refresh_token\":\"fixture-old-refresh-123\",\"id_token\":\"fixture-old-id-123\"}
+  }",
+  >>
+  let request =
+    v.Record(
+      dict.from_list([
+        #("host", v.String("auth.example.com")),
+        #("path", v.String("/oauth/token")),
+      ]),
+    )
+  let reply =
+    v.ok(
+      v.Record(
+        dict.from_list([
+          #(
+            "body",
+            v.Binary(<<
+              "{\"access_token\":\"fixture-new-access-123\",\"refresh_token\":\"fixture-new-refresh-123\"}",
+            >>),
+          ),
+        ]),
+      ),
+    )
+  let recorded =
+    recorder.new(sha256)
+    |> recorder.with_threshold(1)
+    |> recorder.record(
+      "ReadFile",
+      v.unit(),
+      v.ok(v.Binary(file)),
+      journal.Performed,
+      Some("/cache/auth.json"),
+      0,
+      1,
+    )
+    |> recorder.record(
+      "Fetch",
+      request,
+      reply,
+      journal.Performed,
+      Some("/oauth/token"),
+      1,
+      1,
+    )
+  let entries = recorder.journal(recorded)
+  let encoded =
+    list.map(entries, journal.encode)
+    |> json.array(fn(value) { value })
+    |> json.to_string
+  assert !string.contains(encoded, "fixture-old-access-123")
+  assert !string.contains(encoded, "fixture-old-refresh-123")
+  assert !string.contains(encoded, "fixture-old-id-123")
+  assert !string.contains(encoded, "fixture-new-access-123")
+  assert !string.contains(encoded, "fixture-new-refresh-123")
+  assert list.length(recorder.secrets(recorded)) == 5
+  let assert [read, fetched] = entries
+  let assert Ok(v.Tagged("Ok", v.Binary(bytes))) =
+    value.decode(read.reply, recorder.store(recorded), Nil)
+  let assert Ok(text) = bit_array.to_string(bytes)
+  assert !secret.reveals(text, recorder.secrets(recorded))
+  assert string.contains(
+    text,
+    "⟦secret:json:file:/cache/auth.json:tokens:access_token⟧",
+  )
+  let assert Ok(v.Tagged("Ok", v.Record(fields))) =
+    value.decode(fetched.reply, recorder.store(recorded), Nil)
+  let assert Ok(v.Binary(bytes)) = dict.get(fields, "body")
+  let assert Ok(text) = bit_array.to_string(bytes)
+  assert !secret.reveals(text, recorder.secrets(recorded))
+  assert string.contains(
+    text,
+    "⟦secret:json:http:auth.example.com/oauth/token:access_token⟧",
+  )
+  let #(result, _) =
+    recorder.encode(recorded, v.String("Bearer fixture-new-access-123"))
+  assert result
+    == value.encode(v.String(
+      "Bearer ⟦secret:json:http:auth.example.com/oauth/token:access_token⟧",
+    ))
 }
