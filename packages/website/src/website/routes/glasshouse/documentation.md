@@ -65,6 +65,12 @@ input/output summaries. Accepted uploads add a trace link to the archive.
 
 ## Archive format
 
+For complete environment inputs, use the [sandbox guide](/guides/sandbox).
+The [sealed sandbox example](/glasshouse/debugger?demo=sandbox) includes an
+unchanged fork, a changed skill, a changed prompt and a refused external host.
+`eyg sandbox replay` checks the complete environment and ordered model/network
+observations; the browser's Replay panel checks each recorded EYG run.
+
 A session holds ordered runs and events. Runs contain the source, pinned program,
 module lock, effect journal and outcome. Values are DAG-JSON blocks indexed by
 CID, so repeated file and binary values are stored once. The versioned JSON

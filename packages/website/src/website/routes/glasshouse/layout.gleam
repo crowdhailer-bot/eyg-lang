@@ -30,6 +30,7 @@ pub fn nav(active: String) -> Element(msg) {
       ]),
       link("/glasshouse", "Overview"),
       link("/glasshouse/documentation", "Documentation"),
+      link("/glasshouse/runtime-acquisition.html", "Runtime acquisition"),
       link("/glasshouse/debugger", "Debugger"),
       link("/guides/trajectories", "CLI guide"),
     ]),
