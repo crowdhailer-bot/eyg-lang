@@ -1,0 +1,3 @@
+trace 216717bcfe9cbfc63fd77b2e0d295e83
+12 spans; all IDs, parents and names verified
+Observation types, session grouping, models and token counts verified
