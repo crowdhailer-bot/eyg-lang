@@ -1,3 +1,4 @@
+import eyg/interpreter/value as v
 import eyg/ir/tree as ir
 import glasshouse/bundle
 import glasshouse/sha256
@@ -86,4 +87,35 @@ pub fn named_packages_use_the_prepared_lock_without_refreshing_the_hub_test() {
   let assert #(sandbox.Returned(#(Ok(#(Ok(_), _)), _)), _) =
     virtual.run(effect, virtual.fork(environment))
     |> sandbox.run(sandbox.sandbox())
+}
+
+pub fn nested_immutable_releases_remain_available_offline_test() {
+  let leaf = #(ir.Integer(42), Nil)
+  let root = #(
+    ir.Reference(ir.Pinned(ir.Release("base", 3, hub_mock.cid(leaf)))),
+    Nil,
+  )
+  let hub = hub_mock.Hub([root, leaf], [])
+  let host =
+    sandbox.sandbox()
+    |> sandbox.with_file(
+      "/project/main.eyg",
+      "#" <> v1.to_string(hub_mock.cid(root)),
+    )
+    |> sandbox.with_network(
+      fn(request, calls) { hub_mock.handle(request, hub, calls) },
+      [],
+    )
+  let assert #(sandbox.Returned(Ok(tree)), host) =
+    acquire.local("/project", [], sha256.hash) |> sandbox.run(host)
+  let assert #(sandbox.Returned(Ok(input)), _) =
+    prepare.prepare(tree, "main.eyg", origin.https("eyg.run"), sha256.hash)
+    |> sandbox.run(host)
+  let assert Ok(environment) = environment.open(input)
+  let assert Ok(node) = source.parse("import \"main.eyg\"", source.Inline)
+  let state = environment.execution_state(environment, environment.hub)
+  let assert #(sandbox.Returned(#(Ok(#(Ok(#(Some(value), _)), _)), _)), _) =
+    virtual.run(execute.block(node, [], state), virtual.fork(environment))
+    |> sandbox.run(sandbox.sandbox())
+  assert value == v.Integer(42)
 }
