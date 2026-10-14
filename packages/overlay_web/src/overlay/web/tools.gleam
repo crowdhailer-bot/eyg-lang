@@ -11,15 +11,17 @@ import eyg/interpreter/value as v
 import eyg/ir/tree as ir
 import eyg/ir/utils.{push_new} as _
 import eyg/parser
-import eyg/parser/debug
 import eyg/parser/parser.{type Reason} as _
+import gleam/dict
 import gleam/dynamic/decode
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/string
 import multiformats/cid/v1
 import overlay/agent
 import overlay/llm/chat
 import overlay/llm/tool
+import overlay/policy
 import overlay/tools/run
 import pal/platform/browser
 import pal/system
@@ -32,6 +34,8 @@ pub type Context {
     counter: Int,
     effects: List(system.Effect(#(Int, state.Value(Meta)))),
     context: cache.Module(Meta),
+    /// Without a policy every effect is performed.
+    policy: Option(policy.Policy(harness.Effect, Meta)),
   )
 }
 
@@ -42,7 +46,7 @@ pub type Meta =
 pub type Call {
   UnknownTool(name: String)
   BadArguments(List(decode.DecodeError))
-  InvalidCode(Reason)
+  InvalidCode(reason: Reason, code: String)
   Pulling(ir.Node(Meta))
   Fetching(cids: List(v1.Cid), source: ir.Node(Meta))
   Successful(state.Value(Meta))
@@ -112,7 +116,7 @@ fn run_code(ctx: Context, id: String, code: String) -> #(Context, Progress) {
         }
       }
     }
-    Error(reason) -> #(ctx, failed(id, InvalidCode(reason)))
+    Error(reason) -> #(ctx, failed(id, InvalidCode(reason, code)))
   }
 }
 
@@ -124,7 +128,7 @@ fn check_single(
   let analysis =
     infer.pure()
     |> with_scope([#("context", context.type_)])
-    |> infer.with_effects(interface.types(harness.effects()))
+    |> infer.with_effects(interface.types(effects()))
     |> infer.check(source)
     |> cache.infer_sync(cache)
   infer.all_errors(analysis)
@@ -241,37 +245,46 @@ fn loop(
           }
       }
     }
-    Error(#(break.UnhandledEffect(label, lift), _, env, k)) -> {
-      case browser.cast(label, lift) {
-        // Printing belongs to the result the agent reads, not only the browser
-        // console. Keeping it here also preserves output across suspension.
-        Ok(harness.Print(message)) ->
-          loop(expression.resume(v.unit(), env, k), ctx, [message, ..output])
-        Ok(effect) -> {
-          case browser.extrinsic(effect) {
-            browser.Abort(reason) -> #(ctx, output, Aborted(reason))
-            browser.Work(system.Done(value)) ->
-              loop(expression.resume(value, env, k), ctx, output)
-            browser.Work(effect) -> {
-              let id = ctx.counter
-
-              let effect = system.map(effect, fn(v) { #(id, v) })
-              let effects = [effect, ..ctx.effects]
-              let ctx = Context(..ctx, counter: id + 1, effects:)
-              #(ctx, output, Handling(id, env, k))
-            }
-            browser.Spotless(..) -> #(
-              ctx,
-              output,
-              Aborted("Spotless integration not supported in harness"),
-            )
-          }
-        }
-        Error(reason) -> #(ctx, output, Exception(reason))
+    Error(#(break.UnhandledEffect(label, lift), _, env, k)) ->
+      case decide(ctx, label, lift) {
+        Perform(lift) -> perform(label, lift, env, k, ctx, output)
+        Resume(value) -> loop(expression.resume(value, env, k), ctx, output)
+        Refuse(reason) -> #(ctx, output, Aborted(reason))
       }
-    }
     Error(#(reason, _, _, _)) -> #(ctx, output, Exception(reason))
     Ok(value) -> #(ctx, output, Successful(value))
+  }
+}
+
+fn perform(label, lift, env, k, ctx: Context, output) {
+  {
+    case browser.cast(label, lift) {
+      // Printing belongs to the result the agent reads, not only the browser
+      // console. Keeping it here also preserves output across suspension.
+      Ok(harness.Print(message)) ->
+        loop(expression.resume(v.unit(), env, k), ctx, [message, ..output])
+      Ok(effect) -> {
+        case browser.extrinsic(effect) {
+          browser.Abort(reason) -> #(ctx, output, Aborted(reason))
+          browser.Work(system.Done(value)) ->
+            loop(expression.resume(value, env, k), ctx, output)
+          browser.Work(effect) -> {
+            let id = ctx.counter
+
+            let effect = system.map(effect, fn(v) { #(id, v) })
+            let effects = [effect, ..ctx.effects]
+            let ctx = Context(..ctx, counter: id + 1, effects:)
+            #(ctx, output, Handling(id, env, k))
+          }
+          browser.Spotless(..) -> #(
+            ctx,
+            output,
+            Aborted("Spotless integration not supported in harness"),
+          )
+        }
+      }
+      Error(reason) -> #(ctx, output, Exception(reason))
+    }
   }
 }
 
@@ -306,7 +319,7 @@ fn do_all_returns(
       let message = case call {
         UnknownTool(name:) -> Ok("unknown tool: " <> name)
         BadArguments(reasons) -> Ok(string.inspect(reasons))
-        InvalidCode(reason) -> Ok(debug.describe(reason))
+        InvalidCode(reason, code) -> Ok(parser.format_error(reason, code))
         Successful(value) -> Ok(agent.inspect_result(value))
         Errored(errors) -> {
           list.map(errors, fn(error) { analysis_debug.reason(error.1) })
@@ -437,5 +450,81 @@ fn apply_effect(
       #(ctx, Progress(id:, output:, call:))
     }
     _ -> #(ctx, progress)
+  }
+}
+
+/// The effects available to the agent.
+/// Service effects need a Spotless integration which this harness does not have.
+pub fn effects() {
+  let services =
+    list.map(
+      [harness.DNSimple, harness.GitHub, harness.Vimeo],
+      harness.effect_label,
+    )
+  harness.effects()
+  |> list.filter(fn(effect) { !list.contains(services, effect.name) })
+}
+
+type Outcome {
+  Perform(state.Value(Meta))
+  Resume(state.Value(Meta))
+  Refuse(String)
+}
+
+/// The rules for a policy entered in the browser.
+/// Effects that do no IO, and aborting, need no gate.
+pub fn policy_rules() {
+  policy.match_rules(effects(), [
+    #("Abort", policy.Unchecked),
+    #("Alert", policy.PolicyField("alert")),
+    #("Copy", policy.PolicyField("copy")),
+    #("DecodeJSON", policy.Unchecked),
+    #("Download", policy.PolicyField("download")),
+    #("Fetch", policy.PolicyField("fetch")),
+    #("Flip", policy.Unchecked),
+    #("Now", policy.PolicyField("now")),
+    #("Paste", policy.PolicyField("paste")),
+    #("Print", policy.PolicyField("print")),
+    #("Prompt", policy.PolicyField("prompt")),
+    #("Random", policy.Unchecked),
+    #("Visit", policy.PolicyField("visit")),
+  ])
+}
+
+/// Ask the policy, if there is one, what to do with an effect.
+fn decide(ctx: Context, label, lift) -> Outcome {
+  case ctx.policy {
+    None -> Perform(lift)
+    Some(policy) ->
+      case dict.get(policy, label) {
+        Ok(policy.Interface(_, policy.Gated(gate))) -> {
+          let return =
+            expression.call(gate, [#(lift, [])])
+            |> cache.static_loop(ctx.cache, expression.resume)
+          case return {
+            Ok(returned) ->
+              case policy.decision_from_value(returned) {
+                Ok(policy.Pass(lift)) -> Perform(lift)
+                Ok(policy.Mock(value)) -> Resume(value)
+                Error(Nil) ->
+                  Refuse(
+                    "policy for "
+                    <> label
+                    <> " failed: expected Pass or Mock, got "
+                    <> simple_debug.inspect(returned),
+                  )
+              }
+            Error(#(reason, _, _, _)) ->
+              Refuse(
+                "policy for "
+                <> label
+                <> " failed: "
+                <> simple_debug.describe(reason),
+              )
+          }
+        }
+        Ok(policy.Interface(_, policy.Unrestricted)) -> Perform(lift)
+        Error(Nil) -> Refuse("the " <> label <> " effect is not available")
+      }
   }
 }
