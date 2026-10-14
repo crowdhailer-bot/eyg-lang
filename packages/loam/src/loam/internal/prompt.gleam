@@ -99,7 +99,7 @@ fn apply_keys(model: editor.Model, keys) {
                 && string.length(key) == 1
                 && string.compare(key, " ") != order.Lt
               {
-                True -> io.print(key)
+                True -> io.print(key <> "\u{1b}[0J")
                 False -> io.print(editor.redraw(next.line))
               }
           }
