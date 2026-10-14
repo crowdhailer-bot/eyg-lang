@@ -5,7 +5,7 @@
 To test all the packages on the BEAM environment.
 ```sh
 # Erlang-target Gleam packages
-for pkg in packages/{gleam_analysis,gleam_hub,gleam_ir,gleam_parser,intelligence,overlay_llm,topological,touch_grass,untethered}; do
+for pkg in packages/{gleam_analysis,gleam_embedding,gleam_hub,gleam_ir,gleam_parser,intelligence,overlay_llm,topological,touch_grass,untethered}; do
   ( cd "$pkg" && gleam format --check src test && gleam build --warnings-as-errors && gleam test )
 done
 ```
@@ -28,6 +28,11 @@ The [terminal shell guide](./guides/tui_shell.md) covers the direct, Lustre and
 signals frontends. Each needs `bun install` before `gleam test` to install its
 OpenTUI native library. `packages/overlay_terminal` tests their shared runtime.
 The checked terminal recordings are orchestrated by `tracing/terminal_demo`.
+
+The [Erlang embedding guide](./guides/embedding_erlang.md) runs the supervised
+counter example. Build and test it from `examples/erl_counter`; its native host
+callbacks delegate EYG execution and package loading to `gleam_embedding`.
+`tracing/erlang_demo` checks its real HTTP cache reuse and records the console.
 
 ## Writing EYG packages
 

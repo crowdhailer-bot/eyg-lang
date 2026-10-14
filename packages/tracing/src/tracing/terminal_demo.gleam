@@ -31,8 +31,22 @@ pub fn main() {
   let assert Ok(bun) = runtime.get()
   let assert Ok(host) = process.get()
   let env = process.env(host)
-  let assert Ok(False) = simplifile.exists("/tmp/.X97-lock", follow_links: True)
   let assert Ok(model) = terminal_fixture.start()
+  let outcome =
+    in_desktop(bun, root, env, fn() { record_all(bun, root, env) })
+    |> promise.map(Ok)
+    |> promise.rescue(Error)
+  use outcome <- promise.await(outcome)
+  use _ <- promise.map(server.stop(model, True))
+  case outcome {
+    Ok(_) -> io.println("PASS checked real terminal recordings")
+    Error(error) -> panic as failure(error)
+  }
+}
+
+/// Shared capture lifecycle for terminal and native embedding walkthroughs.
+pub fn in_desktop(bun, root, env, work) {
+  let assert Ok(False) = simplifile.exists("/tmp/.X97-lock", follow_links: True)
   let xvfb =
     spawn(bun, root, env, [
       "Xvfb",
@@ -43,14 +57,12 @@ pub fn main() {
       "-nolisten",
       "tcp",
     ])
-  let outcome =
-    record_all(bun, root, env) |> promise.map(Ok) |> promise.rescue(Error)
+  let outcome = work() |> promise.map(Ok) |> promise.rescue(Error)
   use outcome <- promise.await(outcome)
   let _ = subprocess.kill(xvfb, "SIGTERM")
-  use _ <- promise.await(subprocess.exited(xvfb))
-  use _ <- promise.map(server.stop(model, True))
+  use _ <- promise.map(subprocess.exited(xvfb))
   case outcome {
-    Ok(_) -> io.println("PASS checked real terminal recordings")
+    Ok(_) -> Nil
     Error(error) -> panic as failure(error)
   }
 }
@@ -80,6 +92,13 @@ fn record_variant(bun, root, env, variant) {
       root,
       package <> "/recordings",
     ))
+  in_terminal(bun, root, env, fn() {
+    use _ <- promise.await(shell(bun, root, env, package))
+    overlay(bun, root, env, package)
+  })
+}
+
+pub fn in_terminal(bun, root, env, work) {
   use _ <- promise.await(
     command(root, "tmux", [
       "new-session",
@@ -127,8 +146,7 @@ fn record_variant(bun, root, env, variant) {
   let outcome =
     {
       use _ <- promise.await(timers.sleep(500))
-      use _ <- promise.await(shell(bun, root, env, package))
-      overlay(bun, root, env, package)
+      work()
     }
     |> promise.map(Ok)
     |> promise.rescue(Error)
@@ -279,7 +297,7 @@ fn check_archive(root, package, pane) {
   Nil
 }
 
-fn finish_video(child, root, path) {
+pub fn finish_video(child, root, path) {
   let _ = subprocess.kill(child, "SIGINT")
   use exit <- promise.await(subprocess.exited(child))
   case exit {
@@ -295,7 +313,7 @@ fn finish_video(child, root, path) {
   assert string.trim(duration) != ""
 }
 
-fn video(bun, root, env, path) {
+pub fn video(bun, root, env, path) {
   spawn(bun, root, env, [
     "ffmpeg",
     "-hide_banner",
@@ -344,7 +362,7 @@ fn spawn(bun, root, env, command) {
   child
 }
 
-fn command(root, program, arguments) {
+pub fn command(root, program, arguments) {
   use result <- promise.map(
     system.run(system.command(program, arguments, root)),
   )
@@ -352,25 +370,25 @@ fn command(root, program, arguments) {
   result
 }
 
-fn key(root, key) {
+pub fn key(root, key) {
   command(root, "tmux", ["send-keys", "-t", tmux_name, key])
 }
 
-fn type_text(root, text) {
+pub fn type_text(root, text) {
   command(root, "tmux", ["send-keys", "-t", tmux_name, "-l", text])
 }
 
-fn submit(root, text) {
+pub fn submit(root, text) {
   use _ <- promise.await(type_text(root, text))
   use _ <- promise.await(timers.sleep(300))
   key(root, "Enter")
 }
 
-fn capture(root) {
+pub fn capture(root) {
   command(root, "tmux", ["capture-pane", "-p", "-t", tmux_name])
 }
 
-fn wait_for(root, text, attempts) {
+pub fn wait_for(root, text, attempts) {
   use pane <- promise.await(capture(root))
   case string.contains(pane, text), attempts {
     True, _ -> promise.resolve(Nil)
@@ -382,7 +400,7 @@ fn wait_for(root, text, attempts) {
   }
 }
 
-fn wait_shell(root, attempts) {
+pub fn wait_shell(root, attempts) {
   use program <- promise.await(
     command(root, "tmux", [
       "display-message", "-p", "-t", tmux_name, "#{pane_current_command}",

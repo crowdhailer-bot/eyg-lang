@@ -15,6 +15,10 @@ and browser, offline replay, pi-mono/opencode formats and real backend checks.
 - `gleam run -m tracing/terminal_demo`: record and check the direct, Lustre and
   signals frontends using Xvfb, xterm, tmux and ffmpeg. Checks archive closure,
   token usage and offline replay; records into each frontend's `recordings`.
+- `gleam run -m tracing/package_fixture`: repository standard package and its
+  pinned reference over a local HTTP hub on 7207.
+- `gleam run -m tracing/erlang_demo`: record the real Erlang console, verify
+  package requests stop after caching, run counters and check errors before effects.
 
 Fixtures and tests are Gleam. Playwright library adapters are in `gleam_playwright`;
 base platform bindings are in `plinthx`. Successful recordings are in `recordings`;

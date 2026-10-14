@@ -1,0 +1,34 @@
+(eyg_roadmap_counters@assistance-bot)4> {ok, Type} = counters_session:check(S, Ref ++ ".list.map([1, 2], (n) -
+> { n })"), io:format("~ts~n", [Type]).
+List(Integer)
+ok
+(eyg_roadmap_counters@assistance-bot)5> counters_session:cached(S, {package, <<"standard">>}).
+true
+(eyg_roadmap_counters@assistance-bot)6> {ok, _} = counters_session:run(S, Ref ++ ".list.map([\"a\", \"b\"], (n
+ame) -> { perform StartCounter(name) })"), io:format("Counters started.~n").
+Counters started.
+ok
+(eyg_roadmap_counters@assistance-bot)7> _ = counters_eyg:run("perform GetValue(\"a\")"), ok.
+Ok(0)
+ok
+(eyg_roadmap_counters@assistance-bot)8> _ = counters_eyg:run("perform SetTickRate({name: \"a\", seconds: 1})")
+, ok.
+Ok({})
+ok
+(eyg_roadmap_counters@assistance-bot)9> _ = counters_eyg:run("perform GetValue(\"a\")"), ok.
+Ok(1)
+ok
+(eyg_roadmap_counters@assistance-bot)10> _ = counters_eyg:run("let _ = perform StartCounter(\"blocked\") perfo
+rm GetValue(3)"), ok.
+error: type mismatch given: Integer expected: String
+hint: check the expression matches the expected type
+
+ 1 | let _ = perform StartCounter("blocked") perform GetValue(3)
+                                             ^^^^^^^^^^^^^^^^^^^
+ok
+(eyg_roadmap_counters@assistance-bot)11> counters_api:get_value(<<"blocked">>).
+{error,not_found}
+(eyg_roadmap_counters@assistance-bot)12> _ = counters_session:run(S, "let _ = perform Shutdown(\"a\") perform
+Shutdown(\"b\")"), gen_server:stop(S), ok.
+ok
+(eyg_roadmap_counters@assistance-bot)13>

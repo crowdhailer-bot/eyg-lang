@@ -35,6 +35,8 @@ pub fn route() {
     simplifile.read_bits("../overlay_tui_core/recordings/repl.mp4")
   let assert Ok(terminal_overlay) =
     simplifile.read_bits("../overlay_tui_core/recordings/overlay.mp4")
+  let assert Ok(erlang_recording) =
+    simplifile.read_bits("../../examples/erl_counter/video/erlang-counters.mp4")
   Route(index: route.Page(home.page()), items: [
     #("runtime-acquisition.html", Route(route.Static(article), [])),
     #("trajectories.webm", Route(route.Static(recording), [])),
@@ -44,6 +46,7 @@ pub fn route() {
     #("artifact-trajectory.json", Route(route.Static(artifact_trace), [])),
     #("terminal-repl.mp4", Route(route.Static(terminal_recording), [])),
     #("terminal-overlay.mp4", Route(route.Static(terminal_overlay), [])),
+    #("erlang-counters.mp4", Route(route.Static(erlang_recording), [])),
     #(
       "documentation",
       Route(index: route.Page(documentation.page()), items: []),
