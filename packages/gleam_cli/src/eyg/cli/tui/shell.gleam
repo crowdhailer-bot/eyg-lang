@@ -159,6 +159,11 @@ fn go(effect, events, deadline) {
         events,
         Asking("Standard input", fn(answer) { resume(Ok(answer)) }),
       ))
+    // The tui owns the keyboard, so no key reaches the program.
+    system.ReadKey(milliseconds, resume) ->
+      promise.await(promise.wait(milliseconds), fn(_) {
+        go(resume(None), events, deadline)
+      })
     _ ->
       case now() >. deadline {
         True -> promise.resolve(#(events, Paused(effect)))

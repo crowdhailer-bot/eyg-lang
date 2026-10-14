@@ -14,6 +14,7 @@ import gleam/result
 import gleam/time/timestamp
 import kryptos/eddsa
 import loam/internal/crypto
+import loam/internal/keys
 import loam/internal/prompt
 import loam/internal/tracing
 import midas/effect
@@ -79,6 +80,7 @@ pub type Effect(a) {
   Hash(effect.HashAlgorithm, BitArray, fn(BitArray) -> Effect(a))
   Now(fn(Int) -> Effect(a))
   Prompt(String, fn(Result(String, Nil)) -> Effect(a))
+  ReadKey(Int, fn(Option(String)) -> Effect(a))
   Random(Int, fn(Int) -> Effect(a))
   ReadDirectory(
     String,
@@ -231,6 +233,10 @@ pub fn prompt(text: String) -> Effect(Result(String, Nil)) {
   Prompt(text, Done)
 }
 
+pub fn read_key(milliseconds: Int) -> Effect(Option(String)) {
+  ReadKey(milliseconds, Done)
+}
+
 /// Print a line, including a trailing newline.
 pub fn stdout(text) {
   Stdout(text, Done)
@@ -264,6 +270,8 @@ pub fn then(effect: Effect(a), func: fn(a) -> Effect(b)) -> Effect(b) {
     Now(resume) -> Now(fn(value) { then(resume(value), func) })
     Prompt(text, resume) ->
       Prompt(text, fn(value) { then(resume(value), func) })
+    ReadKey(milliseconds, resume) ->
+      ReadKey(milliseconds, fn(value) { then(resume(value), func) })
     Random(max, resume) -> Random(max, fn(value) { then(resume(value), func) })
     ReadFileRange(path, offset, limit, resume) ->
       ReadFileRange(path, offset, limit, fn(result) {
@@ -379,7 +387,13 @@ pub fn run_with_environment(
 }
 
 fn run_traced(effect: Effect(a), trace: tracing.Context) -> Promise(a) {
-  use #(outcome, trace) <- promise.await(run_effect(fn() { effect }, trace))
+  let reader = keys.new()
+  use #(outcome, trace) <- promise.await(run_effect(
+    fn() { effect },
+    trace,
+    reader,
+  ))
+  keys.release(reader)
   let error = case outcome {
     Ok(_) -> option.None
     Error(reason) ->
@@ -403,19 +417,20 @@ type Driver(a) {
 fn run_effect(
   work: fn() -> Effect(a),
   trace: tracing.Context,
+  reader: keys.Reader,
 ) -> Promise(#(Result(a, Dynamic), tracing.Context)) {
   // Catch one step at a time, releasing its old context before driving the next.
   // Otherwise pending exception handlers retain already-exported span batches.
   use next <- promise.await(
     promise.resolve(Nil)
-    |> promise.await(fn(_) { run_step(work(), trace) })
+    |> promise.await(fn(_) { run_step(work(), trace, reader) })
     |> promise.map(Ok)
     |> promise.rescue(Error),
   )
   case next {
     Error(reason) -> promise.resolve(#(Error(reason), trace))
     Ok(Finished(value, trace)) -> promise.resolve(#(Ok(value), trace))
-    Ok(NextEffect(work, trace)) -> run_effect(work, trace)
+    Ok(NextEffect(work, trace)) -> run_effect(work, trace, reader)
   }
 }
 
@@ -427,7 +442,11 @@ fn continue(
   promise.resolve(NextEffect(fn() { resume(value) }, trace))
 }
 
-fn run_step(effect: Effect(a), trace: tracing.Context) -> Promise(Driver(a)) {
+fn run_step(
+  effect: Effect(a),
+  trace: tracing.Context,
+  reader: keys.Reader,
+) -> Promise(Driver(a)) {
   case effect {
     Acquire(_, resume) ->
       continue(Error("Acquire requires a sandbox"), resume, trace)
@@ -451,6 +470,7 @@ fn run_step(effect: Effect(a), trace: tracing.Context) -> Promise(Driver(a)) {
       continue(Nil, resume, trace)
     }
     Exit(status) -> {
+      keys.release(reader)
       let error = case status {
         0 -> option.None
         _ -> option.Some("process exited with status " <> int.to_string(status))
@@ -531,10 +551,18 @@ fn run_step(effect: Effect(a), trace: tracing.Context) -> Promise(Driver(a)) {
       continue(do_write_file(path, contents), resume, trace)
     SetPermissions(path, permissions, resume) ->
       continue(do_set_permissions(path, permissions), resume, trace)
-    Stdin(resume) -> continue(read_stdin(), resume, trace)
+    Stdin(resume) -> {
+      keys.release(reader)
+      continue(read_stdin(), resume, trace)
+    }
     Prompt(text, resume) -> {
+      keys.release(reader)
       use value <- promise.await(prompt.read_line(text))
       continue(value, resume, trace)
+    }
+    ReadKey(milliseconds, resume) -> {
+      use key <- promise.await(keys.read(reader, milliseconds))
+      continue(key, resume, trace)
     }
     Stdout(text, resume) -> continue(io.println(text), resume, trace)
     Wait(duration, resume) -> {
@@ -547,12 +575,16 @@ fn run_step(effect: Effect(a), trace: tracing.Context) -> Promise(Driver(a)) {
 /// Perform only the first operation of an effect, returning what follows it.
 /// A frontend that owns the terminal handles output and input itself and steps
 /// every other operation. A finished effect or an exit is returned unchanged;
-/// spans are not recorded.
+/// spans are not recorded and no key is read.
 pub fn step(effect: Effect(a)) -> Promise(Effect(a)) {
   case effect {
     Done(_) | Exit(_) -> promise.resolve(effect)
     _ -> {
-      use next <- promise.map(run_step(effect, tracing.configured([])))
+      use next <- promise.map(run_step(
+        effect,
+        tracing.configured([]),
+        keys.new(),
+      ))
       case next {
         Finished(value, _) -> Done(value)
         NextEffect(work, _) -> work()
