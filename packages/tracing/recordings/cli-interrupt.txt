@@ -1,0 +1,8 @@
+corin@assistance-bot:~/mono/repos/eyg-lang$ EYG_TRACE_DIR='/home/corin/mono/repos/eyg-lang/packages/tracing/.r
+ecordings/cli-interrupt' '/tmp/eyg-roadmap-pi-host/eyg' overlay packages/tracing/fixtures/cli-interrupt.eyg
+>>> pause
+^CStopped, send a message to continue.
+
+>>> resume
+Resumed normally.
+>>> send a message
