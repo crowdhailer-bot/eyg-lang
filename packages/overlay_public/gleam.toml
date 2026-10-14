@@ -17,4 +17,7 @@ plinth = ">= 0.10.2 and < 1.0.0"
 splitter = ">= 1.2.0 and < 2.0.0"
 
 [dev_dependencies]
+gleam_json = ">= 3.1.0 and < 4.0.0"
+gleam_vite = { path = "../gleam_vite" }
+plinthx = { path = "../plinthx" }
 gleeunit = ">= 1.0.0 and < 2.0.0"
