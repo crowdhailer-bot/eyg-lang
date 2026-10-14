@@ -21,8 +21,18 @@ pub type Options {
 @external(javascript, "./subprocess_ffi.mjs", "spawn")
 pub fn spawn(bun: Bun, options: Options) -> Result(Subprocess, String)
 
+@external(javascript, "./subprocess_ffi.mjs", "spawnWithInput")
+pub fn spawn_with_input(
+  bun: Bun,
+  options: Options,
+  input: BitArray,
+) -> Result(Subprocess, String)
+
 @external(javascript, "./subprocess_ffi.mjs", "exited")
 pub fn exited(process: Subprocess) -> Promise(Result(Int, String))
+
+@external(javascript, "./subprocess_ffi.mjs", "writeInput")
+pub fn write_input(process: Subprocess, text: String) -> Result(Nil, String)
 
 @external(javascript, "./subprocess_ffi.mjs", "stdout")
 pub fn stdout(process: Subprocess) -> Result(ReadableStream, Nil)
@@ -60,3 +70,9 @@ pub fn readable_stream_to_text(
   bun: Bun,
   stream: ReadableStream,
 ) -> Promise(Result(String, String))
+
+@external(javascript, "./subprocess_ffi.mjs", "readableStreamToBits")
+pub fn readable_stream_to_bits(
+  bun: Bun,
+  stream: ReadableStream,
+) -> Promise(Result(BitArray, String))
