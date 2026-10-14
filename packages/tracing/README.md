@@ -5,6 +5,11 @@ what happened. The [trajectory guide](../../guides/trajectories.md) covers
 recording in the CLI and browser, offline replay, pi-mono/opencode formats and
 real backend checks.
 
+- `gleam run -m tracing/terminal_fixture`: scripted Ollama on 7206 for the
+  [terminal shell guide](../../guides/tui_shell.md).
+- `gleam run -m tracing/terminal_demo`: record and check `eyg tui` using Xvfb,
+  xterm, tmux and ffmpeg. Checks archive closure, token usage and offline
+  replay; records into `recordings/terminal-*`.
 - `gleam run -m tracing/tui_check -- shell|overlay`: use `eyg tui` in tmux,
   typing keys and waiting at each check for text on the screen. Build
   packages/gleam_cli first. Packages come from a local hub on port 7207 and

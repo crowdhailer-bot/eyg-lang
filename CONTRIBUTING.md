@@ -24,6 +24,9 @@ Browser recordings and real Jaeger/Langfuse checks are described in the
 [trajectory guide](./guides/trajectories.md). Their workflows and model fixture
 are Gleam modules in `packages/tracing`.
 
+The [terminal shell guide](./guides/tui_shell.md) covers `eyg tui`. Its checked
+recordings are orchestrated by `tracing/terminal_demo`.
+
 ## Writing EYG packages
 
 All EYG packages are in the `eyg_packages` directory.
