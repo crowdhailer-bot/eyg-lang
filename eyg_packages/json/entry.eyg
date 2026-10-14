@@ -1,5 +1,5 @@
 let aok = import "../aok/index.eyg"
-let tests = import "./test.eyg"
+let tests = !list_fold(import "./test_document.eyg", import "./test.eyg", (test, acc) -> { [test, ..acc] })
 
 {
   tests,
