@@ -69,13 +69,65 @@ pub fn render(model: state.State) {
         state.Ignore,
       ),
     ]),
-    // h.div([a.class("output")], [
-  //   // h.div([], [h.span([], [h.text("cell1")])]),
-  // // h.div([], [h.span([], [h.text("cell2")])]),
-  // // h.div([], [h.span([], [h.text("cell3")])]),
-  // // h.div([], [h.span([], [h.text("cell4")])]),
-  // // h.div([], [h.span([], [h.text("cell5")])]),
-  // ]),
+    render_trace(view.trace(model)),
+  ])
+}
+
+// Every effect of the session is recorded, the trace opens in the Glasshouse debugger.
+fn render_trace(trace: #(String, List(view.Run))) {
+  let #(id, runs) = trace
+  h.aside([a.class("trace")], [
+    h.div([a.class("trace-heading")], [
+      h.h2([], [h.text("Trace")]),
+      h.button(
+        [
+          a.class("button trace-download"),
+          event.on_click(state.UserClickedDownloadTrace),
+        ],
+        [h.text("Download")],
+      ),
+    ]),
+    h.p([a.class("trace-note")], [
+      h.text("Every effect is recorded in " <> id <> ". "),
+      h.text("Download the trace and open it in the "),
+      h.a([a.href("https://eyg.run/glasshouse/debugger"), a.target("_blank")], [
+        h.text("Glasshouse debugger"),
+      ]),
+      h.text(
+        " to step through and replay it. The agent can read it with the Trace effect.",
+      ),
+    ]),
+    case runs {
+      [] -> h.p([a.class("trace-note")], [h.text("No tool calls yet.")])
+      runs -> h.ol([a.class("trace-runs")], list.map(runs, render_run))
+    },
+  ])
+}
+
+fn render_run(run: view.Run) {
+  let view.Run(id:, code:, effects:, result:) = run
+  h.li([a.class("trace-run")], [
+    h.div([a.class("trace-run-heading")], [
+      h.span([a.class("trace-id")], [h.text(id)]),
+      h.code([a.class("one-line")], [h.text(first_line(code))]),
+    ]),
+    case effects {
+      [] -> element.none()
+      effects ->
+        h.ul(
+          [a.class("trace-effects")],
+          list.map(effects, fn(effect) {
+            let #(label, summary) = effect
+            h.li([], [
+              h.span([a.class("trace-label")], [h.text(label)]),
+              h.text(" " <> summary),
+            ])
+          }),
+        )
+    },
+    h.div([a.class("trace-result one-line")], [
+      h.text("→ " <> first_line(result)),
+    ]),
   ])
 }
 

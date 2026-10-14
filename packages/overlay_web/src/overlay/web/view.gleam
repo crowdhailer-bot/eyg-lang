@@ -2,6 +2,10 @@
 
 import eyg/hub/cache
 import eyg/ir/tree as ir
+import glasshouse/recorder
+import glasshouse/run
+import glasshouse/session
+import glasshouse/value
 import gleam/dict
 import gleam/list
 import gleam/option
@@ -111,4 +115,44 @@ pub fn summary(text: String) -> String {
   string.split(text, "\n")
   |> list.find(fn(line) { string.trim(line) != "" })
   |> result.unwrap("")
+}
+
+/// A tool call as recorded in the session's trace.
+pub type Run {
+  Run(
+    id: String,
+    code: String,
+    effects: List(#(String, String)),
+    result: String,
+  )
+}
+
+/// The tool calls recorded so far, oldest first, with a summary of each effect's request.
+pub fn trace(state: State) -> #(String, List(Run)) {
+  let State(trace:, ..) = state
+  let store = recorder.store(trace.recorder)
+  let events = list.reverse(trace.events)
+  let runs =
+    list.filter_map(events, fn(event) {
+      case event {
+        session.Execution(run: run.Run(kind: run.Tool(id), code:, journal:, ..)) -> {
+          let result =
+            list.find_map(events, fn(event) {
+              case event {
+                session.ToolResult(call_id:, text:, ..) if call_id == id ->
+                  Ok(text)
+                _ -> Error(Nil)
+              }
+            })
+            |> result.unwrap("")
+          let effects =
+            list.map(journal, fn(entry) {
+              #(entry.label, value.summary(entry.lift, store, 80))
+            })
+          Ok(Run(id:, code:, effects:, result:))
+        }
+        _ -> Error(Nil)
+      }
+    })
+  #(trace.id, runs)
 }

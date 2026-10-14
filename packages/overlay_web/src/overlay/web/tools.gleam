@@ -12,6 +12,8 @@ import eyg/ir/tree as ir
 import eyg/ir/utils.{push_new} as _
 import eyg/parser
 import eyg/parser/parser.{type Reason} as _
+import glasshouse/journal
+import glasshouse/recorder
 import gleam/dict
 import gleam/dynamic/decode
 import gleam/list
@@ -23,6 +25,7 @@ import overlay/llm/chat
 import overlay/llm/tool
 import overlay/policy
 import overlay/tools/run
+import overlay/web/trace
 import pal/platform/browser
 import pal/system
 import touch_grass/harness/browser as harness
@@ -34,7 +37,8 @@ pub type Context {
     counter: Int,
     effects: List(system.Effect(#(Int, state.Value(Meta)))),
     context: cache.Module(Meta),
-    /// Without a policy every effect is performed.
+    /// The session so far, effects are recorded into it and the `Trace` effect reads it.
+    trace: trace.Trace,
     policy: Option(policy.Policy(harness.Effect, Meta)),
   )
 }
@@ -46,20 +50,36 @@ pub type Meta =
 pub type Call {
   UnknownTool(name: String)
   BadArguments(List(decode.DecodeError))
-  InvalidCode(reason: Reason, code: String)
+  InvalidCode(Reason, String)
   Pulling(ir.Node(Meta))
   Fetching(cids: List(v1.Cid), source: ir.Node(Meta))
   Successful(state.Value(Meta))
   Errored(List(#(Meta, error.Reason)))
   Exception(state.Reason(Meta))
   Aborted(String)
-  Handling(task_id: Int, env: state.Env(Meta), k: state.Stack(Meta))
+  Handling(
+    task_id: Int,
+    env: state.Env(Meta),
+    k: state.Stack(Meta),
+    label: String,
+    lift: state.Value(Meta),
+    started: Int,
+    answer: journal.Answer,
+  )
 }
 
 /// A tool call state and any output printed.
-/// Output is held most recent first.
+/// Output and the journal of effects are held most recent first.
 pub type Progress {
-  Progress(id: String, output: List(String), call: Call)
+  Progress(
+    id: String,
+    output: List(String),
+    call: Call,
+    code: String,
+    program: Option(String),
+    journal: List(journal.Entry),
+    started: Int,
+  )
 }
 
 pub type Calls =
@@ -83,32 +103,27 @@ fn execute_single(ctx: Context, call: tool.Call) -> #(Context, Progress) {
 }
 
 fn run_code(ctx: Context, id: String, code: String) -> #(Context, Progress) {
+  let pending = waiting(id, code)
   case parser.all_from_string(code) {
     Ok(source) -> {
       let source = ir.map_annotation(source, fn(_) { [] })
       case check_single(source, ctx.cache, ctx.context) {
-        [] -> {
-          let #(ctx, output, call) =
-            source
-            |> execute(ctx.context)
-            |> loop(ctx, [])
-          #(ctx, Progress(id:, output:, call:))
-        }
+        [] -> start(ctx, pending, source)
         errors -> {
           let references = missing_references(errors)
           case requires_pull(references, ctx.cache) {
             True -> {
               let cache = cache.pull(ctx.cache)
               let ctx = Context(..ctx, cache:)
-              #(ctx, failed(id, Pulling(source)))
+              #(ctx, Progress(..pending, call: Pulling(source)))
             }
             False -> {
               case to_fetch(references, ctx.cache, []) {
-                [] -> #(ctx, failed(id, Errored(errors)))
+                [] -> #(ctx, Progress(..pending, call: Errored(errors)))
                 needed -> {
                   let cache = cache.fetch_all(ctx.cache, needed)
                   let ctx = Context(..ctx, cache:)
-                  #(ctx, failed(id, Fetching(needed, source)))
+                  #(ctx, Progress(..pending, call: Fetching(needed, source)))
                 }
               }
             }
@@ -116,8 +131,47 @@ fn run_code(ctx: Context, id: String, code: String) -> #(Context, Progress) {
         }
       }
     }
-    Error(reason) -> #(ctx, failed(id, InvalidCode(reason, code)))
+    Error(reason) -> #(
+      ctx,
+      Progress(..pending, call: InvalidCode(reason, code)),
+    )
   }
+}
+
+fn waiting(id, code) {
+  Progress(
+    id:,
+    output: [],
+    call: Aborted("not started"),
+    code:,
+    program: None,
+    journal: [],
+    started: trace.now(),
+  )
+}
+
+// Pin the program, every reference is in the cache once it type checks, then run it.
+fn start(ctx: Context, progress: Progress, source) -> #(Context, Progress) {
+  let #(recorded, program) = trace.pin(ctx.trace, source, ctx.cache)
+  let ctx = Context(..ctx, trace: recorded)
+  let progress =
+    Progress(..progress, program: Some(program), started: trace.now())
+  source
+  |> execute(ctx.context)
+  |> loop(ctx, progress)
+}
+
+/// The effects a tool program can use, the browser's and `Trace`.
+pub fn effects() {
+  let services =
+    list.map(
+      [harness.DNSimple, harness.GitHub, harness.Vimeo],
+      harness.effect_label,
+    )
+  let effects =
+    harness.effects()
+    |> list.filter(fn(effect) { !list.contains(services, effect.name) })
+  list.append(effects, [trace.interface()])
 }
 
 fn check_single(
@@ -213,7 +267,7 @@ pub fn to_fetch(
 }
 
 fn failed(id, call) {
-  Progress(id:, output: [], call:)
+  Progress(..waiting(id, ""), call:)
 }
 
 // context can include tasks
@@ -228,64 +282,138 @@ fn failed(id, call) {
 fn loop(
   return: Result(state.Value(Meta), state.Debug(Meta)),
   ctx: Context,
-  output: List(String),
-) -> #(Context, List(String), Call) {
+  progress: Progress,
+) -> #(Context, Progress) {
+  let finish = fn(ctx, progress, call) { #(ctx, Progress(..progress, call:)) }
   case return {
     Error(#(break.UndefinedReference(reference) as break, _m, env, k)) -> {
       case reference {
         ir.Relative(location:) -> {
           let message = "unable to load source from location: " <> location
-          #(ctx, output, Aborted(message))
+          finish(ctx, progress, Aborted(message))
         }
         _ ->
           case cache.get_reference(ctx.cache, reference) {
             Ok(cache.Module(value:, ..)) ->
-              loop(expression.resume(value, env, k), ctx, output)
-            Error(Nil) -> #(ctx, output, Exception(break))
+              loop(expression.resume(value, env, k), ctx, progress)
+            Error(Nil) -> finish(ctx, progress, Exception(break))
           }
       }
     }
-    Error(#(break.UnhandledEffect(label, lift), _, env, k)) ->
+    // The session so far, answered without leaving the page.
+    Error(#(break.UnhandledEffect("Trace", lift), _, env, k)) -> {
+      let reply = trace.reply(ctx.trace)
+      let #(ctx, progress) =
+        record(ctx, progress, "Trace", lift, reply, trace.now())
+      loop(expression.resume(reply, env, k), ctx, progress)
+    }
+    Error(#(break.UnhandledEffect(label, lift), _, env, k)) -> {
       case decide(ctx, label, lift) {
-        Perform(lift) -> perform(label, lift, env, k, ctx, output)
-        Resume(value) -> loop(expression.resume(value, env, k), ctx, output)
-        Refuse(reason) -> #(ctx, output, Aborted(reason))
+        Perform(sent) -> {
+          let answer = case ctx.policy, sent == lift {
+            None, _ -> journal.Performed
+            Some(_), True -> journal.Gated
+            Some(_), False ->
+              journal.Altered(recorder.fingerprint(ctx.trace.recorder, sent))
+          }
+          perform(label, lift, sent, answer, env, k, ctx, progress)
+        }
+        Resume(reply) -> {
+          let #(ctx, progress) =
+            record_answer(
+              ctx,
+              progress,
+              label,
+              lift,
+              reply,
+              journal.Mocked,
+              trace.now(),
+            )
+          loop(expression.resume(reply, env, k), ctx, progress)
+        }
+        Refuse(reason) -> finish(ctx, progress, Aborted(reason))
       }
-    Error(#(reason, _, _, _)) -> #(ctx, output, Exception(reason))
-    Ok(value) -> #(ctx, output, Successful(value))
+    }
+    Error(#(reason, _, _, _)) -> finish(ctx, progress, Exception(reason))
+    Ok(value) -> finish(ctx, progress, Successful(value))
   }
 }
 
-fn perform(label, lift, env, k, ctx: Context, output) {
-  {
-    case browser.cast(label, lift) {
-      // Printing belongs to the result the agent reads, not only the browser
-      // console. Keeping it here also preserves output across suspension.
-      Ok(harness.Print(message)) ->
-        loop(expression.resume(v.unit(), env, k), ctx, [message, ..output])
-      Ok(effect) -> {
-        case browser.extrinsic(effect) {
-          browser.Abort(reason) -> #(ctx, output, Aborted(reason))
-          browser.Work(system.Done(value)) ->
-            loop(expression.resume(value, env, k), ctx, output)
-          browser.Work(effect) -> {
-            let id = ctx.counter
+fn finish(ctx, progress, call) {
+  #(ctx, Progress(..progress, call:))
+}
 
-            let effect = system.map(effect, fn(v) { #(id, v) })
-            let effects = [effect, ..ctx.effects]
-            let ctx = Context(..ctx, counter: id + 1, effects:)
-            #(ctx, output, Handling(id, env, k))
-          }
-          browser.Spotless(..) -> #(
+fn perform(
+  label,
+  lift,
+  sent,
+  answer,
+  env,
+  k,
+  ctx: Context,
+  progress: Progress,
+) {
+  let started = trace.now()
+  case browser.cast(label, sent) {
+    // Printing belongs to the result the agent reads, not only the browser
+    // console. Keeping it here also preserves output across suspension.
+    Ok(harness.Print(message)) -> {
+      let #(ctx, progress) =
+        record_answer(ctx, progress, label, lift, v.unit(), answer, started)
+      let progress = Progress(..progress, output: [message, ..progress.output])
+      loop(expression.resume(v.unit(), env, k), ctx, progress)
+    }
+    Ok(effect) -> {
+      case browser.extrinsic(effect) {
+        browser.Abort(reason) -> finish(ctx, progress, Aborted(reason))
+        browser.Work(system.Done(value)) -> {
+          let #(ctx, progress) =
+            record_answer(ctx, progress, label, lift, value, answer, started)
+          loop(expression.resume(value, env, k), ctx, progress)
+        }
+        browser.Work(effect) -> {
+          let id = ctx.counter
+
+          let effect = system.map(effect, fn(v) { #(id, v) })
+          let effects = [effect, ..ctx.effects]
+          let ctx = Context(..ctx, counter: id + 1, effects:)
+          finish(
             ctx,
-            output,
-            Aborted("Spotless integration not supported in harness"),
+            progress,
+            Handling(id, env, k, label, lift, started, answer),
           )
         }
+        browser.Spotless(..) ->
+          finish(
+            ctx,
+            progress,
+            Aborted("Spotless integration not supported in harness"),
+          )
       }
-      Error(reason) -> #(ctx, output, Exception(reason))
     }
+    Error(reason) -> finish(ctx, progress, Exception(reason))
   }
+}
+
+fn record(ctx: Context, progress: Progress, label, lift, reply, started) {
+  record_answer(ctx, progress, label, lift, reply, journal.Performed, started)
+}
+
+fn record_answer(
+  ctx: Context,
+  progress: Progress,
+  label,
+  lift,
+  reply,
+  answer,
+  started,
+) {
+  let #(recorded, entry) =
+    trace.answer(ctx.trace, label, lift, reply, answer, started, trace.now())
+  #(
+    Context(..ctx, trace: recorded),
+    Progress(..progress, journal: [entry, ..progress.journal]),
+  )
 }
 
 fn is_running(call: Call) {
@@ -315,7 +443,7 @@ fn do_all_returns(
 ) -> Result(List(chat.Message(a)), Nil) {
   case calls {
     [] -> Ok(list.reverse(acc))
-    [Progress(id:, output:, call:), ..calls] -> {
+    [Progress(id:, output:, call:, ..), ..calls] -> {
       let message = case call {
         UnknownTool(name:) -> Ok("unknown tool: " <> name)
         BadArguments(reasons) -> Ok(string.inspect(reasons))
@@ -347,30 +475,20 @@ fn do_all_returns(
 }
 
 pub fn pulled(ctx: Context, progress: Progress) -> #(Context, Progress) {
-  let Progress(id:, output:, call:) = progress
-
-  case call {
+  case progress.call {
     Pulling(source) -> {
       // TODO move to cache.infer_sync that will gather need to pull and to fetch references
       case check_single(source, ctx.cache, ctx.context) {
-        [] -> {
-          let #(ctx, output, call) =
-            source
-            |> execute(ctx.context)
-            // output should always be empty going into this loop.
-            // Maybe output should move into a running state of call
-            |> loop(ctx, output)
-          #(ctx, Progress(id:, output:, call:))
-        }
+        [] -> start(ctx, progress, source)
         errors -> {
           // Don't check for needs pull here as we've aready done that.
           let references = missing_references(errors)
           case to_fetch(references, ctx.cache, []) {
-            [] -> #(ctx, failed(id, Errored(errors)))
+            [] -> #(ctx, Progress(..progress, call: Errored(errors)))
             needed -> {
               let cache = cache.fetch_all(ctx.cache, needed)
               let ctx = Context(..ctx, cache:)
-              #(ctx, failed(id, Fetching(needed, source)))
+              #(ctx, Progress(..progress, call: Fetching(needed, source)))
             }
           }
         }
@@ -388,25 +506,16 @@ pub fn check_fetching(
   ctx: Context,
   progress: Progress,
 ) -> #(Context, Progress) {
-  let Progress(id:, output:, call:) = progress
-  case call {
+  case progress.call {
     Fetching(cids:, source:) -> {
       let cids = list.filter(cids, still_fetching(_, ctx.cache))
       case cids {
         [] ->
           case check_single(source, ctx.cache, ctx.context) {
-            [] -> {
-              let #(ctx, output, call) =
-                source
-                |> execute(ctx.context)
-                // output should always be empty going into this loop.
-                // Maybe output should move into a running state of call
-                |> loop(ctx, output)
-              #(ctx, Progress(id:, output:, call:))
-            }
-            errors -> #(ctx, failed(id, Errored(errors)))
+            [] -> start(ctx, progress, source)
+            errors -> #(ctx, Progress(..progress, call: Errored(errors)))
           }
-        _ -> #(ctx, failed(id, Fetching(cids, source)))
+        _ -> #(ctx, Progress(..progress, call: Fetching(cids, source)))
       }
     }
     _ -> #(ctx, progress)
@@ -442,27 +551,16 @@ fn apply_effect(
   finished_id: Int,
   value: state.Value(Meta),
 ) {
-  let Progress(id:, output:, call:) = progress
-  case call {
-    Handling(task_id:, env:, k:) if task_id == finished_id -> {
-      let #(ctx, output, call) =
-        loop(expression.resume(value, env, k), ctx, output)
-      #(ctx, Progress(id:, output:, call:))
+  case progress.call {
+    Handling(task_id:, env:, k:, label:, lift:, started:, answer:)
+      if task_id == finished_id
+    -> {
+      let #(ctx, progress) =
+        record_answer(ctx, progress, label, lift, value, answer, started)
+      loop(expression.resume(value, env, k), ctx, progress)
     }
     _ -> #(ctx, progress)
   }
-}
-
-/// The effects available to the agent.
-/// Service effects need a Spotless integration which this harness does not have.
-pub fn effects() {
-  let services =
-    list.map(
-      [harness.DNSimple, harness.GitHub, harness.Vimeo],
-      harness.effect_label,
-    )
-  harness.effects()
-  |> list.filter(fn(effect) { !list.contains(services, effect.name) })
 }
 
 type Outcome {
@@ -487,6 +585,7 @@ pub fn policy_rules() {
     #("Print", policy.PolicyField("print")),
     #("Prompt", policy.PolicyField("prompt")),
     #("Random", policy.Unchecked),
+    #("Trace", policy.Unchecked),
     #("Visit", policy.PolicyField("visit")),
   ])
 }

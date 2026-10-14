@@ -7,7 +7,13 @@ import eyg/interpreter/state as istate
 import eyg/ir/tree as ir
 import eyg/parser
 import eyg/parser/parser as _
+import glasshouse/archive
+import glasshouse/run as glasshouse_run
+import glasshouse/session
+import glasshouse/sha256
+import glasshouse/usage
 import gleam/bit_array
+import gleam/http/request.{type Request}
 import gleam/http/response.{Response}
 import gleam/int
 import gleam/json
@@ -17,6 +23,7 @@ import gleam/result
 import gleam/set
 import gleam/string
 import midas/continuation
+import oas/generator/utils
 import ogre/origin
 import overlay/agent
 import overlay/export
@@ -28,6 +35,7 @@ import overlay/policy
 import overlay/web/context
 import overlay/web/provider_setup
 import overlay/web/tools
+import overlay/web/trace
 import pal/system
 import touch_grass/download
 import touch_grass/harness/browser as harness
@@ -58,6 +66,12 @@ pub type State {
     policy_source: String,
     policy: Option(policy.Policy(harness.Effect, tools.Meta)),
     policy_error: Option(String),
+    /// The session recorded so far, it can be downloaded and opened in the Glasshouse debugger.
+    trace: trace.Trace,
+    /// The completion request in flight and when it was sent.
+    asked: Option(#(Request(BitArray), Int)),
+    /// The body of the streaming response so far.
+    streamed: BitArray,
   )
 }
 
@@ -74,6 +88,7 @@ pub type AgentStatus {
 
 pub fn new(config: Config) -> State {
   let Config(origin:, context:) = config
+  let started = trace.now()
   let llm =
     provider.Llm(
       provider: provider.Ollama(ollama.Config(origin:, api_key: None)),
@@ -98,6 +113,9 @@ pub fn new(config: Config) -> State {
     policy_source: "",
     policy: None,
     policy_error: None,
+    trace: trace.new_session(started),
+    asked: None,
+    streamed: <<>>,
   )
 }
 
@@ -154,12 +172,14 @@ pub type Message {
   LlmStreamedCompletion(
     completions: List(chat.Completion(tool.Call)),
     remaining: BitArray,
+    chunk: BitArray,
   )
   LlmStreamFinished(Result(Nil, String))
   /// The provider rejected the API token.
   LlmTokenRejected(reason: String)
   UserClickedExpand(Int)
   UserClickedShrink(Int)
+  UserClickedDownloadTrace
   // run messages
   EffectHandled(task_id: Int, value: istate.Value(tools.Meta))
   CacheMessage(cache.ActionCompleted)
@@ -238,8 +258,18 @@ fn do_update(
           case string.trim(state.input) {
             "" -> #(State(..state, input_error: Some("")), [])
             input -> {
+              let at = trace.now()
+              let recorded =
+                state.trace
+                |> trace.configure(
+                  context.describe(state.context_source),
+                  context.module(state.context).value,
+                  at,
+                )
+                |> trace.prompt(at, input)
               let message = chat.UserMessage(text: input, images: [])
-              let action = fetch_completion(state, [message])
+              let state = State(..state, trace: recorded)
+              let #(state, action) = ask(state, [message])
               let state =
                 State(..state, status: Asking([message]), input: "", steps: 0)
               #(state, [action])
@@ -262,6 +292,7 @@ fn do_update(
               ..state,
               status: Streaming(reader, chat.fresh(), <<>>),
               history:,
+              streamed: <<>>,
             )
           let action = stream_next_chunk(state.llm.provider, reader, <<>>)
           #(state, [action])
@@ -269,12 +300,16 @@ fn do_update(
         _ -> #(state, [])
       }
     }
-    LlmStreamedCompletion(new, remaining) -> {
+    LlmStreamedCompletion(new, remaining, chunk) -> {
       case state.status {
         Streaming(reader:, completion:, remaining: _) -> {
           let completion = chat.append_chunks(completion, new)
           let state =
-            State(..state, status: Streaming(reader:, completion:, remaining:))
+            State(
+              ..state,
+              status: Streaming(reader:, completion:, remaining:),
+              streamed: <<state.streamed:bits, chunk:bits>>,
+            )
           let action = stream_next_chunk(state.llm.provider, reader, remaining)
           #(state, [action])
         }
@@ -287,7 +322,8 @@ fn do_update(
           let message = chat.from_completion(completion)
           let history = [message, ..state.history]
 
-          let state = State(..state, history:)
+          let state =
+            State(..record_generation(state, Ok(completion)), history:)
           case completion.tool_calls {
             [] -> #(State(..state, status: Waiting), [])
             calls -> {
@@ -301,6 +337,7 @@ fn do_update(
       }
     }
     LlmStreamFinished(Error(reason)) -> {
+      let state = record_generation(state, Error(reason))
       // A prompt that was never answered is returned to the input to try again.
       let input = case state.status, state.input {
         Asking([chat.UserMessage(text:, ..)]), "" -> text
@@ -375,6 +412,9 @@ fn do_update(
             steps: 0,
             input_error: None,
             expanded: set.new(),
+            trace: trace.new_session(trace.now()),
+            asked: None,
+            streamed: <<>>,
           ),
           [],
         )
@@ -393,6 +433,14 @@ fn do_update(
         Ok(policy) -> #(State(..state, policy:, policy_error: None), [])
         Error(reason) -> #(State(..state, policy_error: Some(reason)), [])
       }
+    UserClickedDownloadTrace -> {
+      let archive = trace.archive(state.trace, agent(state), trace.now())
+      let input =
+        download.Input(name: state.trace.id <> ".json", content: <<
+          archive.to_string(archive):utf8,
+        >>)
+      #(state, [system.Download(input, fn() { system.Done(Ignore) })])
+    }
     Ignore -> #(state, [])
   }
 }
@@ -400,6 +448,7 @@ fn do_update(
 /// Stop the agent, responses that arrive later are ignored as the status is waiting.
 /// Tool calls without results are given one, so the history is valid for the next request.
 fn stop(state: State, reason: String) -> State {
+  let state = record_generation(state, Error(reason))
   let history = case state.status {
     Waiting -> state.history
     Asking(messages) -> list.append(messages, state.history)
@@ -428,13 +477,14 @@ pub fn can_save_provider(state: State) {
 // cache state doesn't update during the eval but needs to resume later if everything fetched at the beginning
 
 fn current_context(state: State) {
-  let State(cache:, counter:, context:, ..) = state
+  let State(cache:, counter:, context:, trace:, ..) = state
   tools.Context(
     cache:,
     counter:,
     effects: [],
     context: context.module(context),
     policy: state.policy,
+    trace:,
   )
 }
 
@@ -443,7 +493,8 @@ fn current_context(state: State) {
 fn run_effects_if_any_remain_to_do(return, state: State) {
   let #(ctx, calls) = return
 
-  let tools.Context(cache:, counter:, effects: inner, ..) = ctx
+  let tools.Context(cache:, counter:, effects: inner, context: _, trace:, ..) =
+    ctx
   let effects =
     list.map(
       inner,
@@ -453,14 +504,15 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
       }),
     )
 
-  let state = State(..state, cache:, counter:)
+  let state = State(..state, cache:, counter:, trace:)
   let #(state, cache_effects) = flush(state)
   let effects = list.append(cache_effects, effects)
 
   // I think here we do the switch on pulling. 
   case tools.all_returns(calls) {
     Error(Nil) -> #(State(..state, status: Executing(calls)), effects)
-    Ok(messages) ->
+    Ok(messages) -> {
+      let state = record_tool_calls(state, calls, messages)
       case state.steps >= max_steps {
         True -> {
           let reason =
@@ -472,14 +524,16 @@ fn run_effects_if_any_remain_to_do(return, state: State) {
         False -> {
           let state =
             State(..state, status: Asking(messages), steps: state.steps + 1)
-          #(state, [fetch_completion(state, messages), ..effects])
+          let #(state, action) = ask(state, messages)
+          #(state, [action, ..effects])
         }
       }
+    }
   }
 }
 
-fn fetch_completion(state, messages) {
-  use response <- system.FetchStreamResponse(completion_request(state, messages))
+fn fetch_completion(request) {
+  use response <- system.FetchStreamResponse(request)
 
   case response {
     Ok(Response(200, body:, ..)) -> system.Done(LlmStartedStreaming(body))
@@ -519,7 +573,7 @@ fn stream_next_chunk(provider, reader, remaining) {
     Ok(Some(chunk)) -> {
       let #(completions, remaining) =
         provider.completion_chunk_parse(provider, remaining, chunk)
-      LlmStreamedCompletion(completions, remaining)
+      LlmStreamedCompletion(completions, remaining, chunk)
     }
     Ok(None) -> LlmStreamFinished(Ok(Nil))
     Error(reason) -> LlmStreamFinished(Error(string.inspect(reason)))
@@ -527,17 +581,18 @@ fn stream_next_chunk(provider, reader, remaining) {
   |> system.Done
 }
 
+fn system_prompt(state: State) {
+  agent.system_prompt(
+    state.origin,
+    tools.effects(),
+    context.instructions(state.context_source, state.context),
+    option.is_some(state.policy),
+  )
+}
+
 fn completion_request(state: State, messages: List(chat.Message(tool.Call))) {
   let context =
-    provider.Context(
-      system_prompt: agent.system_prompt(
-        state.origin,
-        tools.effects(),
-        context.instructions(state.context_source, state.context),
-        option.is_some(state.policy),
-      ),
-      tools: agent.tools(),
-    )
+    provider.Context(system_prompt: system_prompt(state), tools: agent.tools())
   let history = list.append(messages, state.history) |> list.reverse
   provider.stream_completion_request(state.llm, context, history)
 }
@@ -601,4 +656,113 @@ fn export_history(state: State) {
     )
   use <- system.Download(input)
   system.Done(Ignore)
+}
+
+// Every call has finished, each is recorded as a run with the result the model reads.
+fn record_tool_calls(state: State, calls: tools.Calls, messages) {
+  let generation = "g" <> int.to_string(state.trace.generations)
+  let recorded =
+    list.zip(calls, messages)
+    |> list.index_fold(state.trace, fn(recorded, pair, index) {
+      let #(progress, message) = pair
+      let result = chat.text(message)
+      let #(recorded, outcome) = case progress.call {
+        tools.Successful(value) -> trace.returned(recorded, value)
+        // Programs that did not parse or type check never ran.
+        tools.UnknownTool(..)
+        | tools.BadArguments(..)
+        | tools.InvalidCode(..)
+        | tools.Errored(..) -> #(recorded, glasshouse_run.Rejected(result))
+        _ -> #(recorded, glasshouse_run.Failed(result))
+      }
+      trace.tool_call(
+        recorded,
+        trace.call_id(generation, index),
+        progress.code,
+        progress.program,
+        list.reverse(progress.journal),
+        outcome,
+        progress.started,
+        trace.now(),
+        result,
+      )
+    })
+  State(..state, trace: recorded)
+}
+
+fn record_generation(state: State, result) {
+  case state.asked {
+    Some(#(request, started)) -> {
+      let id = trace.next_generation(state.trace)
+      let key =
+        sha256.hash(<<request.path:utf8, "\n":utf8, request.body:bits>>)
+        |> bit_array.base16_encode
+        |> string.lowercase
+      let #(recorded, request_cid) = trace.store_body(state.trace, request.body)
+      let #(recorded, response, status) = case result, state.streamed {
+        Error(_), <<>> -> #(recorded, None, 0)
+        _, body -> {
+          let #(recorded, cid) = trace.store_body(recorded, body)
+          #(recorded, Some(cid), 200)
+        }
+      }
+      let #(thinking, content, calls, error) = case result {
+        Ok(chat.Completion(thinking:, content:, tool_calls:)) -> #(
+          thinking,
+          content,
+          tool_calls,
+          None,
+        )
+        Error(reason) -> #("", "", [], Some(reason))
+      }
+      let generation =
+        session.Generation(
+          id:,
+          started:,
+          ended: trace.now(),
+          key:,
+          request: request_cid,
+          response:,
+          status:,
+          thinking:,
+          content:,
+          tool_calls: list.index_map(calls, fn(call, index) {
+            let tool.Call(function: tool.FunctionCall(name:, arguments:), ..) =
+              call
+            session.ToolCall(
+              id: trace.call_id(id, index),
+              name:,
+              arguments: json.to_string(utils.fields_to_json(arguments)),
+            )
+          }),
+          usage: usage.from_response(state.streamed),
+          source: session.Live,
+          error:,
+        )
+      State(..state, trace: trace.generated(recorded, generation), asked: None)
+    }
+    None -> state
+  }
+}
+
+/// The agent the session is recorded for.
+pub fn agent(state: State) -> session.Agent {
+  let provider = case state.llm.provider {
+    provider.Ollama(_) -> "ollama"
+    provider.Mistral(_) -> "mistral"
+  }
+  session.Agent(
+    provider:,
+    model: state.llm.model,
+    system_prompt: system_prompt(state),
+  )
+}
+
+/// Ask for a completion, the request is kept to record the generation.
+fn ask(state: State, messages) -> #(State, system.Effect(Message)) {
+  let request = completion_request(state, messages)
+  #(
+    State(..state, asked: Some(#(request, trace.now()))),
+    fetch_completion(request),
+  )
 }

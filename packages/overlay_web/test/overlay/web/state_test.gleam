@@ -2,6 +2,8 @@ import eyg/hub/cache
 import eyg/hub/publisher
 import eyg/ir/dag_json
 import eyg/ir/tree as ir
+import glasshouse/journal
+import glasshouse/session
 import gleam/bit_array
 import gleam/dict
 import gleam/fetch
@@ -165,7 +167,7 @@ pub fn interrupted_stream_test() {
 pub fn streamed_completion_while_not_streaming_test() {
   let state = init_default()
   let #(s2, actions) =
-    state.update(state, state.LlmStreamedCompletion([], <<>>))
+    state.update(state, state.LlmStreamedCompletion([], <<>>, <<>>))
   assert s2 == state
   assert [] == actions
 }
@@ -538,7 +540,7 @@ pub fn invalid_source_code_test() {
   ]) = state.status
   assert id == tool_call_id
   let expected =
-    "error: invalid character '$' at position 0\nhint: remove or replace this character — EYG does not use it"
+    "error: invalid character '$' at position 0\nhint: remove or replace this character — EYG does not use it\n\n 1 | $\n     ^"
   assert expected == text
   assert [] == images
   let assert [system.FetchStreamResponse(request:, resume: _)] = actions
@@ -836,6 +838,26 @@ pub fn policy_mocks_effect_test() {
   let #(state, _) =
     state.update(State(..state, status:), state.LlmStreamFinished(Ok(Nil)))
   assert state.Asking([chat.ToolResultMessage("abc", "7", [])]) == state.status
+  let assert [session.ToolResult(..), session.Execution(run), ..] =
+    state.trace.events
+  let assert [entry] = run.journal
+  assert entry.answer == journal.Mocked
+}
+
+pub fn modified_policy_requests_are_recorded_as_hashes_test() {
+  let state = with_policy([#("print", "(_) -> { Pass(\"replaced\") }")])
+  let status =
+    chat_completion("")
+    |> with_code("abc", "perform Print(\"before\")")
+    |> streaming
+  let #(state, _) =
+    state.update(State(..state, status:), state.LlmStreamFinished(Ok(Nil)))
+  let assert [session.ToolResult(text:, ..), session.Execution(run), ..] =
+    state.trace.events
+  assert string.contains(text, "replaced")
+  let assert [entry] = run.journal
+  let assert journal.Altered(sent) = entry.answer
+  assert string.starts_with(sent, "baguqeera")
 }
 
 pub fn invalid_policy_is_reported_test() {
