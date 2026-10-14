@@ -42,6 +42,11 @@ The [Ash guide](./guides/embedding_ash.md) covers typed resource actions, scoped
 effects and retained sessions. Run `mix test` from `packages/ash_eyg` and
 `examples/helpdesk`; `tracing/ash_demo` checks and records the AshAdmin editor.
 
+The [Pi guide](./guides/embedding_pi.md) builds and boots the image with Gleam
+modules in `packages/eyg_pi`. Its `boot_check` checks online then offline cache
+reuse, `hdmi_check` checks USB input, and `record_pong` checks and records a real
+CID-loaded game. Run its Gleam tests and `eyg script test/pong_test.eyg` there.
+
 ## Writing EYG packages
 
 All EYG packages are in the `eyg_packages` directory.

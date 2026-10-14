@@ -41,6 +41,7 @@ pub fn route() {
     simplifile.read_bits("../tracing/recordings/phoenix-counters.webm")
   let assert Ok(ash_recording) =
     simplifile.read_bits("../tracing/recordings/ash-helpdesk.webm")
+  let assert Ok(pi_recording) = simplifile.read_bits("../eyg_pi/docs/pong.mp4")
   Route(index: route.Page(home.page()), items: [
     #("runtime-acquisition.html", Route(route.Static(article), [])),
     #("trajectories.webm", Route(route.Static(recording), [])),
@@ -53,6 +54,7 @@ pub fn route() {
     #("erlang-counters.mp4", Route(route.Static(erlang_recording), [])),
     #("phoenix-counters.webm", Route(route.Static(phoenix_recording), [])),
     #("ash-helpdesk.webm", Route(route.Static(ash_recording), [])),
+    #("pi-pong.mp4", Route(route.Static(pi_recording), [])),
     #(
       "documentation",
       Route(index: route.Page(documentation.page()), items: []),
