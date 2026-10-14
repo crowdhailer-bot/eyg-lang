@@ -12,3 +12,6 @@ pub fn splice(
   delete_count: Int,
   items: List(a),
 ) -> Result(Array(a), String)
+
+@external(javascript, "./array_ffi.mjs", "set")
+pub fn set(array: Array(a), index: Int, value: a) -> Result(Nil, String)

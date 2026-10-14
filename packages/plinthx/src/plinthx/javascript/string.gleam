@@ -4,3 +4,7 @@ import gleam/dynamic.{type Dynamic}
 
 @external(javascript, "./string_ffi.mjs", "from")
 pub fn from(value: Dynamic) -> Result(String, String)
+
+pub fn convert(value: Dynamic) {
+  from(value)
+}

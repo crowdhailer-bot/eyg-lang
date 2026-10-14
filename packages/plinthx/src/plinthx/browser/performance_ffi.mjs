@@ -7,3 +7,11 @@ export function get() {
 }
 export const timeOrigin = performance => performance.timeOrigin;
 export const now = performance => performance.now();
+
+export function getPerformance() {
+  const performance = globalThis.performance;
+  if (globalThis.Performance && performance instanceof globalThis.Performance) {
+    return Result$Ok(performance);
+  }
+  return Result$Error();
+}

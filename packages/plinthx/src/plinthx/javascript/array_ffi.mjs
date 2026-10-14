@@ -8,3 +8,10 @@ export function splice(array, start, deleteCount, items) {
   try { return Result$Ok(array.splice(start, deleteCount, ...items)); }
   catch (error) { return Result$Error(String(error)); }
 }
+
+export function set(array, index, value) {
+  try {
+    array[index] = value;
+    return Result$Ok(undefined);
+  } catch (error) { return Result$Error(String(error)); }
+}
