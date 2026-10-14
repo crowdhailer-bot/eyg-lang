@@ -96,6 +96,27 @@ pub fn missing_usage_is_zero_test() {
   assert usage.from_response(<<255>>) == session.no_usage()
 }
 
+pub fn bedrock_usage_test() {
+  let body = <<"{\"usage\":{\"inputTokens\":7,\"outputTokens\":3}}">>
+  assert usage.from_response(body) == session.Usage(7, 3)
+}
+
+pub fn messages_from_bedrock_request_test() {
+  let body = <<
+    "{\"system\":[{\"text\":\"be brief\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"hi\"}]},{\"role\":\"assistant\",\"content\":[{\"text\":\"Running\"},{\"toolUse\":{\"toolUseId\":\"t1\",\"name\":\"run\",\"input\":{\"code\":\"1\"}}}]},{\"role\":\"user\",\"content\":[{\"toolResult\":{\"toolUseId\":\"t1\",\"content\":[{\"text\":\"1\"}]}},{\"text\":\"and?\"}]}]}":utf8,
+  >>
+  assert context.from_request(body)
+    == Ok([
+      System("be brief"),
+      User("hi"),
+      Assistant("", "Running", [
+        session.ToolCall("t1", "run", "{\"code\":\"1\"}"),
+      ]),
+      Tool("t1", "1"),
+      User("and?"),
+    ])
+}
+
 pub fn estimate_test() {
   assert usage.estimate("") == 0
   assert usage.estimate("abcd") == 1

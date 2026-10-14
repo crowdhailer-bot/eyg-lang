@@ -5,6 +5,7 @@ A unified API for LLM chat completion across providers.
 Included providers are:
 
 - [OpenAI compatible Chat Completions](../../guides/openai_compatible.md)
+- [Amazon Bedrock Converse](../../guides/bedrock.md)
 - [Mistral](https://mistral.ai/)
 - [Ollama](https://ollama.com/)
 
