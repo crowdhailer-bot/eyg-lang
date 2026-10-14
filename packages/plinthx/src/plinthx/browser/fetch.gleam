@@ -32,7 +32,11 @@ pub fn new_response_bits(
 ) -> Result(Response, String)
 
 @external(javascript, "./fetch_ffi.mjs", "newEmptyResponse")
-pub fn new_empty_response(constructor: ResponseConstructor, status: Int, headers: List(#(String, String))) -> Result(Response, String)
+pub fn new_empty_response(
+  constructor: ResponseConstructor,
+  status: Int,
+  headers: List(#(String, String)),
+) -> Result(Response, String)
 
 @external(javascript, "./fetch_ffi.mjs", "requestUrl")
 pub fn request_url(request: Request) -> String

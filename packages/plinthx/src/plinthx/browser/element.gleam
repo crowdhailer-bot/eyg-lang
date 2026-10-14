@@ -8,5 +8,6 @@ pub fn click(element: Element) -> Nil
 
 @external(javascript, "./element_ffi.mjs", "scrollNearest")
 pub fn scroll_nearest(element: Element) -> Nil
+
 @external(javascript, "./element_ffi.mjs", "contentWindow")
 pub fn content_window(element: Element) -> Result(WindowProxy, Nil)
