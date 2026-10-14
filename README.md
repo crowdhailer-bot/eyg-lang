@@ -68,6 +68,8 @@ Another reason could be to imagine your own syntax, or even visual editor, and r
 The source for packages maintained as a standard library i.e. `standard` and `json`.
 The [`aok`](./eyg_packages/aok/) package provides assertions, ordered computer-effect
 expectations, and test runners.
+The librarian [context](./guides/overlay_contexts.md) searches package and guide
+catalogues before the agent writes code.
 The [`overlay`](./eyg_packages/overlay/) package contains policy and skills helpers for overlay agents.
 The [`tiling`](./eyg_packages/tiling/) modules arrange Overlay artifacts using
 dwindle and main-stack layouts.
