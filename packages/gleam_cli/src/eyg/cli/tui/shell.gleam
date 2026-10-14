@@ -161,7 +161,7 @@ fn go(effect, events, deadline) {
             system.Stdout(text, resume) -> print(text <> "\n", False, resume)
             system.WriteStdout(text, resume) -> print(text, False, resume)
             system.WriteStderr(text, resume) -> print(text, True, resume)
-            system.Fetch(request, _) -> {
+            system.Fetch(request, _) | system.FetchStream(request, _) -> {
               let events = [Fetched(public_url(request)), ..events]
               promise.await(system.step(effect), go(_, events, deadline))
             }
