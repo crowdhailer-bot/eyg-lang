@@ -8,7 +8,8 @@ export function get() {
 export async function send(fetch, url, init) {
   try {
     return Result$Ok(await fetch(url, {
-      method: init.method, headers: Array.from(init.headers), body: init.body,
+      method: init.method, headers: Array.from(init.headers),
+      body: init.method === "GET" || init.method === "HEAD" ? undefined : init.body,
       signal: init.signal instanceof Some ? init.signal[0] : undefined,
     }));
   } catch (error) { return Result$Error(String(error)); }
