@@ -1,0 +1,34 @@
+
+  eyg / overlay                                  /home/corin/mono/repos/eyg-lang  ·  scripted-terminal-guide
+
+
+
+    trace saved to /home/corin/mono/repos/eyg-lang/.eyg/traces/20261014T151531-fx98j4mg0q.json
+
+
+
+    I will run the calculation.
+                                                                                                           █
+                                                                                                           █
+                                                                                                           █
+    ▾ run  19 ms · code                                                                                    ▀
+    let _ = perform StandardOut("Hello from Gleam") !int_add(20, 22)
+
+
+    Output:
+    Hello from Gleam
+    Result:
+    42
+
+    ▾ 1 effects  19 ms
+
+      StandardOut("Hello from Gleam")
+      ↳ passed · {}
+
+
+  │
+  │  Ask anything¦
+  │
+  │  Overlay  scripted-terminal-guide                                   enter send  ·  shift+enter newline
+
+  Ready                                                           ctrl+o code  ·  ctrl+e effects  ·  f1 help
