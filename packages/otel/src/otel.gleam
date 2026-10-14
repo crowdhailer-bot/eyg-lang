@@ -14,6 +14,7 @@ import gleam/string
 import gleam/uri
 import otel/clock
 import otel/span
+import otel/trace
 import plinthx/browser/abort_signal
 import plinthx/browser/fetch
 import plinthx/node/process
@@ -133,38 +134,7 @@ pub fn end_span(value: Span, error: Option(String)) -> Span {
 }
 
 pub fn encode(exporter: Exporter, spans: List(Span)) -> json.Json {
-  let resource =
-    json.object([
-      #(
-        "attributes",
-        json.array(
-          [
-            #("service.name", span.Text(exporter.service)),
-            ..exporter.attributes
-          ],
-          span.attribute_json,
-        ),
-      ),
-    ])
-  let scope =
-    json.object([
-      #("scope", json.object([#("name", json.string(exporter.scope))])),
-      #("spans", json.array(spans, span.encode)),
-    ])
-  json.object([
-    #(
-      "resourceSpans",
-      json.array(
-        [
-          json.object([
-            #("resource", resource),
-            #("scopeSpans", json.array([scope], fn(value) { value })),
-          ]),
-        ],
-        fn(value) { value },
-      ),
-    ),
-  ])
+  trace.encode(exporter.service, exporter.scope, exporter.attributes, spans)
 }
 
 pub fn warn(exporter: Exporter, message: String) -> Exporter {

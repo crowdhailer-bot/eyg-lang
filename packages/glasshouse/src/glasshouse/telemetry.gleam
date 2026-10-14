@@ -18,9 +18,9 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
-import otel
 import otel/clock
 import otel/span as attribute
+import otel/trace
 
 pub type Span {
   Span(
@@ -417,7 +417,7 @@ pub fn otel_spans(
   session: Session,
   store: Store,
   sha256: Sha256,
-) -> List(otel.Span) {
+) -> List(attribute.Span) {
   let trace = trace_id(session, sha256)
   list.map(spans(session, store, sha256), fn(s) {
     attribute.Span(
@@ -435,8 +435,5 @@ pub fn otel_spans(
 
 /// Standard OTLP, usable by Jaeger, a collector, or Langfuse.
 pub fn payload(session: Session, store: Store, sha256: Sha256) -> Json {
-  otel.encode(
-    otel.configure([], "eyg", "glasshouse", []),
-    otel_spans(session, store, sha256),
-  )
+  trace.encode("eyg", "glasshouse", [], otel_spans(session, store, sha256))
 }
