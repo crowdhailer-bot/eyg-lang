@@ -6,7 +6,7 @@ let render = ({title, media_type, content}) -> {
     "<video id=\"video\" controls playsinline preload=\"metadata\" src=\"media/video\"></video>",
     "<nav><label for=\"speed\">Playback speed</label><select id=\"speed\"><option value=\"0.5\">0.5×</option><option value=\"1\" selected>1×</option><option value=\"1.5\">1.5×</option><option value=\"2\">2×</option></select></nav>",
     "<p id=\"status\" aria-live=\"polite\"></p>",
-    "<script>const video=document.getElementById('video');document.getElementById('speed').onchange=e=>video.playbackRate=Number(e.target.value);video.onerror=()=>document.getElementById('status').textContent='This browser could not decode the supplied video.';</script>"
+    "<script>", import "./runtime.eyg".video, "</script>"
   ]))
   [player, {path: "media/video", media_type, content}]
 }

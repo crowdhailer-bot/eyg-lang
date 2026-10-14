@@ -40,3 +40,10 @@ Reference the returned `#<cid>` to pin the viewer independently from its data.
 
 Tests: `eyg script eyg_packages/artifact_viewers/entry.eyg`, plus the actual
 browser interactions in `packages/overlay_public/test/browser/viewers.spec.mjs`.
+
+Browser behavior is written in Gleam under
+[`packages/overlay_puppet/src/overlay/viewer`](../../packages/overlay_puppet/src/overlay/viewer).
+Regenerate `runtime.eyg` with `gleam run --runtime bun -m bundle` from
+`packages/overlay_puppet`; it also generates the sandboxed preview driver.
+The [artifact guide](../../guides/overlay_artifacts.md) includes the checked
+viewer video and reproduction commands.
