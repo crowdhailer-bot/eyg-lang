@@ -71,6 +71,54 @@ pub fn observed_blocks_retain_runtime_spans_and_effect_order_test() {
   assert stopped == Ok(Nil)
 }
 
+pub fn frontend_interactions_keep_native_spans_and_async_prompt_replies_test() {
+  let #(server, env, received) = capture()
+  let output = ref.new([])
+  let prompts = ref.new([])
+  let interactions =
+    system.Interactions(
+      output: fn(text, error) {
+        let _ = ref.update(output, fn(lines) { [#(text, error), ..lines] })
+        Nil
+      },
+      input: fn(text) {
+        let _ = ref.update(prompts, fn(lines) { [text, ..lines] })
+        use _ <- promise.map(promise.wait(1))
+        Ok("answer")
+      },
+      fetch: fn(_) { Nil },
+    )
+  let work =
+    system.span(
+      "frontend",
+      [],
+      fn() {
+        use reply <- system.then(system.prompt("Question"))
+        let assert Ok(reply) = reply
+        use Nil <- system.then(system.stdout(reply))
+        use Nil <- system.map(system.write_stderr("detail"))
+        42
+      },
+      fn(_) { None },
+    )
+  use value <- promise.await(system.run_with_interactions_and_environment(
+    work,
+    interactions,
+    env,
+  ))
+  assert value == 42
+  assert ref.get(prompts) == ["Question"]
+  assert list.reverse(ref.get(output))
+    == [#("answer\n", False), #("detail", True)]
+  let spans = ref.get(received)
+  let assert Ok(root) = list.find(spans, fn(span) { span.name == "eyg.run" })
+  let assert Ok(frontend) =
+    list.find(spans, fn(span) { span.name == "frontend" })
+  assert frontend.parent_id == Some(root.span_id)
+  use stopped <- promise.map(server.stop(server, True))
+  assert stopped == Ok(Nil)
+}
+
 pub fn explicit_spans_are_lazy_and_close_before_the_caller_continues_test() {
   let #(server, env, received) = capture()
   let started = ref.new(False)

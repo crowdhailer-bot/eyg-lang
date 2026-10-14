@@ -144,6 +144,11 @@ fn trace_attributes(origin: source.Origin) -> List(#(String, String)) {
   [#("eyg.source", label)]
 }
 
+/// Refresh the published package ledger while retaining cached modules.
+pub fn pull(state: State) -> system.Effect(State) {
+  update(State(..state, cache: cache.pull(state.cache)))
+}
+
 fn update(state: State) -> system.Effect(State) {
   let #(cache, effects) = cache.flush(state.cache)
   case effects {

@@ -366,8 +366,32 @@ pub fn span(
   value
 }
 
+/// A frontend owns these interactions; all other operations keep the existing native driver.
+pub type Interactions {
+  Interactions(
+    output: fn(String, Bool) -> Nil,
+    input: fn(String) -> Promise(Result(String, Nil)),
+    fetch: fn(Request(BitArray)) -> Nil,
+  )
+}
+
+pub fn run_with_interactions(
+  effect: Effect(a),
+  interactions: Interactions,
+) -> Promise(a) {
+  run_traced(effect, tracing.new(), Some(interactions))
+}
+
+pub fn run_with_interactions_and_environment(
+  effect: Effect(a),
+  interactions: Interactions,
+  env: List(#(String, String)),
+) -> Promise(a) {
+  run_traced(effect, tracing.configured(env), Some(interactions))
+}
+
 pub fn run(effect: Effect(a)) -> Promise(a) {
-  run_traced(effect, tracing.new())
+  run_traced(effect, tracing.new(), None)
 }
 
 /// Explicit per-run configuration, useful for hosts that do not have process env.
@@ -375,11 +399,19 @@ pub fn run_with_environment(
   effect: Effect(a),
   env: List(#(String, String)),
 ) -> Promise(a) {
-  run_traced(effect, tracing.configured(env))
+  run_traced(effect, tracing.configured(env), None)
 }
 
-fn run_traced(effect: Effect(a), trace: tracing.Context) -> Promise(a) {
-  use #(outcome, trace) <- promise.await(run_effect(fn() { effect }, trace))
+fn run_traced(
+  effect: Effect(a),
+  trace: tracing.Context,
+  interactions: Option(Interactions),
+) -> Promise(a) {
+  use #(outcome, trace) <- promise.await(run_effect(
+    fn() { effect },
+    trace,
+    interactions,
+  ))
   let error = case outcome {
     Ok(_) -> option.None
     Error(reason) ->
@@ -403,19 +435,20 @@ type Driver(a) {
 fn run_effect(
   work: fn() -> Effect(a),
   trace: tracing.Context,
+  interactions: Option(Interactions),
 ) -> Promise(#(Result(a, Dynamic), tracing.Context)) {
   // Catch one step at a time, releasing its old context before driving the next.
   // Otherwise pending exception handlers retain already-exported span batches.
   use next <- promise.await(
     promise.resolve(Nil)
-    |> promise.await(fn(_) { run_step(work(), trace) })
+    |> promise.await(fn(_) { run_step(work(), trace, interactions) })
     |> promise.map(Ok)
     |> promise.rescue(Error),
   )
   case next {
     Error(reason) -> promise.resolve(#(Error(reason), trace))
     Ok(Finished(value, trace)) -> promise.resolve(#(Ok(value), trace))
-    Ok(NextEffect(work, trace)) -> run_effect(work, trace)
+    Ok(NextEffect(work, trace)) -> run_effect(work, trace, interactions)
   }
 }
 
@@ -427,7 +460,11 @@ fn continue(
   promise.resolve(NextEffect(fn() { resume(value) }, trace))
 }
 
-fn run_step(effect: Effect(a), trace: tracing.Context) -> Promise(Driver(a)) {
+fn run_step(
+  effect: Effect(a),
+  trace: tracing.Context,
+  interactions: Option(Interactions),
+) -> Promise(Driver(a)) {
   case effect {
     Acquire(_, resume) ->
       continue(Error("Acquire requires a sandbox"), resume, trace)
@@ -487,14 +524,18 @@ fn run_step(effect: Effect(a), trace: tracing.Context) -> Promise(Driver(a)) {
     }
     WriteFileBits(path, bytes, resume) ->
       continue(simplifile.write_bits(path, bytes), resume, trace)
-    WriteStdout(text, resume) -> continue(io.print(text), resume, trace)
-    WriteStderr(text, resume) -> continue(io.print_error(text), resume, trace)
+    WriteStdout(text, resume) ->
+      continue(output(interactions, text, False), resume, trace)
+    WriteStderr(text, resume) ->
+      continue(output(interactions, text, True), resume, trace)
     GenerateKey(resume) -> continue(crypto.generate_key(), resume, trace)
     Fetch(request, resume) -> {
+      notify_fetch(interactions, request)
       use response <- promise.await(do_fetch(request))
       continue(response, resume, trace)
     }
     FetchStream(request, resume) -> {
+      notify_fetch(interactions, request)
       use reply <- promise.await(fetch.send_bits(request))
       let reply =
         reply
@@ -531,9 +572,24 @@ fn run_step(effect: Effect(a), trace: tracing.Context) -> Promise(Driver(a)) {
       continue(do_write_file(path, contents), resume, trace)
     SetPermissions(path, permissions, resume) ->
       continue(do_set_permissions(path, permissions), resume, trace)
-    Stdin(resume) -> continue(read_stdin(), resume, trace)
-    Prompt(text, resume) -> continue(input.input(text), resume, trace)
-    Stdout(text, resume) -> continue(io.println(text), resume, trace)
+    Stdin(resume) ->
+      case interactions {
+        None -> continue(read_stdin(), resume, trace)
+        Some(custom) -> {
+          use value <- promise.await(custom.input("Standard input"))
+          continue(result.replace_error(value, "failed input"), resume, trace)
+        }
+      }
+    Prompt(text, resume) ->
+      case interactions {
+        None -> continue(input.input(text), resume, trace)
+        Some(custom) -> {
+          use value <- promise.await(custom.input(text))
+          continue(value, resume, trace)
+        }
+      }
+    Stdout(text, resume) ->
+      continue(output(interactions, text <> "\n", False), resume, trace)
     Wait(duration, resume) -> {
       use response <- promise.await(promise.wait(duration))
       continue(response, resume, trace)
@@ -630,4 +686,22 @@ pub fn read_chunk(
   reader: Reader,
 ) -> Effect(Result(#(Option(BitArray), Reader), effect.FetchError)) {
   ReadChunk(reader, Done)
+}
+
+fn output(interactions: Option(Interactions), text: String, error: Bool) {
+  case interactions, error {
+    Some(custom), _ -> custom.output(text, error)
+    None, True -> io.print_error(text)
+    None, False -> io.print(text)
+  }
+}
+
+fn notify_fetch(
+  interactions: Option(Interactions),
+  request: Request(BitArray),
+) {
+  case interactions {
+    Some(custom) -> custom.fetch(request)
+    None -> Nil
+  }
 }
