@@ -24,6 +24,29 @@ pub type Args {
   Replay(path: String)
   Inspect(path: String, step: Option(Int))
   Upload(path: String)
+  SandboxPrepare(directory: String, entry: String, output: String)
+  SandboxRun(
+    environment: String,
+    entry: String,
+    output: String,
+    hosts: List(String),
+  )
+  SandboxOverlay(
+    environment: String,
+    entry: String,
+    output: String,
+    prompt: String,
+    hosts: List(String),
+  )
+  SandboxReplay(path: String)
+  SandboxExport(path: String, output: String)
+  SandboxSnapshot(path: String, output: String)
+  SandboxStart(
+    config: String,
+    output: String,
+    prompt: String,
+    authorities: List(String),
+  )
   InvalidArguments(message: String)
   Help
   Version
@@ -31,6 +54,21 @@ pub type Args {
 
 pub fn parse(args) {
   case args {
+    ["sandbox", "prepare", directory, entry, output] ->
+      SandboxPrepare(directory, entry, output)
+    ["sandbox", "run", environment, entry, output, ..hosts] ->
+      SandboxRun(environment, entry, output, hosts)
+    ["sandbox", "overlay", environment, entry, output, prompt, ..hosts] ->
+      SandboxOverlay(environment, entry, output, prompt, hosts)
+    ["sandbox", "start", config, output, prompt, ..authorities] ->
+      SandboxStart(config, output, prompt, authorities)
+    ["sandbox", "replay", path] -> SandboxReplay(path)
+    ["sandbox", "export", path, output] -> SandboxExport(path, output)
+    ["sandbox", "snapshot", path, output] -> SandboxSnapshot(path, output)
+    ["sandbox", ..] ->
+      InvalidArguments(
+        "usage: eyg sandbox prepare|run|overlay|start|replay|export|snapshot ...",
+      )
     ["record", "shell"] -> RecordShell
     ["record", "run", "-c", code] | ["record", "run", "--code", code] ->
       Record(source.Code(code), None)
@@ -190,6 +228,13 @@ commands:
   record run -c <code>   record an inline block
   record <file> [args]   record a script and its arguments
   record shell          record successive shell inputs
+  sandbox prepare <directory> <entry> <output>  seal an input environment
+  sandbox run <environment> <entry> <output> [hosts...]  execute a private fork
+  sandbox overlay <environment> <config> <output> <prompt> [hosts...]  run an agent
+  sandbox start <config> <output> <prompt> [authorities...]  start without a host snapshot
+  sandbox replay <trace> verify the complete execution offline
+  sandbox export <trace> <output>  export a portable archive
+  sandbox snapshot <trace> <output>  export the resulting environment
   replay <trace>        replay EYG journals from a portable archive
   inspect <trace> [step] show recorded effects and observed file changes
   upload <trace>        send archived spans to Langfuse or an OTLP collector
