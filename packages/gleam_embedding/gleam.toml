@@ -1,0 +1,24 @@
+name = "eyg_embedding"
+version = "0.1.0"
+target = "erlang"
+description = "Typed EYG evaluation and validated package loading for BEAM hosts"
+
+[dependencies]
+eyg_analysis = { path = "../gleam_analysis" }
+eyg_hub = { path = "../gleam_hub" }
+eyg_interpreter = { path = "../gleam_interpreter" }
+eyg_ir = { path = "../gleam_ir" }
+eyg_parser = { path = "../gleam_parser" }
+gleam_stdlib = ">= 1.0.0 and < 2.0.0"
+gleam_crypto = ">= 1.6.0 and < 2.0.0"
+gleam_httpc = ">= 5.0.0 and < 6.0.0"
+midas = ">= 3.1.0 and < 4.0.0"
+ogre = ">= 1.1.0 and < 2.0.0"
+
+[dev_dependencies]
+gleam_erlang = ">= 1.3.0 and < 2.0.0"
+gleeunit = ">= 1.0.0 and < 2.0.0"
+gleam_http = ">= 4.3.0 and < 5.0.0"
+gleam_json = ">= 3.1.0 and < 4.0.0"
+multiformats = ">= 4.0.0 and < 5.0.0"
+untethered = { path = "../untethered" }
