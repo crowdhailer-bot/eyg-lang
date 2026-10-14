@@ -8,3 +8,4 @@ export function get() {
 export const stdout = process => process.stdout;
 export const isTTY = stream => typeof stream.isTTY === "boolean" ? Result$Ok(stream.isTTY) : Result$Error(undefined);
 export const env = process => toList(Object.entries(process.env));
+export const heapBytes = process => process.memoryUsage().heapUsed;
