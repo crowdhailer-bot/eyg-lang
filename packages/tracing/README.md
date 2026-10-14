@@ -28,6 +28,8 @@ and browser, offline replay, pi-mono/opencode formats and real backend checks.
   Set `EYG_BIN` to select the compiled binary.
 - `gleam run -m tracing/cli_prompt_demo`: check and record the CLI's terminal
   editing, Unicode and history. Set `EYG_BIN` to select the host CLI.
+- `gleam run -m tracing/cli_interrupt_demo`: a delayed local model on7208 checks
+  real Ctrl-C, a resumed prompt, signal cleanup and the saved closed trajectory.
 
 Fixtures and tests are Gleam. Playwright library adapters are in `gleam_playwright`;
 base platform bindings are in `plinthx`. Successful recordings are in `recordings`;

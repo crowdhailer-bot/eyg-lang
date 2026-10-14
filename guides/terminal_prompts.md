@@ -26,6 +26,18 @@ Combining characters and emoji retain their boundaries while editing. History
 lasts for the current invocation and includes EYG `Prompt` calls. An empty line
 at the shell prompt exits the shell.
 
+While an Overlay agent is working, Ctrl-C stops the turn after its current
+completion chunk or tool call returns. Further tool calls are skipped. The CLI
+prints `Stopped, send a message to continue.` and accepts another prompt.
+Effects already performed remain; the saved trajectory keeps received model
+bytes and the interruption. Ctrl-C at the prompt ends the session.
+
+[Watch the checked interruption and resumed turn](/glasshouse/cli-interrupt.mp4).
+Run `gleam run -m tracing/cli_interrupt_demo` from `packages/tracing` to
+reproduce it with a local scripted model. `EYG_BIN` selects the compiled CLI.
+The recording checks real SIGINT, resumption and archive closure; its portable
+trajectory is [available here](/glasshouse/cli-interrupt.json).
+
 Piped input consumes one line per `Prompt`, accepting CRLF and a final line
 without a newline. Later bytes remain available to subsequent prompts or
 `StandardIn`. EOF and invalid UTF-8 return `Error({})`.
