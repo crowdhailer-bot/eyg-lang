@@ -3,6 +3,7 @@ import eyg/cli/args
 import eyg/cli/check
 import eyg/cli/compile
 import eyg/cli/eval
+import eyg/cli/evaluate
 import eyg/cli/fetch
 import eyg/cli/inspect
 import eyg/cli/internal/config
@@ -99,6 +100,7 @@ fn with_config(parsed) {
     args.Replay(path) -> replay.execute(path, config)
     args.Inspect(path, step) -> inspect.execute(path, step, config)
     args.Upload(path) -> upload.execute(path, config)
+    args.Evaluate(path, variants) -> evaluate.execute(path, variants, config)
     args.SandboxPrepare(directory, entry, output) ->
       sandbox.prepare(directory, entry, output, config)
     args.SandboxRun(environment, entry, output, hosts) ->

@@ -24,6 +24,7 @@ pub type Args {
   Replay(path: String)
   Inspect(path: String, step: Option(Int))
   Upload(path: String)
+  Evaluate(path: String, variants: source.Input)
   SandboxPrepare(directory: String, entry: String, output: String)
   SandboxRun(
     environment: String,
@@ -54,6 +55,9 @@ pub type Args {
 
 pub fn parse(args) {
   case args {
+    ["evaluate", path, "-c", code] | ["evaluate", path, "--code", code] ->
+      Evaluate(path, source.Code(code))
+    ["evaluate", path, file] -> Evaluate(path, source.File(file))
     ["sandbox", "prepare", directory, entry, output] ->
       SandboxPrepare(directory, entry, output)
     ["sandbox", "run", environment, entry, output, ..hosts] ->
@@ -235,6 +239,7 @@ commands:
   sandbox replay <trace> verify the complete execution offline
   sandbox export <trace> <output>  export a portable archive
   sandbox snapshot <trace> <output>  export the resulting environment
+  evaluate <trace> <variants>  fork sealed inputs and compare agent variants
   replay <trace>        replay EYG journals from a portable archive
   inspect <trace> [step] show recorded effects and observed file changes
   upload <trace>        send archived spans to Langfuse or an OTLP collector

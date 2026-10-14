@@ -187,6 +187,31 @@ roots remain available in exported output environments even if never mounted.
 Imports are pinned before a tool program runs: acquire/mount a code tree in one
 tool call, then import from it in a subsequent call.
 
+## Evaluate variants
+
+`eyg evaluate <trace> <variants.eyg>` requires a sandbox trace with a complete
+input environment. For example:
+
+```eyg
+{
+  hosts: ["localhost"],
+  variants: [
+    {name: "same", files: [], prompts: None({})},
+    {name: "brief", files: [{path: "README.md", contents: "Be brief."}], prompts: None({})}
+  ]
+}
+```
+
+Every variant forks the sealed inputs. The initial clock and seed are the same
+across variants; the variant name does not affect execution. Changed external
+requests require an allowed live host, including changed model requests.
+The cohort compares complete input/output trees, even for files overwritten
+without a prior read, and distinguishes replayed from live model tokens.
+
+Older host-observation traces remain inspectable and replayable with `eyg replay`,
+but cannot be evaluated as complete environments. They must be recorded again
+using `eyg sandbox`; unknown historical state is never guessed from today's disk.
+
 ## Embedding and resource bounds
 
 - `loam/environment.open` loads a prepared environment; `virtual.fork` is O(1).
