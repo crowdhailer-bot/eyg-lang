@@ -27,6 +27,11 @@ are Gleam modules in `packages/tracing`.
 The [terminal shell guide](./guides/tui_shell.md) covers `eyg tui`. Its checked
 recordings are orchestrated by `tracing/terminal_demo`.
 
+The [Pi guide](./guides/embedding_pi.md) builds and boots the image with Gleam
+modules in `packages/eyg_pi`. Its `boot_check` checks online then offline cache
+reuse, `hdmi_check` checks USB input, and `record_pong` checks and records a real
+CID-loaded game. Run its Gleam tests and `eyg script test/pong_test.eyg` there.
+
 ## Writing EYG packages
 
 All EYG packages are in the `eyg_packages` directory.

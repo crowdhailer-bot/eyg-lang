@@ -33,6 +33,7 @@ Projects in this repo introduce extra contraints, over regular programming langu
 - Portable recording, replay and telemetry export are explained in [`guides/trajectories.md`](./guides/trajectories.md).
 - Immutable acquisition, private sandboxes and offline evaluation are explained in [`guides/sandbox.md`](./guides/sandbox.md).
 - To install from source see [`./guides/install_from_source.md`](./guides/install_from_source.md).
+- To boot the CLI on a Raspberry Pi image see [`./guides/embedding_pi.md`](./guides/embedding_pi.md).
 
 ## Packages
 
