@@ -33,6 +33,8 @@ real backend checks.
   real Ctrl-C, a resumed prompt, signal cleanup and the saved closed trajectory.
 - `gleam run -m tracing/openai_check`: real HTTP on7209 checks Chat Completions
   headers, fragmented tools, usage, the compiled CLI, archive closure and replay.
+- `gleam run -m tracing/codex_config_check`: execute the guide configuration with
+  a fake file cache and empty prompt; check redaction, archive closure and replay.
 
 Fixtures and tests are Gleam. Playwright library adapters are in `gleam_playwright`;
 base platform bindings are in `plinthx`. Successful recordings are in `recordings`;

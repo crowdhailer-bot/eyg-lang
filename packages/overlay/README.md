@@ -28,6 +28,8 @@ The `.overlay.eyg` file returns a record with the following fields:
   `OpenAI({origin, api_key, path, headers})` with Chat Completions function tools.
   [Bedrock](../../guides/bedrock.md) uses
   `Bedrock({region, access_key_id, secret_access_key, session_token})` with Converse.
+  [Codex subscriptions](../../guides/codex_models.md) use
+  `Codex({access_token, account_id})` with the source branch's private Responses transport.
   `Ollama({origin: String, api_key: Option(String)})` selects Ollama;
   use `origin: "https://ollama.com"` for Ollama cloud or `"http://localhost:11434"` for a local server,
   `Mistral({api_key: String})` selects Mistral.
