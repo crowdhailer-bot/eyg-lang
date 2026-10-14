@@ -25,10 +25,19 @@ pub fn route() {
     simplifile.read_bits("../tracing/recordings/trajectories.webm")
   let assert Ok(sandbox_recording) =
     simplifile.read_bits("../tracing/recordings/sandbox.webm")
+  let assert Ok(artifact_recording) =
+    simplifile.read_bits("../tracing/recordings/artifacts.webm")
+  let assert Ok(viewer_recording) =
+    simplifile.read_bits("../tracing/recordings/artifact-viewers.webm")
+  let assert Ok(artifact_trace) =
+    simplifile.read_bits("../tracing/recordings/artifact-trajectory.json")
   Route(index: route.Page(home.page()), items: [
     #("runtime-acquisition.html", Route(route.Static(article), [])),
     #("trajectories.webm", Route(route.Static(recording), [])),
     #("sandbox.webm", Route(route.Static(sandbox_recording), [])),
+    #("artifacts.webm", Route(route.Static(artifact_recording), [])),
+    #("artifact-viewers.webm", Route(route.Static(viewer_recording), [])),
+    #("artifact-trajectory.json", Route(route.Static(artifact_trace), [])),
     #(
       "documentation",
       Route(index: route.Page(documentation.page()), items: []),
