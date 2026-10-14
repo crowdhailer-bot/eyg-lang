@@ -1,6 +1,6 @@
 let c = import "./common.eyg"
 
-let script = "const figures=[...document.querySelectorAll('figure')];let index=0;function show(){figures.forEach((figure,i)=>figure.hidden=i!==index);document.getElementById('position').textContent=figures.length?`${index+1} / ${figures.length}`:'0 / 0';document.getElementById('empty').hidden=figures.length>0;document.querySelectorAll('button').forEach(b=>b.disabled=figures.length<2)}document.getElementById('previous').onclick=()=>{index=(index+figures.length-1)%figures.length;show()};document.getElementById('next').onclick=()=>{index=(index+1)%figures.length;show()};document.addEventListener('keydown',e=>{if(e.key==='ArrowRight')document.getElementById('next').click();if(e.key==='ArrowLeft')document.getElementById('previous').click()});show();"
+let script = import "./runtime.eyg".carousel
 
 let render = ({title, images}) -> {
   let built = !list_fold(images, {index: 0, figures: [], files: []}, (image, state) -> {
