@@ -10,6 +10,9 @@ import gleam/string
 import oas/generator/utils
 import overlay/helpers.{new_reader, submit_first_prompt}
 import overlay/llm/chat
+import overlay/llm/provider
+import overlay/llm/provider/bedrock
+import overlay/llm/sigv4
 import overlay/llm/tool
 import overlay/web/state.{type State, State}
 import overlay/web/trace
@@ -52,6 +55,40 @@ fn run_kind(outcome) {
 
 fn session_of(state: State) {
   trace.session(state.trace, state.agent(state), 1000)
+}
+
+pub fn bedrock_stream_finishing_validates_the_document_and_usage_test() {
+  let #(original, _) = submit_first_prompt("hello")
+  let llm =
+    provider.Llm(
+      provider.Bedrock(bedrock.Config(
+        "eu-west-1",
+        sigv4.Credentials("key", "secret", None),
+      )),
+      "fixture",
+    )
+  let status = state.Streaming(new_reader([], Ok(Nil)), chat.fresh(), <<>>)
+  let streamed = <<
+    "{\"output\":{\"message\":{\"content\":[{\"text\":\"hello 🌱\"}]}},\"usage\":{\"inputTokens\":7,\"outputTokens\":3}}":utf8,
+  >>
+  let ready = State(..original, llm:, status:, streamed:)
+  let #(finished, actions) =
+    state.update(ready, state.LlmStreamFinished(Ok(Nil)))
+  let assert [
+    system.SetSessionStorageItem(key: "overlay.history", value: saved, ..),
+  ] = actions
+  assert string.contains(saved, "hello 🌱")
+  let assert [generation] = session.generations(session_of(finished))
+  assert generation.content == "hello 🌱"
+  assert generation.usage == session.Usage(7, 3)
+  assert generation.error == None
+  let broken = State(..ready, streamed: <<"{\"output\":">>)
+  let #(failed, actions) =
+    state.update(broken, state.LlmStreamFinished(Ok(Nil)))
+  assert actions == []
+  let assert Some(_) = failed.input_error
+  let assert [generation] = session.generations(session_of(failed))
+  let assert Some(_) = generation.error
 }
 
 pub fn a_session_is_recorded_test() {

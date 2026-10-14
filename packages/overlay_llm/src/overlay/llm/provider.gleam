@@ -4,6 +4,7 @@ import gleam/uri
 import midas/continuation.{type Continuation as K}
 import midas/effect
 import overlay/llm/chat
+import overlay/llm/provider/bedrock
 import overlay/llm/provider/mistral
 import overlay/llm/provider/ollama
 import overlay/llm/provider/openai
@@ -13,6 +14,7 @@ pub type Provider {
   Ollama(ollama.Config)
   Mistral(mistral.Config)
   OpenAI(openai.Config)
+  Bedrock(bedrock.Config)
 }
 
 pub type Llm {
@@ -63,6 +65,8 @@ pub fn completion_request(
       mistral.completion_request(config, model, system_prompt, history, tools)
     OpenAI(config) ->
       openai.completion_request(config, model, system_prompt, history, tools)
+    Bedrock(config) ->
+      bedrock.completion_request(config, model, system_prompt, history, tools)
   }
 }
 
@@ -75,6 +79,7 @@ pub fn completion_response(
     Ollama(_) -> ollama.completion_response(response)
     Mistral(_) -> mistral.completion_response(response)
     OpenAI(_) -> openai.completion_response(response)
+    Bedrock(_) -> bedrock.completion_response(response)
   }
 }
 
@@ -111,6 +116,14 @@ pub fn stream_completion_request(
         history,
         tools,
       )
+    Bedrock(config) ->
+      bedrock.stream_completion_request(
+        config,
+        model,
+        system_prompt,
+        history,
+        tools,
+      )
   }
 }
 
@@ -121,9 +134,22 @@ pub fn completion_chunk_parse(
 ) -> #(List(chat.Completion(tool.Call)), BitArray) {
   case provider {
     Ollama(..) -> ollama.completion_chunk_parse(remaining, chunk)
-    // Bedrock(..) -> bedrock.completion_chunk_parse(remaining, chunk)
     Mistral(..) -> mistral.completion_chunk_parse(remaining, chunk)
     OpenAI(..) -> openai.completion_chunk_parse(remaining, chunk)
+    Bedrock(..) -> bedrock.completion_chunk_parse(remaining, chunk)
+  }
+}
+
+/// Validate providers that buffer a complete document when the stream closes.
+pub fn finish_stream(
+  provider: Provider,
+  body: BitArray,
+  completion: chat.Completion(tool.Call),
+) -> Result(chat.Completion(tool.Call), String) {
+  case provider {
+    Bedrock(_) ->
+      bedrock.completion_response(response.new(200) |> response.set_body(body))
+    _ -> Ok(completion)
   }
 }
 
@@ -133,5 +159,6 @@ pub fn id(provider: Provider) -> String {
     Ollama(..) -> "ollama"
     Mistral(..) -> "mistral"
     OpenAI(..) -> "openai"
+    Bedrock(..) -> "amazon-bedrock"
   }
 }

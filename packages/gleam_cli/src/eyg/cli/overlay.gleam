@@ -1356,7 +1356,10 @@ pub fn streamed_generation(
         write,
       ))
       let completion = case response.status {
-        200 -> completion
+        200 ->
+          result.try(completion, fn(completion) {
+            provider.finish_stream(session.llm.provider, body, completion)
+          })
         status ->
           Error(
             "unexpected status: "

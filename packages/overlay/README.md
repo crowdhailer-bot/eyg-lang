@@ -26,6 +26,8 @@ The `.overlay.eyg` file returns a record with the following fields:
 - `llm` a record `{provider, model}` matching the `Llm` type in gleam module `overlay/llm/provider`.
   [OpenAI compatible endpoints](../../guides/openai_compatible.md) use
   `OpenAI({origin, api_key, path, headers})` with Chat Completions function tools.
+  [Bedrock](../../guides/bedrock.md) uses
+  `Bedrock({region, access_key_id, secret_access_key, session_token})` with Converse.
   `Ollama({origin: String, api_key: Option(String)})` selects Ollama;
   use `origin: "https://ollama.com"` for Ollama cloud or `"http://localhost:11434"` for a local server,
   `Mistral({api_key: String})` selects Mistral.
