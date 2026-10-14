@@ -8,6 +8,7 @@ import gleam/result
 import ogre/origin
 import overlay/llm/provider
 import overlay/llm/provider/bedrock
+import overlay/llm/provider/codex
 import overlay/llm/provider/mistral
 import overlay/llm/provider/ollama
 import overlay/llm/provider/openai
@@ -56,6 +57,10 @@ pub fn type_(rules, level, bindings) {
               #("secret_access_key", t.String),
               #("session_token", t.option(t.String)),
             ]),
+          ),
+          #(
+            "Codex",
+            t.record([#("access_token", t.String), #("account_id", t.String)]),
           ),
         ]),
       ),
@@ -106,6 +111,7 @@ fn cast_provider(
     #("Mistral", inner) -> result.map(cast_mistral(inner), provider.Mistral)
     #("OpenAI", inner) -> result.map(cast_openai(inner), provider.OpenAI)
     #("Bedrock", inner) -> result.map(cast_bedrock(inner), provider.Bedrock)
+    #("Codex", inner) -> result.map(cast_codex(inner), provider.Codex)
     #(_, _) -> Error(break.NoMatch(value))
   }
 }
@@ -188,4 +194,15 @@ fn cast_bedrock(value) {
   let credentials =
     sigv4.Credentials(access_key_id:, secret_access_key:, session_token:)
   Ok(bedrock.Config(region:, credentials:))
+}
+
+/// A ChatGPT subscription through the Codex backend.
+fn cast_codex(value) {
+  use access_token <- result.try(cast.field(
+    "access_token",
+    cast.as_string,
+    value,
+  ))
+  use account_id <- result.try(cast.field("account_id", cast.as_string, value))
+  Ok(codex.Config(access_token:, account_id:))
 }

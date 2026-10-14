@@ -66,8 +66,16 @@ fn decoder() {
         },
         decode.success,
       ),
+      decode.field("usage", response_usage_decoder(), decode.success),
+      decode.at(["response", "usage"], response_usage_decoder()),
     ],
   )
+}
+
+fn response_usage_decoder() {
+  use input <- decode.field("input_tokens", decode.int)
+  use output <- decode.optional_field("output_tokens", 0, decode.int)
+  decode.success(Usage(input:, output:))
 }
 
 /// A rough count for text, about four characters a token.

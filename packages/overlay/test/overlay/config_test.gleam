@@ -8,6 +8,7 @@ import ogre/origin
 import overlay/config
 import overlay/llm/provider
 import overlay/llm/provider/bedrock
+import overlay/llm/provider/codex
 import overlay/llm/provider/mistral
 import overlay/llm/provider/ollama
 import overlay/llm/provider/openai
@@ -137,4 +138,16 @@ pub fn bedrock_session_token_test() {
   let assert provider.Bedrock(bedrock.Config(credentials:, ..)) =
     provider(value)
   assert credentials.session_token == Some("token")
+}
+
+pub fn codex_test() {
+  let value =
+    v.Tagged(
+      "Codex",
+      record([
+        #("access_token", v.String("token")),
+        #("account_id", v.String("account")),
+      ]),
+    )
+  assert provider(value) == provider.Codex(codex.Config("token", "account"))
 }

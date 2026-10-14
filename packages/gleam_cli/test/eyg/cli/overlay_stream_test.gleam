@@ -17,6 +17,7 @@ import loam/system
 import overlay/llm/chat
 import overlay/llm/provider
 import overlay/llm/provider/bedrock
+import overlay/llm/provider/codex
 import overlay/llm/sigv4
 import overlay/policy
 import touch_grass/harness/computer
@@ -232,4 +233,97 @@ pub fn bedrock_truncated_document_records_failure_test() {
   let assert Some(_) = generation.error
   let assert Some(cid) = generation.response
   assert store.get_binary(archive.store, cid) == Ok(body)
+}
+
+fn codex_session() {
+  let #(session, state, host) = prepared()
+  let llm =
+    provider.Llm(
+      provider.Codex(codex.Config("fixture-token", "fixture-account")),
+      "scripted-codex",
+    )
+  #(overlay.Session(..session, llm:, persist: False), state, host)
+}
+
+pub fn codex_tool_round_trip_records_usage_and_replays_test() {
+  let #(session, state, host) = codex_session()
+  let host =
+    sandbox.with_network(
+      host,
+      fn(request, requests) {
+        assert request.path == "/backend-api/codex/responses"
+        assert request.host == "chatgpt.com"
+        assert list.key_find(request.headers, "authorization")
+          == Ok("Bearer fixture-token")
+        assert list.key_find(request.headers, "chatgpt-account-id")
+          == Ok("fixture-account")
+        let assert Ok(messages) = context.from_request(request.body)
+        let item = case requests {
+          [] ->
+            "{\"type\":\"function_call\",\"call_id\":\"t1\",\"name\":\"run\",\"arguments\":\"{\\\"code\\\":\\\"!int_add(20, 22)\\\"}\"}"
+          _ -> {
+            assert list.any(messages, fn(message) {
+              case message {
+                context.Tool("t1", text) -> string.contains(text, "42")
+                _ -> False
+              }
+            })
+            "{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"Computed 42.\"}]}"
+          }
+        }
+        let body =
+          "data: {\"type\":\"response.output_item.done\",\"item\":"
+          <> item
+          <> "}\r\n\r\n"
+          <> "data: {\"type\":\"response.completed\",\"response\":{\"output\":["
+          <> item
+          <> "],\"usage\":{\"input_tokens\":7,\"output_tokens\":3}}}\r\n\r\n"
+        #(Ok(response.new(200) |> response.set_body(<<body:utf8>>)), [
+          request,
+          ..requests
+        ])
+      },
+      [],
+    )
+  let trace = overlay.start_trace("codex-tools", session)
+  let assert #(sandbox.Returned(#(Ok(_), _, trace)), host) =
+    overlay.inner_loop(
+      session,
+      state,
+      [chat.UserMessage("calculate", [])],
+      trace,
+    )
+    |> sandbox.run(host)
+  assert list.length(host.network_state) == 2
+  let saved = overlay.to_archive(session, trace, 101)
+  assert archive.missing(saved) == []
+  let assert Some(agent) = saved.session.agent
+  assert agent.provider == "openai-codex"
+  let assert [first, second] = session.generations(saved.session)
+  assert first.usage == session.Usage(7, 3)
+    && second.usage == session.Usage(7, 3)
+  assert second.content == "Computed 42."
+  assert list.all(rerun.session(saved.session, saved.store), fn(report) {
+    report.problem == None
+  })
+}
+
+pub fn codex_stream_failure_is_recorded_without_assistant_text_test() {
+  let #(session, _, host) = codex_session()
+  let body = <<
+    "data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"message\":\"usage limit reached\"}}}\n\n",
+  >>
+  let host =
+    sandbox.save_and_return(host, response.new(200) |> response.set_body(body))
+  let trace = overlay.start_trace("codex-failed", session)
+  let assert #(sandbox.Returned(#(Error(reason), trace)), host) =
+    overlay.streamed_generation(session, [], trace, system.write_stdout)
+    |> sandbox.run(host)
+  assert reason == "usage limit reached"
+  assert host.stdout |> list.reverse |> string.concat == ""
+  let saved = overlay.to_archive(session, trace, 101)
+  let assert [generation] = session.generations(saved.session)
+  assert generation.error == Some("usage limit reached")
+  let assert Some(cid) = generation.response
+  assert store.get_binary(saved.store, cid) == Ok(body)
 }

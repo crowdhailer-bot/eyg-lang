@@ -60,7 +60,7 @@ pub fn before(session: Session, index: Int) -> List(Message) {
 }
 
 /// The messages in a chat completion request body, as sent to the provider.
-/// Chat Completions, Ollama and Bedrock Converse request formats are understood.
+/// Chat Completions, Ollama, Bedrock Converse and Responses request formats.
 pub fn from_request(body: BitArray) -> Result(List(Message), String) {
   use text <- result.try(
     bit_array.to_string(body) |> result.replace_error("request is not text"),
@@ -69,7 +69,7 @@ pub fn from_request(body: BitArray) -> Result(List(Message), String) {
     text,
     decode.one_of(
       decode.field("messages", decode.list(message_decoder()), decode.success),
-      [bedrock_request_decoder()],
+      [bedrock_request_decoder(), responses_request_decoder()],
     ),
   )
   |> result.replace_error("request has no messages")
@@ -215,4 +215,73 @@ fn bedrock_block_decoder() {
       decode.success(OtherBlock),
     ],
   )
+}
+
+fn responses_request_decoder() {
+  use instructions <- decode.optional_field("instructions", "", decode.string)
+  use items <- decode.field(
+    "input",
+    decode.list({
+      use type_ <- decode.optional_field("type", "message", decode.string)
+      case type_ {
+        "message" -> {
+          use role <- decode.field("role", decode.string)
+          use parts <- decode.field(
+            "content",
+            decode.list(decode.optional_field(
+              "text",
+              "",
+              decode.string,
+              decode.success,
+            )),
+          )
+          let text = string.concat(parts)
+          decode.success(
+            Some(case role {
+              "assistant" -> Assistant("", text, [])
+              "system" | "developer" -> System(text)
+              _ -> User(text)
+            }),
+          )
+        }
+        "function_call" -> {
+          use id <- decode.field("call_id", decode.string)
+          use name <- decode.field("name", decode.string)
+          use arguments <- decode.field("arguments", decode.string)
+          decode.success(
+            Some(Assistant("", "", [session.ToolCall(id:, name:, arguments:)])),
+          )
+        }
+        "function_call_output" -> {
+          use id <- decode.field("call_id", decode.string)
+          use text <- decode.field("output", decode.string)
+          decode.success(Some(Tool(id, text)))
+        }
+        _ -> decode.success(None)
+      }
+    }),
+  )
+  let items = list.filter_map(items, option.to_result(_, Nil))
+  let messages =
+    list.fold(items, [], fn(acc, item) {
+      case item, acc {
+        Assistant(thinking, text, calls),
+          [Assistant(before_thinking, before_text, before_calls), ..rest]
+        -> [
+          Assistant(
+            before_thinking <> thinking,
+            before_text <> text,
+            list.append(before_calls, calls),
+          ),
+          ..rest
+        ]
+        _, _ -> [item, ..acc]
+      }
+    })
+    |> list.reverse
+  let system = case instructions {
+    "" -> []
+    _ -> [System(instructions)]
+  }
+  decode.success(list.append(system, messages))
 }
