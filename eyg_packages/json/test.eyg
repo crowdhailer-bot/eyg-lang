@@ -82,4 +82,23 @@ let nested_score_decoder = json.decode.object(
 
   {name: "json returns Error for invalid input",
    test: (_) -> { assert.error(json.parse("not json", json.decode.boolean)) }},
+
+  {name: "json string encoder escapes all control bytes",
+   test: (_) -> {
+     let bytes = !binary_from_integers([
+       0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+       16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31
+     ])
+     let text = assert.ok(!string_from_binary(bytes))
+     assert.equal(Ok(text), json.parse(json.encode.string(text), json.decode.string))
+   }},
+  {name: "json string encoder preserves Unicode and literal escapes",
+   test: (_) -> {
+     let text = "é 🌱 \\u0001 \"quoted\""
+     assert.equal(Ok(text), json.parse(json.encode.string(text), json.decode.string))
+   }},
+  {name: "json string encoder retains common escape spellings",
+   test: (_) -> {
+     assert.equal_string("\"a\\nb\\tc\\r\"", json.encode.string("a\nb\tc\r"))
+   }},
 ]
