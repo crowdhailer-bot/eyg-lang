@@ -5,4 +5,5 @@ export function get() {
   return globalThis.Performance && performance instanceof globalThis.Performance
     ? Result$Ok(performance) : Result$Error(undefined);
 }
+export const timeOrigin = performance => performance.timeOrigin;
 export const now = performance => performance.now();

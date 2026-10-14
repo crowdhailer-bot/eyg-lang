@@ -1,5 +1,11 @@
 //// Fetch: https://fetch.spec.whatwg.org/
 
+import gleam/javascript/promise.{type Promise}
+import gleam/option.{type Option}
+import plinthx/browser/abort_signal.{type AbortSignal}
+
+pub type Fetch
+
 pub type Response
 
 pub type Request
@@ -19,3 +25,34 @@ pub fn new_response(
 
 @external(javascript, "./fetch_ffi.mjs", "requestUrl")
 pub fn request_url(request: Request) -> String
+
+@external(javascript, "./fetch_ffi.mjs", "requestHeader")
+pub fn request_header(request: Request, name: String) -> Option(String)
+
+@external(javascript, "./fetch_ffi.mjs", "text")
+pub fn request_text(request: Request) -> Promise(Result(String, String))
+
+pub type RequestInit {
+  RequestInit(
+    method: String,
+    headers: List(#(String, String)),
+    body: String,
+    signal: Option(AbortSignal),
+  )
+}
+
+@external(javascript, "./fetch_ffi.mjs", "get")
+pub fn get() -> Result(Fetch, Nil)
+
+@external(javascript, "./fetch_ffi.mjs", "send")
+pub fn send(
+  fetch: Fetch,
+  url: String,
+  init: RequestInit,
+) -> Promise(Result(Response, String))
+
+@external(javascript, "./fetch_ffi.mjs", "status")
+pub fn status(response: Response) -> Int
+
+@external(javascript, "./fetch_ffi.mjs", "text")
+pub fn text(response: Response) -> Promise(Result(String, String))
