@@ -26,6 +26,8 @@ and browser, offline replay, pi-mono/opencode formats and real backend checks.
 - `gleam run -m tracing/cache_check`: start the package fixture, verify two
   independent compiled CLI processes, stop the fixture and verify offline reuse.
   Set `EYG_BIN` to select the compiled binary.
+- `gleam run -m tracing/cli_prompt_demo`: check and record the CLI's terminal
+  editing, Unicode and history. Set `EYG_BIN` to select the host CLI.
 
 Fixtures and tests are Gleam. Playwright library adapters are in `gleam_playwright`;
 base platform bindings are in `plinthx`. Successful recordings are in `recordings`;

@@ -415,14 +415,14 @@ fn run_traced(
   trace: tracing.Context,
   interactions: Option(Interactions),
 ) -> Promise(a) {
-  let reader = keys.new()
+  let reader = Input(keys.new(), prompt.new())
   use #(outcome, trace) <- promise.await(run_effect(
     fn() { effect },
     trace,
     interactions,
     reader,
   ))
-  keys.release(reader)
+  keys.release(reader.keys)
   let error = case outcome {
     Ok(_) -> option.None
     Error(reason) ->
@@ -443,11 +443,15 @@ type Driver(a) {
   NextEffect(fn() -> Effect(a), tracing.Context)
 }
 
+type Input {
+  Input(keys: keys.Reader, history: prompt.History)
+}
+
 fn run_effect(
   work: fn() -> Effect(a),
   trace: tracing.Context,
   interactions: Option(Interactions),
-  reader: keys.Reader,
+  reader: Input,
 ) -> Promise(#(Result(a, Dynamic), tracing.Context)) {
   // Catch one step at a time, releasing its old context before driving the next.
   // Otherwise pending exception handlers retain already-exported span batches.
@@ -476,7 +480,7 @@ fn run_step(
   effect: Effect(a),
   trace: tracing.Context,
   interactions: Option(Interactions),
-  reader: keys.Reader,
+  reader: Input,
 ) -> Promise(Driver(a)) {
   case effect {
     Acquire(_, resume) ->
@@ -501,7 +505,7 @@ fn run_step(
       continue(Nil, resume, trace)
     }
     Exit(status) -> {
-      keys.release(reader)
+      keys.release(reader.keys)
       let error = case status {
         0 -> option.None
         _ -> option.Some("process exited with status " <> int.to_string(status))
@@ -589,7 +593,7 @@ fn run_step(
     Stdin(resume) ->
       case interactions {
         None -> {
-          keys.release(reader)
+          keys.release(reader.keys)
           continue(read_stdin(), resume, trace)
         }
         Some(custom) -> {
@@ -600,8 +604,8 @@ fn run_step(
     Prompt(text, resume) ->
       case interactions {
         None -> {
-          keys.release(reader)
-          use value <- promise.await(prompt.read_line(text))
+          keys.release(reader.keys)
+          use value <- promise.await(prompt.read_line(text, reader.history))
           continue(value, resume, trace)
         }
         Some(custom) -> {
@@ -610,7 +614,7 @@ fn run_step(
         }
       }
     ReadKey(milliseconds, resume) -> {
-      use key <- promise.await(keys.read(reader, milliseconds))
+      use key <- promise.await(keys.read(reader.keys, milliseconds))
       continue(key, resume, trace)
     }
     Stdout(text, resume) ->
