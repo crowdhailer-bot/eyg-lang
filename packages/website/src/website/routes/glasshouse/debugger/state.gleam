@@ -31,6 +31,14 @@ pub const demos = [
   Demo("check the website", "check-the-website"),
 ]
 
+pub const sandbox_demos = [
+  Demo("Sealed session", "sandbox"),
+  Demo("Unchanged fork", "sandbox-same"),
+  Demo("Changed skill", "sandbox-totals"),
+  Demo("Changed prompt", "sandbox-blog"),
+  Demo("Refused host", "sandbox-stopped"),
+]
+
 pub fn demo_path(demo: Demo) -> String {
   "/glasshouse/demo/" <> demo.slug <> ".json"
 }
@@ -63,6 +71,7 @@ pub type Model {
     traces: List(Trace),
     /// Demo traces still loading.
     loading: List(Demo),
+    demo_order: List(Demo),
     /// The slug of the trace being explored, the first trace when none was chosen.
     active: Option(String),
     moment: Int,
@@ -99,6 +108,10 @@ pub type Action {
 /// Start loading the demo traces, the query can pick a trace and moment, i.e. `trace=with-totals&step=12`.
 pub fn init(query: String) -> #(Model, List(Action)) {
   let params = uri.parse_query(query) |> result.unwrap([])
+  let selected = case list.key_find(params, "demo") {
+    Ok("sandbox") -> sandbox_demos
+    _ -> demos
+  }
   let wanted = case list.key_find(params, "trace") {
     Ok(slug) -> {
       let step =
@@ -112,7 +125,8 @@ pub fn init(query: String) -> #(Model, List(Action)) {
   let model =
     Model(
       traces: [],
-      loading: demos,
+      loading: selected,
+      demo_order: selected,
       active: None,
       moment: 0,
       file: None,
@@ -120,7 +134,7 @@ pub fn init(query: String) -> #(Model, List(Action)) {
       error: None,
       wanted:,
     )
-  #(model, list.map(demos, FetchArchive))
+  #(model, list.map(selected, FetchArchive))
 }
 
 pub fn update(model: Model, message: Message) -> #(Model, List(Action)) {
@@ -205,12 +219,16 @@ fn add(model: Model, name, slug, archive: Archive) -> Model {
     )
   // Demo traces keep their order however they arrive, uploads go last.
   let order = fn(trace: Trace) {
-    list.index_fold(demos, list.length(demos), fn(found, demo, i) {
-      case demo.slug == trace.slug {
-        True -> i
-        False -> found
-      }
-    })
+    list.index_fold(
+      model.demo_order,
+      list.length(model.demo_order),
+      fn(found, demo, i) {
+        case demo.slug == trace.slug {
+          True -> i
+          False -> found
+        }
+      },
+    )
   }
   let traces =
     model.traces

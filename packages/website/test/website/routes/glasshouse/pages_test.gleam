@@ -1,3 +1,4 @@
+import eyg/parser
 import gleam/list
 import gleam/string
 import lustre/element
@@ -10,6 +11,22 @@ import website/routes/glasshouse/documentation
 
 pub fn every_page_builds_test() {
   glasshouse.route()
+}
+
+pub fn acquisition_article_examples_parse_test() {
+  let assert Ok(html) =
+    simplifile.read("src/website/routes/glasshouse/runtime-acquisition.html")
+  let assert [_, first, ..rest] =
+    string.split(html, "<code class=\"language-eyg\">")
+  list.each([first, ..rest], fn(section) {
+    let assert Ok(#(code, _)) = string.split_once(section, "</code>")
+    let code =
+      code
+      |> string.replace("&gt;", ">")
+      |> string.replace("&lt;", "<")
+      |> string.replace("&amp;", "&")
+    let assert Ok(_) = parser.all_from_string(code)
+  })
 }
 
 pub fn contents_link_to_every_heading_test() {

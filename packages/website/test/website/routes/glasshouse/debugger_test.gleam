@@ -1,3 +1,5 @@
+import glasshouse/archive as portable
+import glasshouse/cohort
 import glasshouse/session
 import glasshouse/timeline
 import gleam/bit_array
@@ -49,6 +51,28 @@ pub fn every_demo_is_fetched_test() {
   let #(model, actions) = state.init("")
   assert actions == list.map(state.demos, state.FetchArchive)
   assert model.loading == state.demos
+}
+
+pub fn sealed_cohort_loads_in_order_and_replays_test() {
+  let #(model, actions) = state.init("demo=sandbox")
+  assert actions == list.map(state.sandbox_demos, state.FetchArchive)
+  let model =
+    list.reverse(state.sandbox_demos)
+    |> list.fold(model, fn(model, demo) {
+      send(model, state.ArchiveFetched(demo, Ok(archive(demo))))
+    })
+  assert list.map(model.traces, fn(trace) { trace.name })
+    == list.map(state.sandbox_demos, fn(demo) { demo.name })
+  assert list.all(model.traces, fn(trace) {
+    portable.missing(trace.archive) == []
+  })
+  let model = send(model, state.UserClickedReplay)
+  let assert Ok(trace) = state.active(model)
+  let assert Some(reports) = trace.replay
+  assert list.all(reports, fn(report) { report.problem == None })
+  let assert Ok(stopped) = list.last(model.traces)
+  let assert Some(reason) = cohort.stopped(stopped.archive.session)
+  assert string.contains(reason, "not permitted")
 }
 
 pub fn traces_keep_the_demo_order_test() {

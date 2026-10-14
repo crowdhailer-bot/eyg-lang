@@ -17,10 +17,18 @@ import website/routes/glasshouse/layout
 const demo_directory = "src/website/routes/glasshouse/demo/"
 
 pub fn route() {
+  let assert Ok(article) =
+    simplifile.read_bits(
+      "src/website/routes/glasshouse/runtime-acquisition.html",
+    )
   let assert Ok(recording) =
     simplifile.read_bits("../tracing/recordings/trajectories.webm")
+  let assert Ok(sandbox_recording) =
+    simplifile.read_bits("../tracing/recordings/sandbox.webm")
   Route(index: route.Page(home.page()), items: [
+    #("runtime-acquisition.html", Route(route.Static(article), [])),
     #("trajectories.webm", Route(route.Static(recording), [])),
+    #("sandbox.webm", Route(route.Static(sandbox_recording), [])),
     #(
       "documentation",
       Route(index: route.Page(documentation.page()), items: []),
@@ -31,7 +39,13 @@ pub fn route() {
       Route(
         index: route.Page(demo_page()),
         items: list.map(
-          ["cohort", ..list.map(state.demos, fn(d) { d.slug })],
+          [
+            "cohort",
+            "sandbox-cohort",
+            ..list.map(list.append(state.demos, state.sandbox_demos), fn(d) {
+              d.slug
+            })
+          ],
           fn(slug) {
             let assert Ok(bytes) =
               simplifile.read_bits(demo_directory <> slug <> ".json")
@@ -56,6 +70,15 @@ fn demo_page() {
         layout.nav("/glasshouse/demo"),
         h.main([a.class("gh-section")], [
           h.h1([a.class("gh-section-title")], [element.text("Demo traces")]),
+          h.p([], [
+            h.a(
+              [
+                a.href("/glasshouse/debugger?demo=sandbox"),
+                a.class("gh-action"),
+              ],
+              [h.text("Open the checked sealed sandbox cohort")],
+            ),
+          ]),
           h.p([a.class("text-lg")], [
             element.text(
               "A newsletter agent recorded against the development mock, and the variants evaluated from it. Each is a complete archive, open it in the debugger or with the eyg CLI.",
