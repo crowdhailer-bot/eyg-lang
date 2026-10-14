@@ -28,6 +28,7 @@ import loam/acquire
 import loam/broker
 import loam/environment
 import loam/execute
+import loam/package
 import loam/pin
 import loam/platform/computer
 import loam/prepare
@@ -91,6 +92,23 @@ pub fn prepare(
 pub fn load(path: String) -> system.Effect(Result(bundle.Bundle, String)) {
   use text <- system.map(system.read_file(path))
   result.try(text, bundle.from_string(_, traces.sha256))
+}
+
+pub fn package(
+  path: String,
+  output: String,
+  config: config.Config,
+) -> system.Effect(Result(Int, String)) {
+  use input <- system.then(load(path))
+  use input <- system.try(input)
+  use prepared <- system.then(package.prepare(input, config.client.origin))
+  use prepared <- system.try(prepared)
+  use written <- system.then(system.write_file(
+    output,
+    bundle.to_string(prepared),
+  ))
+  use Nil <- system.try(written)
+  system.Done(Ok(0))
 }
 
 pub fn execute(

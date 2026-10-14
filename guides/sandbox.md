@@ -137,6 +137,9 @@ shell commands or adding an effect for each service.
 | `http` | an immutable binary, optionally checked against an expected CID |
 | `repository` | a Git revision materialised as an immutable tree, optionally checked against an expected tree CID |
 
+The [Nix fetcher guide](nix_fetcher.md) compares these contracts and describes
+the Gleam package-graph fetcher and its native fixed-output Nix adapter.
+
 These preparation helpers return `glasshouse/bundle.Bundle`. The runtime adapter
 `acquire.perform` also returns provenance in a `Receipt`. Git is needed only for
 live repository acquisition, not replay. Runtime acquisition creates and cleans

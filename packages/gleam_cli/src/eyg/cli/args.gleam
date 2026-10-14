@@ -14,6 +14,7 @@ pub type Args {
   Parse(input: source.Input)
   Share(input: source.Input)
   Fetch(cid: String)
+  FetchPackage(reference: String, output: String)
   SignatoryInitial(name: String)
   SignatoryList
   SignatoryShow(alias: String)
@@ -26,6 +27,7 @@ pub type Args {
   Upload(path: String)
   Evaluate(path: String, variants: source.Input)
   SandboxPrepare(directory: String, entry: String, output: String)
+  SandboxPackage(path: String, output: String)
   SandboxRun(
     environment: String,
     entry: String,
@@ -55,6 +57,12 @@ pub type Args {
 
 pub fn parse(args) {
   case args {
+    ["sandbox", "package", path, output] -> SandboxPackage(path, output)
+    ["fetch-package", reference, output] -> FetchPackage(reference, output)
+    ["fetch-package", ..] ->
+      InvalidArguments(
+        "usage: eyg fetch-package <#cid|@name:version:cid> <bundle.json>",
+      )
     ["evaluate", path, "-c", code] | ["evaluate", path, "--code", code] ->
       Evaluate(path, source.Code(code))
     ["evaluate", path, file] -> Evaluate(path, source.File(file))
@@ -233,6 +241,8 @@ commands:
   record <file> [args]   record a script and its arguments
   record shell          record successive shell inputs
   sandbox prepare <directory> <entry> <output>  seal an input environment
+  sandbox package <bundle> <output>  prepare a package closure offline
+  fetch-package <reference> <output>  acquire a complete pinned module graph
   sandbox run <environment> <entry> <output> [hosts...]  execute a private fork
   sandbox overlay <environment> <config> <output> <prompt> [hosts...]  run an agent
   sandbox start <config> <output> <prompt> [authorities...]  start without a host snapshot

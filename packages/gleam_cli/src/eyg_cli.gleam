@@ -5,6 +5,7 @@ import eyg/cli/compile
 import eyg/cli/eval
 import eyg/cli/evaluate
 import eyg/cli/fetch
+import eyg/cli/fetch_package
 import eyg/cli/inspect
 import eyg/cli/internal/config
 import eyg/cli/overlay
@@ -85,6 +86,8 @@ fn with_config(parsed) {
     args.Parse(input:) -> parse.execute(input, config)
     args.Share(input:) -> share.execute(input, config)
     args.Fetch(cid:) -> fetch.execute(cid, config)
+    args.FetchPackage(reference, output) ->
+      fetch_package.execute(reference, output, config)
     args.Publish(package:, file:) -> publish.execute(package, file, config)
     args.SignatoryInitial(name:) -> signatory.initial(name, config)
     args.SignatoryList -> signatory.list(config)
@@ -103,6 +106,7 @@ fn with_config(parsed) {
     args.Evaluate(path, variants) -> evaluate.execute(path, variants, config)
     args.SandboxPrepare(directory, entry, output) ->
       sandbox.prepare(directory, entry, output, config)
+    args.SandboxPackage(path, output) -> sandbox.package(path, output, config)
     args.SandboxRun(environment, entry, output, hosts) ->
       sandbox.execute(
         environment,
