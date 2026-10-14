@@ -69,7 +69,7 @@ gleeunit = { version = ">= 1.0.0 and < 2.0.0" }
 lustre = { version = ">= 5.7.1 and < 6.0.0" }
 oas_generator_utils = { version = ">= 1.1.0 and < 2.0.0" }
 ogre = { version = ">= 1.1.0 and < 2.0.0" }
-overlay_llm = { version = ">= 0.1.0 and < 1.0.0" }
+overlay_llm = { path = "../overlay_llm" }
 overlay_web = { path = "../overlay_web" }
 pal = { path = "../pal" }
 pamphlet = { git = "https://github.com/crowdhailer/pamphlet", ref = "750623b" }

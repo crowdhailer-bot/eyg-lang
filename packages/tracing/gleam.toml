@@ -10,9 +10,12 @@ gleam_json = ">= 3.1.0 and < 4.0.0"
 gleam_http = ">= 4.4.0 and < 5.0.0"
 gleam_playwright = { path = "../gleam_playwright" }
 gleam_crypto = ">= 1.6.0 and < 2.0.0"
+ogre = ">= 1.3.0 and < 2.0.0"
 javascript_mutable_reference = ">= 1.0.0 and < 2.0.0"
+loam = { path = "../loam" }
 eyg_hub = { path = "../gleam_hub" }
 eyg_ir = { path = "../gleam_ir" }
+eyg_interpreter = { path = "../gleam_interpreter" }
 glasshouse = { path = "../glasshouse" }
 otel = { path = "../otel" }
 plinthx = { path = "../plinthx" }

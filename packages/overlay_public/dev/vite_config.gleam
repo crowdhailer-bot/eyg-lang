@@ -16,6 +16,8 @@ pub fn config() {
     #("/api", ollama),
     #("/guides", "https://eyg.run"),
     #("/modules", hub),
+    #("/artifacts", hub),
+    #("/artifact/", hub),
     #("/packages", hub),
   ]
   let configuration =
