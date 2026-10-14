@@ -24,6 +24,11 @@ Browser recordings and real Jaeger/Langfuse checks are described in the
 [trajectory guide](./guides/trajectories.md). Their workflows and model fixture
 are Gleam modules in `packages/tracing`.
 
+The [terminal shell guide](./guides/tui_shell.md) covers the direct, Lustre and
+signals frontends. Each needs `bun install` before `gleam test` to install its
+OpenTUI native library. `packages/overlay_terminal` tests their shared runtime.
+The checked terminal recordings are orchestrated by `tracing/terminal_demo`.
+
 ## Writing EYG packages
 
 All EYG packages are in the `eyg_packages` directory.
