@@ -39,3 +39,9 @@ The fixtures exercise real hub encoders and content identifiers, cache reuse,
 all reference forms, dependencies, failed batch rollback, rejected modules,
 checks before effects, host failures and source diagnostics. Native host adapters
 only marshal configuration, callbacks and OTP/framework lifecycle operations.
+
+Mix compiler hooks can run `gleam run -m eyg/embedding/install_beams -- <ebin>`
+from their Gleam project directory. Gleam builds that project first; the module
+copies its compiled BEAM files into the application's compile path. Mix only
+needs to invoke this command and report its exit status. This bridges local
+Gleam dependencies while their Erlang releases are not published.
