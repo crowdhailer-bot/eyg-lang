@@ -1,0 +1,23 @@
+name = "helpdesk_eyg"
+version = "0.1.0"
+target = "erlang"
+
+[dependencies]
+ash_eyg_libraries = { path = "../../../packages/ash_eyg/gleam" }
+eyg_embedding = { path = "../../../packages/gleam_embedding" }
+gleam_stdlib = ">= 1.0.0 and < 2.0.0"
+
+[dev_dependencies]
+eyg_hub = { path = "../../../packages/gleam_hub" }
+eyg_interpreter = { path = "../../../packages/gleam_interpreter" }
+eyg_ir = { path = "../../../packages/gleam_ir" }
+eyg_parser = { path = "../../../packages/gleam_parser" }
+gleam_crypto = ">= 1.6.0 and < 2.0.0"
+gleam_erlang = ">= 1.0.0 and < 2.0.0"
+gleam_http = ">= 4.4.0 and < 5.0.0"
+gleam_json = ">= 3.1.0 and < 4.0.0"
+gleeunit = ">= 1.0.0 and < 2.0.0"
+midas = ">= 3.1.0 and < 4.0.0"
+multiformats = ">= 4.0.0 and < 5.0.0"
+simplifile = ">= 2.7.0 and < 3.0.0"
+untethered = { path = "../../../packages/untethered" }

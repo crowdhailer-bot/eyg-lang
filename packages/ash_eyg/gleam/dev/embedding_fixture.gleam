@@ -1,0 +1,1 @@
+../../../gleam_embedding/test/embedding_fixture.gleam

@@ -21,6 +21,8 @@ and browser, offline replay, pi-mono/opencode formats and real backend checks.
   package requests stop after caching, run counters and check errors before effects.
 - `gleam run -m tracing/phoenix_demo`: check and record the Phoenix example on
   7815 with `package_fixture` on 7207. Covers the real editor and LiveView effects.
+- `gleam run -m tracing/ash_demo`: check and record AshAdmin on 7816 with the
+  package fixture. Covers highlighting, host actions, type errors and cache reuse.
 
 Fixtures and tests are Gleam. Playwright library adapters are in `gleam_playwright`;
 base platform bindings are in `plinthx`. Successful recordings are in `recordings`;

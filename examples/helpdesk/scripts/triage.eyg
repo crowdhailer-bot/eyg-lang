@@ -1,0 +1,19 @@
+match perform SupportTicketRead({}) {
+  Ok(tickets) -> {
+    match perform SupportRepresentativeRead({}) {
+      Ok(representatives) -> {
+        match !list_pop(representatives) {
+          Ok({head: representative, tail: _}) -> {
+            !list_fold(tickets, [], (ticket, assigned) -> {
+              let _ = perform SupportTicketAssign({id: ticket.id, representative_id: Some(representative.id)})
+              [ticket.subject, ..assigned]
+            })
+          }
+          Error(_) -> { [] }
+        }
+      }
+      Error(_) -> { [] }
+    }
+  }
+  Error(_) -> { [] }
+}

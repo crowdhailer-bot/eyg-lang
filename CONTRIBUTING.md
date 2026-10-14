@@ -38,6 +38,10 @@ The [Elixir embedding guide](./guides/embedding_elixir.md) covers Phoenix setup,
 the Gleam browser build, native integration checks and cache ownership. Run
 `mix test` from `examples/phoenix_counters`; its ExUnit hooks invoke Gleam checks.
 
+The [Ash guide](./guides/embedding_ash.md) covers typed resource actions, scoped
+effects and retained sessions. Run `mix test` from `packages/ash_eyg` and
+`examples/helpdesk`; `tracing/ash_demo` checks and records the AshAdmin editor.
+
 ## Writing EYG packages
 
 All EYG packages are in the `eyg_packages` directory.
