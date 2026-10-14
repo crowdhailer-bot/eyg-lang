@@ -1,0 +1,16 @@
+name = "phoenix_counters_browser"
+version = "0.1.0"
+target = "javascript"
+
+[dependencies]
+gleam_stdlib = ">= 1.0.0 and < 2.0.0"
+gleam_javascript = ">= 1.0.0 and < 2.0.0"
+gleam_json = ">= 3.1.0 and < 4.0.0"
+gleam_phoenix = { path = "../../../packages/gleam_phoenix" }
+gleam_shiki = { path = "../../../packages/gleam_shiki" }
+plinthx = { path = "../../../packages/plinthx" }
+javascript_mutable_reference = ">= 1.0.0 and < 2.0.0"
+simplifile = ">= 2.7.0 and < 3.0.0"
+
+[javascript]
+runtime = "bun"

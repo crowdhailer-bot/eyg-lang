@@ -19,6 +19,8 @@ and browser, offline replay, pi-mono/opencode formats and real backend checks.
   pinned reference over a local HTTP hub on 7207.
 - `gleam run -m tracing/erlang_demo`: record the real Erlang console, verify
   package requests stop after caching, run counters and check errors before effects.
+- `gleam run -m tracing/phoenix_demo`: check and record the Phoenix example on
+  7815 with `package_fixture` on 7207. Covers the real editor and LiveView effects.
 
 Fixtures and tests are Gleam. Playwright library adapters are in `gleam_playwright`;
 base platform bindings are in `plinthx`. Successful recordings are in `recordings`;

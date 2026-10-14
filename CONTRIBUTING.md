@@ -34,6 +34,10 @@ counter example. Build and test it from `examples/erl_counter`; its native host
 callbacks delegate EYG execution and package loading to `gleam_embedding`.
 `tracing/erlang_demo` checks its real HTTP cache reuse and records the console.
 
+The [Elixir embedding guide](./guides/embedding_elixir.md) covers Phoenix setup,
+the Gleam browser build, native integration checks and cache ownership. Run
+`mix test` from `examples/phoenix_counters`; its ExUnit hooks invoke Gleam checks.
+
 ## Writing EYG packages
 
 All EYG packages are in the `eyg_packages` directory.
