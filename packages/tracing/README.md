@@ -31,6 +31,8 @@ real backend checks.
   editing, Unicode and history. Set `EYG_BIN` to select the host CLI.
 - `gleam run -m tracing/cli_interrupt_demo`: a delayed local model on7208 checks
   real Ctrl-C, a resumed prompt, signal cleanup and the saved closed trajectory.
+- `gleam run -m tracing/openai_check`: real HTTP on7209 checks Chat Completions
+  headers, fragmented tools, usage, the compiled CLI, archive closure and replay.
 
 Fixtures and tests are Gleam. Playwright library adapters are in `gleam_playwright`;
 base platform bindings are in `plinthx`. Successful recordings are in `recordings`;

@@ -347,10 +347,7 @@ fn run_origin(input: source.Input) -> run.Origin {
 
 /// A trace starting with the configuration run.
 pub fn start_trace(id: String, session: Session(_)) -> Trace {
-  let provider = case session.llm.provider {
-    provider.Ollama(_) -> "ollama"
-    provider.Mistral(_) -> "mistral"
-  }
+  let provider = provider.id(session.llm.provider)
   let agent =
     trace.Agent(
       provider:,
