@@ -6,11 +6,13 @@ import midas/effect
 import overlay/llm/chat
 import overlay/llm/provider/mistral
 import overlay/llm/provider/ollama
+import overlay/llm/provider/openai
 import overlay/llm/tool
 
 pub type Provider {
   Ollama(ollama.Config)
   Mistral(mistral.Config)
+  OpenAI(openai.Config)
 }
 
 pub type Llm {
@@ -59,6 +61,8 @@ pub fn completion_request(
       ollama.completion_request(config, model, system_prompt, history, tools)
     Mistral(config) ->
       mistral.completion_request(config, model, system_prompt, history, tools)
+    OpenAI(config) ->
+      openai.completion_request(config, model, system_prompt, history, tools)
   }
 }
 
@@ -70,6 +74,7 @@ pub fn completion_response(
   case provider {
     Ollama(_) -> ollama.completion_response(response)
     Mistral(_) -> mistral.completion_response(response)
+    OpenAI(_) -> openai.completion_response(response)
   }
 }
 
@@ -98,6 +103,14 @@ pub fn stream_completion_request(
         history,
         tools,
       )
+    OpenAI(config) ->
+      openai.stream_completion_request(
+        config,
+        model,
+        system_prompt,
+        history,
+        tools,
+      )
   }
 }
 
@@ -110,6 +123,7 @@ pub fn completion_chunk_parse(
     Ollama(..) -> ollama.completion_chunk_parse(remaining, chunk)
     // Bedrock(..) -> bedrock.completion_chunk_parse(remaining, chunk)
     Mistral(..) -> mistral.completion_chunk_parse(remaining, chunk)
+    OpenAI(..) -> openai.completion_chunk_parse(remaining, chunk)
   }
 }
 
@@ -118,5 +132,6 @@ pub fn id(provider: Provider) -> String {
   case provider {
     Ollama(..) -> "ollama"
     Mistral(..) -> "mistral"
+    OpenAI(..) -> "openai"
   }
 }

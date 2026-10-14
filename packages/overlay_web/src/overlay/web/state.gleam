@@ -998,10 +998,7 @@ fn record_generation(state: State, result) {
 
 /// The agent the session is recorded for.
 pub fn agent(state: State) -> session.Agent {
-  let provider = case state.llm.provider {
-    provider.Ollama(_) -> "ollama"
-    provider.Mistral(_) -> "mistral"
-  }
+  let provider = provider.id(state.llm.provider)
   session.Agent(
     provider:,
     model: state.llm.model,
