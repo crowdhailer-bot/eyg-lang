@@ -434,23 +434,19 @@ fn validate(suite_path: String, options: Options) -> Promise(Nil) {
       promise.resolve(Nil)
     }
     Ok(#(environment, suite, contexts)) -> {
-      let #(context, _name) = case contexts {
-        [first, ..] -> first
-        [] -> #(session.NoContext, "none")
-      }
-      use problems <- promise.map(
-        list.fold(suite.tasks, promise.resolve([]), fn(done, task) {
-          use done <- promise.await(done)
-          use problems <- promise.map(validate_task(environment, context, task))
-          list.append(done, problems)
-        }),
-      )
+      use problems <- promise.map(validate_contexts(
+        environment,
+        suite,
+        contexts,
+      ))
       case problems {
         [] ->
           io.println(
             "Every task of "
             <> suite.name
-            <> " is solved by its reference and failed by the null agent.",
+            <> " is solved by its reference and failed by the null agent in "
+            <> int.to_string(list.length(contexts))
+            <> " contexts.",
           )
         _ -> {
           list.each(problems, io.println)
@@ -459,6 +455,26 @@ fn validate(suite_path: String, options: Options) -> Promise(Nil) {
       }
     }
   }
+}
+
+/// Validate every selected context, keeping its name on each diagnostic.
+pub fn validate_contexts(
+  environment: Environment,
+  suite: Suite,
+  contexts: List(#(session.Context, String)),
+) -> Promise(List(String)) {
+  list.fold(contexts, promise.resolve([]), fn(done, selected) {
+    use done <- promise.await(done)
+    let #(context, name) = selected
+    list.fold(suite.tasks, promise.resolve(done), fn(done, task) {
+      use done <- promise.await(done)
+      use problems <- promise.map(validate_task(environment, context, task))
+      list.append(
+        done,
+        list.map(problems, fn(problem) { name <> ": " <> problem }),
+      )
+    })
+  })
 }
 
 pub fn validate_task(
