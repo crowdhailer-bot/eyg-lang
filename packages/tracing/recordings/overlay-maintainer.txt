@@ -1,0 +1,34 @@
+corin@assistance-bot:~/mono/repos/eyg-lang$ cd '/tmp/eyg-roadmap-context-workspace'
+corin@assistance-bot:/tmp/eyg-roadmap-context-workspace$ '/tmp/eyg-roadmap-pi-host/eyg' run -c 'let context =
+import "/home/corin/mono/repos/eyg-lang/packages/tracing/../../eyg_packages/overlay_maintainer/index.eyg" let
+workspace = context.workspace.at(match perform CWD({}) { Ok(path) -> { path } Error(_) -> { !never(perform Abo
+rt("no working directory")) } }) let source = context.source.at({owner: "crowdhailer-bot", name: "eyg-lang", b
+ranch: "b9fd9ec5758a39e7943e1223ad572a1b2dd89750", url: "https://github.com/crowdhailer-bot/eyg-lang"}) match
+source.read("eyg_packages/overlay_librarian/index.eyg") { Ok(text) -> { perform StandardOut(!string_append(!st
+ring_split(text, "\n").head, "\n")) } Error(reason) -> { !never(perform Abort(reason)) } }'
+// An Overlay context for finding libraries and guides before writing code.
+corin@assistance-bot:/tmp/eyg-roadmap-context-workspace$ '/tmp/eyg-roadmap-pi-host/eyg' run -c 'let context =
+import "/home/corin/mono/repos/eyg-lang/packages/tracing/../../eyg_packages/overlay_maintainer/index.eyg" let
+workspace = context.workspace.at(match perform CWD({}) { Ok(path) -> { path } Error(_) -> { !never(perform Abo
+rt("no working directory")) } }) match workspace.write_note({name: "Parsing JSON", description: "Use the JSON
+package", date: "2026-10-14", body: "Decode fields."}) { Ok(path) -> { perform StandardOut(!string_append(path
+, "\n")) } Error(reason) -> { !never(perform Abort(reason)) } }'
+notes/parsing-json.md
+corin@assistance-bot:/tmp/eyg-roadmap-context-workspace$ '/tmp/eyg-roadmap-pi-host/eyg' run -c 'let context =
+import "/home/corin/mono/repos/eyg-lang/packages/tracing/../../eyg_packages/overlay_maintainer/index.eyg" let
+workspace = context.workspace.at(match perform CWD({}) { Ok(path) -> { path } Error(_) -> { !never(perform Abo
+rt("no working directory")) } }) !list_fold(workspace.notes({}), {}, (note, _) -> { perform StandardOut(!strin
+g_append(note.path, !string_append(": ", !string_append(note.date, "\n")))) })'
+notes/parsing-json.md: 2026-10-14
+corin@assistance-bot:/tmp/eyg-roadmap-context-workspace$
+
+
+
+
+
+
+
+
+
+
+

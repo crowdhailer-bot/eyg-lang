@@ -5,7 +5,7 @@ import eyg/interpreter/cast
 import eyg/interpreter/value as v
 import gleam/javascript/promise
 import gleam/list
-import gleam/option
+import gleam/option.{Some}
 import gleam/string
 import overlay/eval
 import overlay/eval/agent.{Reply}
@@ -15,8 +15,11 @@ import overlay/eval/model
 import overlay/eval/module
 import overlay/eval/session
 import overlay/eval/transcript
+import simplifile
 
 const librarian = "../../eyg_packages/overlay_librarian/index.eyg"
+
+const maintainer = "../../eyg_packages/overlay_maintainer/index.eyg"
 
 fn setup(path) {
   let assert Ok(environment) = eval.environment("../..")
@@ -56,6 +59,20 @@ pub fn every_guide_in_the_index_is_on_the_site_test() {
   assert [] == list.filter(site, fn(slug) { !list.contains(slugs, slug) })
 }
 
+pub fn every_mapped_source_path_exists_test() {
+  let #(_, _, context) = setup(maintainer)
+  let paths = strings(field(context, ["source", "map"]), "path")
+  assert []
+    == list.filter(paths, fn(path) {
+      !result_true(simplifile.is_file("../../" <> path))
+      && !result_true(simplifile.is_directory("../../" <> path))
+    })
+}
+
+fn result_true(result) {
+  result == Ok(True)
+}
+
 fn run(path, code, workspace) {
   let #(environment, loaded, _) = setup(path)
   let agent = agent.scripted([[Reply("", [code]), Reply("done", [])]])
@@ -91,6 +108,45 @@ pub fn guides_are_read_from_the_site_in_a_session_test() {
   ))
   let assert transcript.Computed(v.Tagged("Ok", v.String(text))) = outcome
   assert string.contains(text, "@json")
+}
+
+pub fn source_is_read_from_the_repository_in_a_session_test() {
+  use #(outcome, _) <- promise.map(run(
+    maintainer,
+    "context.source.read(\"packages/touch_grass/src/touch_grass/harness/browser.gleam\")",
+    option.None,
+  ))
+  let assert transcript.Computed(v.Tagged("Ok", v.String(text))) = outcome
+  assert string.contains(text, "Sleep")
+}
+
+pub fn directories_are_listed_from_the_repository_in_a_session_test() {
+  use #(outcome, _) <- promise.map(run(
+    maintainer,
+    "context.source.list(\"eyg_packages\")",
+    option.None,
+  ))
+  let assert transcript.Computed(v.Tagged("Ok", v.LinkedList(entries))) =
+    outcome
+  let paths =
+    list.map(entries, fn(entry) {
+      let assert Ok(path) = cast.field("path", cast.as_string, entry)
+      path
+    })
+  assert list.contains(paths, "eyg_packages/overlay_maintainer")
+}
+
+pub fn notes_are_written_in_a_workspace_session_test() {
+  use #(outcome, transcript) <- promise.map(run(
+    maintainer,
+    "context.workspace.write_note({name: \"Parsing JSON\", description: \"Use @json\", date: \"2026-09-17\", body: \"Decode fields.\"})",
+    Some([]),
+  ))
+  assert transcript.Computed(v.Tagged("Ok", v.String("notes/parsing-json.md")))
+    == outcome
+  let assert Some(files) = transcript.workspace
+  let assert Ok(_) = list.key_find(files, "notes/parsing-json.md")
+  Nil
 }
 
 pub fn the_overlay_catalogue_example_runs_against_the_current_api_test() {
