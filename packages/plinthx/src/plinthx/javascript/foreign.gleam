@@ -34,6 +34,9 @@ pub fn is_function(value: Dynamic) -> Bool
 @external(javascript, "./foreign_ffi.mjs", "isUndefined")
 pub fn is_undefined(value: Dynamic) -> Bool
 
+@external(javascript, "./foreign_ffi.mjs", "isUint8Array")
+pub fn is_uint8_array(value: Dynamic) -> Bool
+
 @external(javascript, "./foreign_ffi.mjs", "isThenable")
 pub fn is_thenable(value: Dynamic) -> Bool
 

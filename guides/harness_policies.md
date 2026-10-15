@@ -60,3 +60,11 @@ From packages/opencode_plugin, run `gleam run -m build`, then `gleam test` and
 `gleam test --runtime node`. The checks cover actual file reads, mocked writes,
 denial, child restrictions, normalized rewrites, nested imports, pure gates,
 host failures and a native consumer of the built dist/core.mjs.
+
+`opencode_plugin/tools` adapts host tool schemas. Tool read becomes effect Read;
+mcp__github__search becomes McpGithubSearch. EYG arguments use snake case names,
+including nested edit records, and argument maps them back using the original
+schema. Null object fields are omitted. Structured replies use snake case names
+recursively; native byte arrays pass through unchanged. The model-facing type
+description marks optional fields with ?, selects the first anyOf alternative
+and describes numeric tool fields as Integer, matching EYG's numeric values.
