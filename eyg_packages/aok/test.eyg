@@ -1,85 +1,116 @@
 let aok = import "./index.eyg"
 let assert = aok.assert
+let fail = (reason) -> { !never(perform Abort(reason)) }
+// Each assertion may return a different value; the exported test list is uniform.
+let test = (name, body) -> {
+  {name, test: (_) -> { let _ = body({}) {} }}
+}
 
 let pass_test = (test) -> {
   match aok.run_test(test) {
     Pass(_) -> { {} }
-    Fail(reason) -> { perform Abort(!string_append("expected pass, got fail: ", reason)) }
+    Fail(reason) -> { fail(!string_append("expected pass, got fail: ", reason)) }
   }
 }
 
 let fail_test = (test, expected_reason) -> {
   match aok.run_test(test) {
-    Pass(_) -> { perform Abort("expected fail, got pass") }
+    Pass(_) -> { fail("expected fail, got pass") }
     Fail(reason) -> { assert.equal_string(reason, expected_reason) }
   }
 }
 
 [
-  {name: "equal returns its first arg when values match",
-   test: (_) -> { assert.equal(assert.equal(7, 7), 7) }},
+  test("equal returns its first arg when values match",
+   (_) -> { assert.equal(assert.equal(7, 7), 7) }),
 
-  {name: "equal aborts when values differ",
-   test: (_) -> { fail_test((_) -> { assert.equal(1, 2) }, "values were not equal") }},
+  test("equal aborts when values differ",
+   (_) -> { fail_test((_) -> { assert.equal(1, 2) }, "values were not equal") }),
 
-  {name: "equal_string passes on equal strings",
-   test: (_) -> { assert.equal_string(assert.equal_string("hi", "hi"), "hi") }},
+  test("equal_string passes on equal strings",
+   (_) -> { assert.equal_string(assert.equal_string("hi", "hi"), "hi") }),
 
-  {name: "ok unwraps an Ok variant",
-   test: (_) -> { assert.equal(assert.ok(Ok(42)), 42) }},
+  test("ok unwraps an Ok variant",
+   (_) -> { assert.equal(assert.ok(Ok(42)), 42) }),
 
-  {name: "ok aborts on Error",
-   test: (_) -> { fail_test((_) -> { assert.ok(Error("nope")) }, "value was not `Ok`") }},
+  test("ok aborts on Error",
+   (_) -> { fail_test((_) -> { assert.ok(Error("nope")) }, "value was not `Ok`") }),
 
-  {name: "error unwraps the Error reason",
-   test: (_) -> { assert.equal_string(assert.error(Error("bad")), "bad") }},
+  test("error unwraps the Error reason",
+   (_) -> { assert.equal_string(assert.error(Error("bad")), "bad") }),
 
-  {name: "error aborts on Ok",
-   test: (_) -> { fail_test((_) -> { assert.error(Ok(1)) }, "value was not `Error`") }},
+  test("error aborts on Ok",
+   (_) -> { fail_test((_) -> { assert.error(Ok(1)) }, "value was not `Error`") }),
 
-  {name: "true passes on True",
-   test: (_) -> { pass_test((_) -> { assert.true(True({})) }) }},
+  test("true passes on True",
+   (_) -> { pass_test((_) -> { assert.true(True({})) }) }),
 
-  {name: "true aborts on False",
-   test: (_) -> { fail_test((_) -> { assert.true(False({})) }, "value was not `True`") }},
+  test("true aborts on False",
+   (_) -> { fail_test((_) -> { assert.true(False({})) }, "value was not `True`") }),
 
-  {name: "false passes on False",
-   test: (_) -> { pass_test((_) -> { assert.false(False({})) }) }},
+  test("false passes on False",
+   (_) -> { pass_test((_) -> { assert.false(False({})) }) }),
 
-  {name: "contains finds an element",
-   test: (_) -> { assert.equal(assert.contains([1, 2, 3], 2), 2) }},
+  test("contains finds an element",
+   (_) -> { assert.equal(assert.contains([1, 2, 3], 2), 2) }),
 
-  {name: "contains aborts when absent",
-   test: (_) -> { fail_test(
+  test("contains aborts when absent",
+   (_) -> { fail_test(
      (_) -> { assert.contains([1, 2, 3], 99) },
      "list did not contain expected value"
-   ) }},
+   ) }),
 
-  {name: "run_test catches Abort as Fail",
-   test: (_) -> {
-     match aok.run_test((_) -> { perform Abort("nope") }) {
+  test("run_test catches Abort as Fail",
+   (_) -> {
+     match aok.run_test((_) -> { fail("nope") }) {
        Fail(reason) -> { assert.equal_string(reason, "nope") }
-       Pass(_) -> { perform Abort("expected Fail") }
+       Pass(_) -> { fail("expected Fail") }
      }
-   }},
+   }),
 
-  {name: "run_test returns Pass on success",
-   test: (_) -> {
+  test("run_test returns Pass on success",
+   (_) -> {
      match aok.run_test((_) -> { 0 }) {
        Pass(_) -> { 0 }
-       Fail(reason) -> { perform Abort(!string_append("expected Pass, got Fail: ", reason)) }
+       Fail(reason) -> { fail(!string_append("expected Pass, got Fail: ", reason)) }
      }
-   }},
+   }),
 
-  {name: "run_all preserves test order",
-   test: (_) -> {
+  test("run_all preserves test order",
+   (_) -> {
      let results = aok.run_all([
        {name: "first", test: (_) -> { 0 }},
        {name: "second", test: (_) -> { 0 }},
      ])
      match !list_pop(results) {
        Ok({head, tail: _}) -> { assert.equal_string(head.name, "first") }
-       Error(_) -> { perform Abort("run_all returned empty list") }
+       Error(_) -> { fail("run_all returned empty list") }
      }
-   }},
+   }),
+
+  test("first stdout captures the lift and abandons the body", (_) -> {
+    let result = aok.expect.standard_out((name) -> {
+      let _ = perform StandardOut(name)
+      fail("must not resume")
+    }, "hello")
+    assert.equal(result.lift, "hello")
+  }),
+  test("first log captures the lift", (_) -> {
+    assert.equal(aok.expect.log((_) -> { perform Log(42) }, {}).lift, 42)
+  }),
+  test("first abort captures the subject's abort", (_) -> {
+    assert.equal(aok.expect.abort((_) -> { fail("subject") }, {}).lift, "subject")
+  }),
+  test("missing abort is not mistaken for the subject's abort", (_) -> {
+    fail_test((_) -> { aok.expect.abort((_) -> { 42 }, {}) },
+      "expected `Abort` effect, none was performed")
+  }),
+  test("missing stdout fails", (_) -> {
+    fail_test((_) -> { aok.expect.standard_out((_) -> { 42 }, {}) },
+      "expected `StandardOut` effect, none was performed")
+  }),
+  test("missing log fails", (_) -> {
+    fail_test((_) -> { aok.expect.log((_) -> { 42 }, {}) },
+      "expected `Log` effect, none was performed")
+  }),
 ]

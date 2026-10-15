@@ -1,0 +1,19 @@
+// Minimal first-effect assertions. They deliberately abandon the continuation.
+let capture = (handler, name, f, arg) -> {
+  let outcome = handler((lift, _) -> { Found(lift) }, (_) -> {
+    let _ = f(arg)
+    Missing({})
+  })
+  // In particular, the missing-Abort assertion is outside its Abort handler.
+  match outcome {
+    Found(lift) -> { {lift} }
+    Missing(_) -> {
+      !never(perform Abort(!string_append("expected `", !string_append(name, "` effect, none was performed"))))
+    }
+  }
+}
+{
+  log: capture(handle Log, "Log"),
+  standard_out: capture(handle StandardOut, "StandardOut"),
+  abort: capture(handle Abort, "Abort")
+}
