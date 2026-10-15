@@ -6,6 +6,7 @@
 //// so requests built from the substitute match the recorded requests.
 
 import eyg/interpreter/value as v
+import eyg/ir/tree as ir
 import gleam/bit_array
 import gleam/dict
 import gleam/dynamic/decode
@@ -156,7 +157,33 @@ fn do_substitute(value, replacements) {
       v.Tagged(label, do_substitute(inner, replacements))
     v.Partial(switch, applied) ->
       v.Partial(switch, list.map(applied, do_substitute(_, replacements)))
-    v.Integer(_) | v.Closure(..) -> value
+    v.Closure(parameter, body, environment) -> {
+      let used = ir.free_variables(body, [parameter])
+      let body =
+        ir.rewrite_pure(body, fn(node) {
+          case node.0 {
+            ir.String(text) -> #(
+              ir.String(replace_all(text, replacements)),
+              node.1,
+            )
+            ir.Binary(bytes) -> {
+              let assert v.Binary(bytes) =
+                do_substitute(v.Binary(bytes), replacements)
+              #(ir.Binary(bytes), node.1)
+            }
+            expression -> #(expression, node.1)
+          }
+        })
+      let environment =
+        list.map(environment, fn(entry) {
+          case list.contains(used, entry.0) {
+            True -> #(entry.0, do_substitute(entry.1, replacements))
+            False -> entry
+          }
+        })
+      v.Closure(parameter, body, environment)
+    }
+    v.Integer(_) -> value
   }
 }
 
