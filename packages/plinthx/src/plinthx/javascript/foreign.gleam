@@ -11,8 +11,23 @@ pub fn to_dynamic(value: a) -> Dynamic
 @external(javascript, "./foreign_ffi.mjs", "apply")
 pub fn apply(function: Dynamic, arguments: Array(Dynamic)) -> Dynamic
 
+@external(javascript, "./foreign_ffi.mjs", "tryApply")
+pub fn try_apply(
+  function: Dynamic,
+  arguments: Array(Dynamic),
+) -> Result(Dynamic, Dynamic)
+
 @external(javascript, "./foreign_ffi.mjs", "isFunction")
 pub fn is_function(value: Dynamic) -> Bool
+
+@external(javascript, "./foreign_ffi.mjs", "isUndefined")
+pub fn is_undefined(value: Dynamic) -> Bool
+
+@external(javascript, "./foreign_ffi.mjs", "isThenable")
+pub fn is_thenable(value: Dynamic) -> Bool
+
+@external(javascript, "./foreign_ffi.mjs", "error")
+pub fn error(message: String) -> Dynamic
 
 /// Attach a body while delegating invocation to a host callback.
 @external(javascript, "./foreign_ffi.mjs", "wrap")

@@ -41,6 +41,7 @@ Projects in this repo introduce extra contraints, over regular programming langu
 - Immutable acquisition, private sandboxes and offline evaluation are explained in [`guides/sandbox.md`](./guides/sandbox.md).
 - To install from source see [`./guides/install_from_source.md`](./guides/install_from_source.md).
 - To boot the CLI on a Raspberry Pi image see [`./guides/embedding_pi.md`](./guides/embedding_pi.md).
+- The [JavaScript host bundle](./guides/embedding_javascript.md) exposes a retained typed shell without a Gleam toolchain.
 
 ## Packages
 
