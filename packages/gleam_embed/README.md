@@ -91,3 +91,4 @@ executes it. Recreate it from packages/tracing with
 
 The [JSON boundary](../../guides/embedding_json.md) exchanges plain data and describes
 closed effect signatures for hosts outside Gleam.
+An [embedded agent](../../guides/embedded_agents.md) can share the same retained shell.

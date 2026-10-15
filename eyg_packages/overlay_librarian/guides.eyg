@@ -46,7 +46,8 @@ let index = [
   {slug: "advanced-effects", title: "Advanced effects", summary: "Stateful and shared state handlers, and why effects should not return functions.", keywords: "effect handler state counter resume"},
   {slug: "masking-handlers-and-enforcing-purity", title: "Masking handlers and enforcing purity", summary: "Skip one handler or guard a pure application.", keywords: "effect mask handler pure callback"},
   {slug: "shallow-handlers", title: "Shallow handlers", summary: "Resume raw continuations under explicitly chosen handlers.", keywords: "effect handler shallow continuation resume step"},
-  {slug: "json-boundaries-for-embedded-eyg", title: "JSON boundaries for embedded EYG", summary: "Exchange plain data and declare closed effect types.", keywords: "embed host json type effect codec"}
+  {slug: "json-boundaries-for-embedded-eyg", title: "JSON boundaries for embedded EYG", summary: "Exchange plain data and declare closed effect types.", keywords: "embed host json type effect codec"},
+  {slug: "agents-in-an-embedded-shell", title: "Agents in an embedded shell", summary: "Give an agent the same typed effects as a person.", keywords: "embed host agent shell run model tool"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
