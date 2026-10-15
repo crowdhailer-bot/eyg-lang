@@ -305,15 +305,18 @@ fn absolute(label, lift, directory) {
     | "Read", v.Record(fields)
     | "Write", v.Record(fields)
     | "Edit", v.Record(fields)
+    | "Grep", v.Record(fields)
+    | "Glob", v.Record(fields)
     ->
-      case dict.get(fields, "path") {
-        Ok(v.String(path)) ->
-          resolve(path)
-          |> result.map(fn(path) {
-            v.Record(dict.insert(fields, "path", v.String(path)))
-          })
-        _ -> Ok(lift)
-      }
+      list.try_fold(["path", "file_path"], fields, fn(fields, name) {
+        case dict.get(fields, name) {
+          Ok(v.String(path)) ->
+            resolve(path)
+            |> result.map(fn(path) { dict.insert(fields, name, v.String(path)) })
+          _ -> Ok(fields)
+        }
+      })
+      |> result.map(v.Record)
     _, _ -> Ok(lift)
   }
 }

@@ -351,3 +351,31 @@ pub fn native_file_tool_paths_are_absolute_before_gates_and_callbacks_test() {
   assert opencode_plugin.report_text(report) == "True({})"
   assert opencode_plugin.report_effects(report) == ["Read", "Write", "Edit"]
 }
+
+pub fn native_file_path_fields_are_normalized_together_test() {
+  use config <- promise.await(configured("{policy: {read: Pass}}"))
+  let hosts = [
+    opencode_plugin.host(
+      "Read",
+      "{file_path: String, path: String}",
+      "Any",
+      foreign.to_dynamic(fn(input, _) { promise.resolve(input) }),
+    ),
+  ]
+  use report <- promise.map(opencode_plugin.run(
+    "perform Read({file_path: \"nested/../notes.md\", path: \"./notes.md\"})",
+    opencode_plugin.config_policy(config),
+    opencode_plugin.config_context(config),
+    directory(),
+    hosts,
+  ))
+  assert opencode_plugin.report_ok(report)
+  assert string.contains(
+    opencode_plugin.report_text(report),
+    "file_path: \"" <> directory() <> "/notes.md\"",
+  )
+  assert string.contains(
+    opencode_plugin.report_text(report),
+    "path: \"" <> directory() <> "/notes.md\"",
+  )
+}
