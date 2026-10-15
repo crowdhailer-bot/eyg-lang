@@ -1,0 +1,11 @@
+cd packages/opencode_plugin && gleam run -m upstream_check
+corin@assistance-bot:~/mono/repos/eyg-lang$ cd packages/opencode_plugin && gleam run -m upstream_check
+   Compiled in 0.47s
+    Running upstream_check.main
+PASS native tools: Shout -> HELLO; Timing mocked; Secret unavailable; original input, hooks and permissions re
+tained
+PASS MCP tools use their normal permission and event pipeline
+PASS Task metadata sets child policy before its first call and later calls retain it
+PASS gate/off modes, early dispatcher return and cancellation completion hook
+PASS actual OpenCode v1.19.0 dispatcher
+corin@assistance-bot:~/mono/repos/eyg-lang/packages/opencode_plugin$

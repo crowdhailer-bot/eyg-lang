@@ -35,6 +35,8 @@ the child gate runs first, followed by the parent gates. Rewritten file paths
 are normalized to absolute paths before each gate. A Mock ends the chain,
 since it performs no host operation. A named agent's configured policy can
 serve as its starting policy; adapters choose when explicit escalation is allowed.
+An omitted gate stays unavailable in descendants, including gates for effects
+that are normally open by default. A child can also gate an open default effect.
 
 Relative program imports use the read_file gate for every file, including
 nested imports. A rewritten module path anchors further imports to its new

@@ -21,10 +21,14 @@ ogre = ">= 1.1.0 and < 2.0.0"
 overlay = { path = "../overlay" }
 touch_grass = { path = "../touch_grass" }
 plinthx = { path = "../plinthx" }
+envoy = ">= 1.2.0 and < 2.0.0"
+simplifile = ">= 2.4.0 and < 3.0.0"
+gleam_sha256 = { path = "../gleam_sha256" }
 
 [dev_dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
-simplifile = ">= 2.4.0 and < 3.0.0"
+argv = ">= 1.0.0 and < 2.0.0"
+gleam_http = ">= 4.4.0 and < 5.0.0"
 
 [javascript]
 runtime = "bun"

@@ -7,6 +7,7 @@
 # You should check this file into your source control repository.
 
 packages = [
+  { name = "argv", version = "1.1.0", build_tools = ["gleam"], requirements = [], otp_app = "argv", source = "hex", outer_checksum = "3277D100448BDB4A29B6D58C0F36F631CBC349E8BDD09766C6309DF202831140" },
   { name = "base32", version = "1.0.0", build_tools = ["rebar3"], requirements = [], otp_app = "base32", source = "hex", outer_checksum = "0449285348ED0C4CD83C7198E76C5FD5A0451C4EF18695B9FD43792A503E551A" },
   { name = "bigi", version = "4.1.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "bigi", source = "hex", outer_checksum = "44FEDF1DF5C1F426A80B67C32B976D0828D66524E11BDC2DD22B78D37C883BA7" },
   { name = "castor", version = "2.1.0", build_tools = ["gleam"], requirements = ["gleam_json", "gleam_stdlib", "non_empty_list", "oas_generator_utils"], otp_app = "castor", source = "hex", outer_checksum = "D3659680ABFE81634E27479479431ED66FC43F2547FDB41F0E9ACDE798CD4B13" },
@@ -56,14 +57,18 @@ packages = [
 ]
 
 [requirements]
+argv = { version = ">= 1.0.0 and < 2.0.0" }
+envoy = { version = ">= 1.2.0 and < 2.0.0" }
 eyg_analysis = { path = "../gleam_analysis" }
 eyg_hub = { path = "../gleam_hub" }
 eyg_interpreter = { path = "../gleam_interpreter" }
 eyg_ir = { path = "../gleam_ir" }
 eyg_parser = { path = "../gleam_parser" }
 filepath = { version = ">= 1.1.2 and < 2.0.0" }
+gleam_http = { version = ">= 4.4.0 and < 5.0.0" }
 gleam_javascript = { version = ">= 1.0.0 and < 2.0.0" }
 gleam_json = { version = ">= 3.1.0 and < 4.0.0" }
+gleam_sha256 = { path = "../gleam_sha256" }
 gleam_stdlib = { version = ">= 0.44.0 and < 2.0.0" }
 gleeunit = { version = ">= 1.0.0 and < 2.0.0" }
 javascript_mutable_reference = { version = ">= 1.0.0 and < 2.0.0" }
