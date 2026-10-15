@@ -10,6 +10,9 @@ pub fn get_location() -> Result(Location, Nil)
 @external(javascript, "./html_ffi.mjs", "hash")
 pub fn hash(location: Location) -> String
 
+@external(javascript, "./html_ffi.mjs", "search")
+pub fn search(location: Location) -> String
+
 @external(javascript, "./html_ffi.mjs", "setInnerHtml")
 pub fn set_inner_html(element: Element, html: String) -> Result(Nil, String)
 

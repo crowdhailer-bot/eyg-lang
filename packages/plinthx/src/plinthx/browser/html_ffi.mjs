@@ -5,6 +5,7 @@ export function getLocation() {
   return globalThis.Location && location instanceof globalThis.Location ? Result$Ok(location) : Result$Error(undefined);
 }
 export const hash = location => location.hash;
+export const search = location => location.search;
 export function setInnerHtml(element, html) {
   try { element.innerHTML = html; return Result$Ok(undefined); }
   catch (error) { return Result$Error(String(error)); }
