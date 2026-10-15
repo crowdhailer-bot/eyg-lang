@@ -2,7 +2,8 @@ import eyg/ir/dag_json
 import eyg/ir/tree as ir
 import eyg/parser
 import eyg/parser/parser.{
-  InvalidCidReference, InvalidImportPath, InvalidReleaseVersion,
+  ExpectedEffectName, InvalidCidReference, InvalidImportPath,
+  InvalidReleaseVersion,
 } as _
 import gleeunit/should
 import multiformats/cid/v1
@@ -38,6 +39,18 @@ pub fn literal_test() {
   // |> parser.all_from_string()
   // |> should.be_ok()
   // |> should.equal(#(ir.String("hello"), #(0, 7)))
+}
+
+pub fn shallow_handler_and_contextual_keyword_test() {
+  parser.all_from_string("handle shallow Ping")
+  |> should.equal(Ok(#(ir.Shallow("Ping"), #(0, 19))))
+  parser.all_from_string("handle Ping")
+  |> should.equal(Ok(#(ir.Handle("Ping"), #(0, 11))))
+  parser.all_from_string("let shallow = 1 shallow") |> should.be_ok
+  parser.all_from_string("handle shallow ping")
+  |> should.equal(Error(ExpectedEffectName("handle shallow", 15)))
+  parser.all_from_string("handle shallow")
+  |> should.equal(Error(ExpectedEffectName("handle shallow", 14)))
 }
 
 pub fn mask_contextual_keyword_test() {

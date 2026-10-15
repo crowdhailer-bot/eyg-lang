@@ -185,6 +185,7 @@ pub fn top_content(projection) {
         | e.String(_)
         | e.Perform(_)
         | e.Deep(_)
+        | e.Shallow(_)
         | e.Mask(_) -> [
           edit(),
           call_with(),

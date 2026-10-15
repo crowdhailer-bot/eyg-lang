@@ -62,6 +62,10 @@ pub fn stateful_handler_has_bounded_stack_and_capture_test() {
   check("../../guides/examples/stateful_handler_workload.eyg", dynamic.int)
 }
 
+pub fn shallow_state_has_bounded_stack_and_capture_test() {
+  check("../../spec/evaluation/shallow_counter.eyg", dynamic.int)
+}
+
 pub fn interleaved_handlers_have_bounded_stack_and_capture_test() {
   check("../../guides/examples/composed_stateful_workload.eyg", fn(n) {
     foreign.object(

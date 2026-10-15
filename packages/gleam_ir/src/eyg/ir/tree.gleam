@@ -38,6 +38,9 @@ pub type Expression(m) {
 
   Perform(label: String)
   Handle(label: String)
+  /// Curried operation callback, return callback, then body thunk.
+  /// Resumption excludes this delimiter and its return callback.
+  Shallow(label: String)
   Mask(label: String)
 
   Builtin(identifier: String)
@@ -154,6 +157,10 @@ pub fn perform(label) {
 
 pub fn handle(label) {
   #(Handle(label), Nil)
+}
+
+pub fn shallow(label) {
+  #(Shallow(label), Nil)
 }
 
 pub fn mask(label) {
@@ -514,6 +521,7 @@ pub fn map_children(
     NoCases -> return(NoCases)
     Perform(label:) -> return(Perform(label:))
     Handle(label:) -> return(Handle(label:))
+    Shallow(label:) -> return(Shallow(label:))
     Mask(label:) -> return(Mask(label:))
     Builtin(identifier:) -> return(Builtin(identifier:))
     Reference(reference:) -> return(Reference(reference:))
@@ -625,6 +633,7 @@ pub fn map_children_with(
     NoCases -> return(#(acc, NoCases))
     Perform(label:) -> return(#(acc, Perform(label:)))
     Handle(label:) -> return(#(acc, Handle(label:)))
+    Shallow(label:) -> return(#(acc, Shallow(label:)))
     Mask(label:) -> return(#(acc, Mask(label:)))
     Builtin(identifier:) -> return(#(acc, Builtin(identifier:)))
     Reference(reference:) -> return(#(acc, Reference(reference:)))

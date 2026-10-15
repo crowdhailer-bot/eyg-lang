@@ -2,11 +2,13 @@ import eyg/interpreter/builtin
 import eyg/interpreter/state
 import eyg/interpreter/value as v
 import eyg/ir/tree as ir
+import eyg/parser
 import gleam/dict
 import gleam/int
 import gleam/io
 import gleam/list
 import gleeunit/should
+import simplifile
 
 // The state-passing handler in guides/examples/increment_counter.eyg, with a
 // builtin fold as its workload so recursion in the workload cannot distort
@@ -163,6 +165,22 @@ fn run(source, count) {
       #("iterations", v.Integer(count)),
     ])
   measure(state.Loop(state.E(source), env, state.Empty), 0, 0)
+}
+
+pub fn shallow_state_replacement_has_bounded_stack_test() {
+  let source =
+    simplifile.read("../../spec/evaluation/shallow_counter.eyg")
+    |> should.be_ok
+    |> parser.all_from_string
+    |> should.be_ok
+    |> ir.clear_annotation
+  let source = ir.apply(source, ir.variable("items"))
+  let #(_, limit, _) = run(source, 10)
+  list.each([0, 1, 10, 100, 1000, 10_000], fn(n) {
+    let #(result, depth, _) = run(source, n)
+    result |> should.equal(Ok(v.Integer(n)))
+    { depth <= limit } |> should.be_true
+  })
 }
 
 pub fn state_passing_count_and_stack_measurement_test() {

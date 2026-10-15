@@ -104,6 +104,27 @@ pub fn externalize_moves_large_binaries_test() {
   assert value.inline(external, store) == Ok(encoded)
 }
 
+pub fn partially_applied_shallow_handler_round_trips_test() {
+  let assert Ok(handler) =
+    expression.execute(ir.lambda("_", ir.lambda("_", ir.integer(42))), [])
+  let assert Ok(on_return) =
+    expression.execute(
+      ir.lambda("x", ir.apply(ir.builtin("string_length"), ir.variable("x"))),
+      [],
+    )
+  let assert Ok(restored) =
+    round_trip(v.Partial(v.Shallow("Ping"), [handler, on_return]))
+  let assert Ok(body) =
+    expression.execute(ir.lambda("_", ir.string("hello")), [])
+  assert expression.call(restored, [#(body, Nil)]) == Ok(v.Integer(5))
+  let assert Ok(body) =
+    expression.execute(
+      ir.lambda("_", ir.apply(ir.perform("Ping"), ir.unit())),
+      [],
+    )
+  assert expression.call(restored, [#(body, Nil)]) == Ok(v.Integer(42))
+}
+
 pub fn externalize_keeps_small_binaries_test() {
   let encoded = value.encode(v.Binary(<<"small">>))
   let #(external, store) = value.externalize(encoded, store.new(), 8, sha256)

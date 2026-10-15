@@ -18,6 +18,7 @@ fn check_term(term) {
 }
 
 pub fn literal_test() {
+  check_term(v.Partial(v.Shallow("Ping"), []))
   check_term(v.Partial(v.Mask("Ping"), []))
   check_term(v.Integer(0))
   check_term(v.String("hello"))

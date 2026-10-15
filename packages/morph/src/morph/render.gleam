@@ -286,6 +286,11 @@ pub fn expression(exp, rev, errors) {
         Span([Class(keyword)], [Text("handle ")]),
         Span([Class(effect), exp_key(rev)], [Text(label)]),
       ])
+    e.Shallow(label) ->
+      frame.Inline([
+        Span([Class(keyword)], [Text("handle shallow ")]),
+        Span([Class(effect), exp_key(rev)], [Text(label)]),
+      ])
     e.Mask(label) ->
       frame.Inline([
         Span([Class(keyword)], [Text("mask ")]),

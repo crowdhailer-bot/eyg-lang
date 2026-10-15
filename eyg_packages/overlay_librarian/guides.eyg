@@ -44,7 +44,8 @@ let index = [
   {slug: "start-overlay-from-scripts", title: "Start Overlay from scripts", summary: "Use Overlay and TypeCheck from scripts with captured context functions.", keywords: "agent script overlay typecheck context closure"},
   {slug: "deep-effect-handlers", title: "Deep effect handlers", summary: "Resume operations with persistent delimiters and bounded continuations.", keywords: "effect handler deep continuation resume stack"},
   {slug: "advanced-effects", title: "Advanced effects", summary: "Stateful and shared state handlers, and why effects should not return functions.", keywords: "effect handler state counter resume"},
-  {slug: "masking-handlers-and-enforcing-purity", title: "Masking handlers and enforcing purity", summary: "Skip one handler or guard a pure application.", keywords: "effect mask handler pure callback"}
+  {slug: "masking-handlers-and-enforcing-purity", title: "Masking handlers and enforcing purity", summary: "Skip one handler or guard a pure application.", keywords: "effect mask handler pure callback"},
+  {slug: "shallow-handlers", title: "Shallow handlers", summary: "Resume raw continuations under explicitly chosen handlers.", keywords: "effect handler shallow continuation resume step"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
