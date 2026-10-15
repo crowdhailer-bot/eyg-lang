@@ -109,4 +109,4 @@ compares adapters against the actual computer registry. Run `eyg script entry.ey
 from the repository root.
 
 A finite expectation list bounds accepted interactions, not computation between
-them.
+them. For explicit continuation experiments, see [shallow stepping](./shallow_effect_handlers.md).

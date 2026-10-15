@@ -1,0 +1,7 @@
+corin@assistance-bot:~/mono/repos/eyg-lang$ '/tmp/eyg-roadmap-pi-host/eyg' eval guides/examples/shallow_expect
+ations.eyg
+Ok("Ada")
+corin@assistance-bot:~/mono/repos/eyg-lang$ '/tmp/eyg-roadmap-pi-host/eyg' eval guides/examples/shallow_state.
+eyg
+{state: 1, value: [0, 2, 1]}
+corin@assistance-bot:~/mono/repos/eyg-lang$

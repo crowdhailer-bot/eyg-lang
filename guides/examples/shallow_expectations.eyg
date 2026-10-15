@@ -1,0 +1,23 @@
+let {assert, shallow} = import "../../eyg_packages/aok/index.eyg"
+let program = (_) -> {
+  let _ = perform StandardOut("Loading\n")
+  let bytes = assert.ok(perform ReadFile({path: "/mock/name", offset: 0, limit: 100}))
+  let name = assert.ok(!string_from_binary(bytes))
+  let _ = perform StandardOut(!string_append("Hello ", name))
+  name
+}
+
+handle Abort((reason, _) -> { Error(reason) }, (_) -> {
+Ok(shallow.run((_) -> {
+  let first = shallow.stdout(program, {})
+  let _ = assert.equal(first.lift, "Loading\n")
+  let second = shallow.read_file(first.resume, {})
+  let _ = assert.equal(second.lift.path, "/mock/name")
+  let third = shallow.stdout(second.resume, Ok(!string_to_binary("Ada")))
+  let _ = assert.equal(third.lift, "Hello Ada")
+  let result = third.resume({})
+  let _ = assert.equal(result, "Ada")
+  result
+}))
+})
+// Ok("Ada")

@@ -1,0 +1,104 @@
+let {assert, shallow, run_test} = import "./index.eyg"
+let fail = (reason) -> { !never(perform Abort(reason)) }
+let test = (name, body) -> { {name, test: (_) -> { let _ = body({}) {} }} }
+let failure = (body, reason) -> { assert.equal(run_test(body), Fail(reason)) }
+
+let program = (_) -> {
+  let _ = perform StandardOut("Loading")
+  let bytes = assert.ok(perform ReadFile({path: "/mock", offset: 0, limit: 10}))
+  let name = assert.ok(!string_from_binary(bytes))
+  let _ = perform StandardOut(name)
+  name
+}
+
+[
+  test("shallow steps through stdout, read, stdout and completion", (_) -> {
+    shallow.run((_) -> {
+      let a = shallow.stdout(program, {})
+      let _ = assert.equal(a.lift, "Loading")
+      let b = shallow.read_file(a.resume, {})
+      let _ = assert.equal(b.lift, {path: "/mock", offset: 0, limit: 10})
+      let c = shallow.stdout(b.resume, Ok(!string_to_binary("Ada")))
+      let _ = assert.equal(c.lift, "Ada")
+      assert.equal(c.resume({}), "Ada")
+    })
+  }),
+  test("shallow next handler receives the next repeated output", (_) -> {
+    shallow.run((_) -> {
+      let a = shallow.stdout((_) -> {
+        let _ = perform StandardOut("a")
+        let _ = perform StandardOut("b")
+        42
+      }, {})
+      let b = shallow.stdout(a.resume, {})
+      let _ = assert.equal(b.lift, "b")
+      assert.equal(b.resume({}), 42)
+    })
+  }),
+  test("shallow guards reject wrong order instead of skipping an effect", (_) -> {
+    failure((_) -> { shallow.run((_) -> { shallow.read_file(program, {}) }) },
+      "step 1: unexpected StandardOut")
+  }),
+  test("shallow guards reject extra effects after the final expectation", (_) -> {
+    failure((_) -> { shallow.run((_) -> {
+      let a = shallow.stdout((_) -> {
+        let _ = perform StandardOut("a")
+        perform StandardOut("extra")
+      }, {})
+      a.resume({})
+    }) }, "step 1: unexpected StandardOut")
+  }),
+  test("shallow missing stdout is reported on normal completion", (_) -> {
+    failure((_) -> { shallow.run((_) -> { shallow.stdout((_) -> { 42 }, {}) }) },
+      "expected `StandardOut` effect, none was performed")
+  }),
+  test("shallow missing read is reported on normal completion", (_) -> {
+    failure((_) -> { shallow.run((_) -> { shallow.read_file((_) -> { 42 }, {}) }) },
+      "expected `ReadFile` effect, none was performed")
+  }),
+  test("shallow assertions cannot be swallowed by a subject handler", (_) -> {
+    failure((_) -> { shallow.run((_) -> {
+      let a = shallow.stdout((_) -> {
+        handle Abort((_, _) -> { {} }, (_) -> { perform StandardOut("a") })
+      }, {})
+      fail("assertion outside subject")
+    }) }, "assertion outside subject")
+  }),
+  test("shallow observes failures after the last expected operation", (_) -> {
+    failure((_) -> { shallow.run((_) -> {
+      let a = shallow.stdout((_) -> {
+        let _ = perform StandardOut("a") fail("after output")
+      }, {})
+      a.resume({})
+    }) }, "after output")
+  }),
+  test("shallow log returns the lift and a resumable body", (_) -> {
+    let a = shallow.log((_) -> { let _ = perform Log("hello") 42 }, {})
+    let _ = assert.equal(a.lift, "hello")
+    handle Log((_, _) -> { fail("extra Log") }, (_) -> {
+      assert.equal(a.resume({}), 42)
+    })
+  }),
+  test("shallow missing log fails", (_) -> {
+    failure((_) -> { shallow.log((_) -> { 42 }, {}) },
+      "expected `Log` effect, none was performed")
+  }),
+  test("shallow abort captures only the subject's abort", (_) -> {
+    assert.equal(shallow.abort((_) -> { fail("subject") }, {}).lift, "subject")
+  }),
+  test("shallow missing abort is outside the shallow handler", (_) -> {
+    failure((_) -> { shallow.abort((_) -> { 42 }, {}) },
+      "expected `Abort` effect, none was performed")
+  }),
+  test("shallow generic first supports multi-shot resumption", (_) -> {
+    let a = shallow.first(handle shallow Choose, "Choose", (_) -> {
+      !int_multiply(perform Choose({}), 10)
+    }, {})
+    handle Choose((_, _) -> { fail("extra Choose") }, (_) -> {
+      assert.equal(!int_add(a.resume(1), a.resume(2)), 30)
+    })
+  }),
+  test("shallow guard accepts a completed effect-free scenario", (_) -> {
+    assert.equal(shallow.run((_) -> { 42 }), 42)
+  }),
+]

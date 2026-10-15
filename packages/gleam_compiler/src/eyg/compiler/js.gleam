@@ -15,7 +15,7 @@ pub fn render(exp: ir.Node(Nil), handler: String) -> String {
       [
         "const extrinsic = " <> handler,
         "const $runtime = (" <> runtime.source <> ").create(extrinsic)",
-        "const $run = $runtime.run, $fn = $runtime.function_, $call = $runtime.call, $bind = $runtime.bind, $handle = $runtime.handle, $perform = $runtime.perform, $mask = $runtime.mask",
+        "const $run = $runtime.run, $fn = $runtime.function_, $call = $runtime.call, $bind = $runtime.bind, $handle = $runtime.handle, $perform = $runtime.perform, $mask = $runtime.mask, $shallow = $runtime.shallow",
         "const bind = $runtime.bind_builtin, fix = $runtime.fix, list_fold = $runtime.list_fold, binary_fold = $runtime.binary_fold, never = $runtime.never, pure = $runtime.pure_",
         ..used
         |> list.filter(fn(name) { !runtime.defines(name) })
@@ -73,6 +73,10 @@ fn stack_expression(source: ir.Node(Nil)) -> String {
       <> escape_js(label)
       <> "\", handler, body))"
     ir.Mask(label) -> "$fn(body => $mask(\"" <> escape_js(label) <> "\", body))"
+    ir.Shallow(label) ->
+      "$fn(handler => onReturn => body => $shallow(\""
+      <> escape_js(label)
+      <> "\", handler, onReturn, body))"
     ir.Builtin(name) ->
       case runtime.defines(name) || render_builtin(name) != "" {
         True -> "$fn(" <> name <> ")"
@@ -87,6 +91,7 @@ pub fn needs_effect_runtime(node: ir.Node(a)) {
   case node.0 {
     ir.Perform(_)
     | ir.Handle(_)
+    | ir.Shallow(_)
     | ir.Mask(_)
     | ir.Builtin("pure")
     | ir.Builtin("bind")

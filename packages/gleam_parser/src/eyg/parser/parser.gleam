@@ -293,6 +293,12 @@ pub fn expression(tokens) {
       }
     t.Handle ->
       case rest {
+        [#(t.Name("shallow"), _), #(t.Uppername(label), end), ..rest] -> {
+          let span = #(start, end + string.length(label))
+          Ok(#(#(ir.Shallow(label), span), rest))
+        }
+        [#(t.Name("shallow"), at), ..rest] ->
+          Error(ExpectedEffectName("handle shallow", next_pos(rest, at + 7)))
         [#(t.Uppername(label), end), ..rest] -> {
           let span = #(start, end + string.length(label))
           Ok(#(#(ir.Handle(label), span), rest))

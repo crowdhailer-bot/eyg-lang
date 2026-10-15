@@ -59,6 +59,7 @@ let assert = {
 }
 
 let expect = import "./expect.eyg"
+let shallow = import "./shallow.eyg"
 
 
 // Invoke a single test closure with `{}` under a deep `Abort` handler.
@@ -144,6 +145,7 @@ let debug = !fix((self, tests, name) -> {
 {
   assert,
   expect,
+  shallow,
   run_test,
   run_all,
   all,

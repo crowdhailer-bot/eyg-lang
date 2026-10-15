@@ -83,6 +83,8 @@ References are encoded as Content IDentifiers (CIDs).
 {"0": "h", "l": label}
 // shallow(label)
 {"0": "hs", "l": label}
+// mask(label)
+{"0": "hm", "l": label}
 // builtin(label)
 {"0": "b", "l": label}
 // reference(identifier)
@@ -91,22 +93,44 @@ References are encoded as Content IDentifiers (CIDs).
 {"0": "#", "p": string, "r": integer, "l": cid}
 ```
 
-## Masking and purity
+## Handler semantics
 
-`Mask(label)` is encoded as `{"0":"hm","l":"E"}`. It takes a body thunk
-and skips one enclosing matching handler for operations crossing its boundary.
-Handlers installed inside the body still apply. Mask frames are retained in
-captured continuations. An outstanding mask at the platform boundary produces
-`MaskedEffect`, not host dispatch.
+`Handle(label)` (`h`) is a curried two-argument primitive: operation callback,
+then body thunk. The body is called with `{}`. On a matching effect the callback
+receives the payload and a deep continuation. That continuation includes the
+matching delimiter. The callback runs outside it; normal body return passes
+through unchanged.
 
-Its type is `({} -> e A) -> <E(P,Q) | e> A`. The skipped signature is independent
-of any outer signature of the same label. Effect rows retain scoped duplicates.
+`Mask(label)` (`hm`) takes one body thunk. Operations crossing its boundary skip
+one enclosing matching handler; newly installed inner handlers still apply.
+Mask frames remain in captured resumptions. An operation with an outstanding
+mask at the host boundary fails with `MaskedEffect`, not platform dispatch.
+Its type is `({} -> e A) -> <E(P,Q) | e> A`, with independent skipped-handler
+request and reply types. Duplicate labels are scoped, not set-unioned.
 
-`!pure(f)` returns a wrapper that guards one application. An effect reaching the
-guard fails with `ImpureEffect` before any outer handler or platform operation.
-Inner handlers remain usable; returned functions do not inherit the guard.
-These semantics apply even without type checking. Shared fixtures are in
-`masking.json` and `masking_errors.json`.
+`!pure(f)` returns a wrapper that installs a purity boundary for each application.
+Dispatch reaching that boundary fails with `ImpureEffect` before any outer
+handler or the host runs. Inner handlers are allowed; the guard is not inherited
+by functions returned from the application. Non-functions are rejected.
+These rules apply with or without type checking. Shared positive and negative
+fixtures are in `masking.json` and `masking_errors.json`.
+
+`Shallow(label)` (`hs`) takes operation callback, normal-return callback, then
+body thunk. It captures the suspended computation **without** its matching
+delimiter or return callback. Normal completion under the delimiter calls the
+return callback; an operation callback's answer bypasses it. Both callbacks run
+outside the delimiter. The raw body result and handled answer can have different
+types. A raw continuation retains the body's effects, including the handled label.
+
+Both primitives capture intervening inner handlers but not outer delimiters.
+Both permit abandoning or repeatedly resuming immutable continuations.
+See [the shallow guide](../guides/shallow_effect_handlers.md) for the type rule
+and its conservative scoped-row restriction.
+
+The source fixtures in [shallow_handlers.json](./shallow_handlers.json) are
+shared by the parser-backed inference, interpreter, and compiler tests.
+The existing JSON IR fixtures and their content identifiers remain compatible;
+`ir_suite.json` includes the separate `hs` encoding.
 
 ## Builtins
 
@@ -126,6 +150,7 @@ There is also a `fix` builtin that introduces recursion.
 This means there are no guarantees about memory usage of a general EYG program.
 
 It is possible to track use of builtins if you want these gurantees.
-For example a program without `fix` is total an guaranteed to terminate.
+Absence of `fix` alone does not prove termination: unchecked self-application,
+effect handlers, imports, and external waits must also be considered.
 It is a non-goal of the eyg libraries to support all these usecases.
 However if you have a need for them please reach out.

@@ -14,6 +14,12 @@ pub type Step {
   Call(function: Dynamic, argument: Dynamic)
   Bind(value: Dynamic, then: fn(Dynamic) -> Dynamic)
   Handle(label: String, handler: Dynamic, body: Dynamic)
+  ShallowCall(
+    label: String,
+    handler: Dynamic,
+    on_return: Dynamic,
+    body: Dynamic,
+  )
   Perform(label: String, value: Dynamic)
   MaskCall(label: String, body: Dynamic)
   PureCall(function: Dynamic, argument: Dynamic)
@@ -22,7 +28,7 @@ pub type Step {
 
 pub type Frame {
   Then(fn(Dynamic) -> Dynamic)
-  Delimiter(String, Dynamic)
+  Delimiter(String, Dynamic, Option(Dynamic))
   MaskBoundary(String)
   PureBoundary
 }
@@ -40,6 +46,7 @@ pub type Runtime {
     bind: fn(Dynamic, fn(Dynamic) -> Dynamic) -> Dynamic,
     bind_builtin: fn(Dynamic) -> fn(Dynamic) -> Dynamic,
     handle: fn(String, Dynamic, Dynamic) -> Dynamic,
+    shallow: fn(String, Dynamic, Dynamic, Dynamic) -> Dynamic,
     perform: fn(String, Dynamic) -> Dynamic,
     mask: fn(String, Dynamic) -> Dynamic,
     pure_: fn(Dynamic) -> Dynamic,
@@ -67,6 +74,9 @@ pub fn create(host: Dynamic) -> Runtime {
     },
     handle: fn(label, handler, body) {
       foreign.to_dynamic(Handle(label, handler, body))
+    },
+    shallow: fn(label, handler, on_return, body) {
+      foreign.to_dynamic(ShallowCall(label, handler, on_return, body))
     },
     perform: fn(label, value) { foreign.to_dynamic(Perform(label, value)) },
     mask: fn(label, body) { foreign.to_dynamic(MaskCall(label, body)) },
@@ -118,7 +128,14 @@ fn loop(value, stack, host, metrics) {
     Some(Handle(label, handler, body)) ->
       loop(
         call(body, unit()),
-        [Delimiter(label, handler), ..stack],
+        [Delimiter(label, handler, None), ..stack],
+        host,
+        metrics,
+      )
+    Some(ShallowCall(label, handler, on_return, body)) ->
+      loop(
+        call(body, unit()),
+        [Delimiter(label, handler, Some(on_return)), ..stack],
         host,
         metrics,
       )
@@ -169,7 +186,9 @@ fn loop(value, stack, host, metrics) {
       case stack {
         [] -> value
         [Then(then), ..rest] -> loop(then(value), rest, host, metrics)
-        [Delimiter(..), ..rest] -> loop(value, rest, host, metrics)
+        [Delimiter(_, _, None), ..rest] -> loop(value, rest, host, metrics)
+        [Delimiter(_, _, Some(on_return)), ..rest] ->
+          loop(call(on_return, value), rest, host, metrics)
         [MaskBoundary(_), ..rest] | [PureBoundary, ..rest] ->
           loop(value, rest, host, metrics)
       }
@@ -185,10 +204,15 @@ fn find(stack, label, frames, skip) {
     [PureBoundary, ..] -> Error("ImpureEffect")
     [MaskBoundary(found) as frame, ..rest] if found == label ->
       find(rest, label, [frame, ..frames], skip + 1)
-    [Delimiter(found, _) as frame, ..rest] if found == label && skip > 0 ->
+    [Delimiter(found, _, _) as frame, ..rest] if found == label && skip > 0 ->
       find(rest, label, [frame, ..frames], skip - 1)
-    [Delimiter(found, handler) as frame, ..rest] if found == label ->
-      Ok(Some(#(handler, rest, [frame, ..frames])))
+    [Delimiter(found, handler, on_return) as frame, ..rest] if found == label -> {
+      let frames = case on_return {
+        None -> [frame, ..frames]
+        Some(_) -> frames
+      }
+      Ok(Some(#(handler, rest, frames)))
+    }
     [frame, ..rest] -> find(rest, label, [frame, ..frames], skip)
   }
 }

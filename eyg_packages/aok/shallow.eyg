@@ -1,0 +1,18 @@
+// Low-level stepping, in the shape of aok's original {lift, resume} API.
+// The caller must install the next expectation around resume, and run the tail.
+let expect = import "./expect.eyg"
+let first = (handler, name, f, arg) -> {
+  handler((lift, resume) -> { {lift, resume} }, (_) -> {
+    !never(perform Abort(!string_append("expected `", !string_append(name, "` effect, none was performed"))))
+  }, (_) -> { f(arg) })
+}
+{
+  first,
+  log: first(handle shallow Log, "Log"),
+  stdout: first(handle shallow StandardOut, "StandardOut"),
+  read_file: first(handle shallow ReadFile, "ReadFile"),
+  abort: first(handle shallow Abort, "Abort"),
+  // Guards every computer operation not caught by the currently installed step.
+  // The entire scenario, including its assertions, runs inside these guards.
+  run: (scenario) -> { expect.run(scenario, []) }
+}

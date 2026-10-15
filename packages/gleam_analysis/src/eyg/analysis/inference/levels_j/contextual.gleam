@@ -447,6 +447,8 @@ pub fn do_infer(source, env, eff, level, bindings) -> Step(_) {
       prim(perform(label), env, eff, level, bindings, ir.Perform(label))
     ir.Handle(label) ->
       prim(handle(label), env, eff, level, bindings, ir.Handle(label))
+    ir.Shallow(label) ->
+      prim(shallow(label), env, eff, level, bindings, ir.Shallow(label))
     ir.Mask(label) ->
       prim(mask(label), env, eff, level, bindings, ir.Mask(label))
     ir.Builtin(id) ->
@@ -573,6 +575,22 @@ pub fn handle(label) {
       return,
     )
   t.Fun(handler, t.Empty, t.Fun(exec, tail, return))
+}
+
+/// A raw shallow resumption retains the body's effects and result type.
+/// Only normal completion under the delimiter applies the return callback.
+pub fn shallow(label) {
+  let lift = q(0)
+  let reply = q(1)
+  let tail = q(2)
+  let body_result = q(3)
+  let answer = q(4)
+  let body_effects = t.EffectExtend(label, #(lift, reply), tail)
+  let kont = t.Fun(reply, body_effects, body_result)
+  let handler = t.Fun(lift, t.Empty, t.Fun(kont, tail, answer))
+  let on_return = t.Fun(body_result, tail, answer)
+  let exec = t.Fun(t.unit, body_effects, body_result)
+  pure2(handler, on_return, t.Fun(exec, tail, answer))
 }
 
 // Masking skips one enclosing handler. The body uses the residual row;

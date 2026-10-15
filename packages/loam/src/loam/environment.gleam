@@ -20,7 +20,7 @@ import multiformats/cid/v1
 import ogre/origin
 
 /// Bump when observable execution semantics change, not for archive/UI changes.
-pub const runtime = "eyg-sandbox-2/scoped-masks-purity/fuel-1000000"
+pub const runtime = "eyg-sandbox-3/shallow-answers/fuel-1000000"
 
 pub type Environment {
   Environment(

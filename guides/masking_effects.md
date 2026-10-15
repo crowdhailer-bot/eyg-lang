@@ -49,6 +49,6 @@ The [recording](../packages/tracing/recordings/masking-effects.mp4) runs the
 mask example above and that command. Recheck it from packages/tracing with
 `EYG_BIN=/absolute/path/to/eyg gleam run -m tracing/mask_demo`.
 
-Sandbox archives now record `eyg-sandbox-2/scoped-masks-purity/fuel-1000000`.
+Sandbox archives now record `eyg-sandbox-3/shallow-answers/fuel-1000000`.
 The loader rejects archives with a different runtime fingerprint; recreate an
 older environment with the current CLI before recording a new sandbox run.

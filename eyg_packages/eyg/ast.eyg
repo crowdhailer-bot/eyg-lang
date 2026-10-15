@@ -74,6 +74,7 @@ let source_decoder = !fix((self, parsed) -> {
       {tag: "n", decode: (_) -> { [NoCases({})] }},
       {tag: "p", decode: (_) -> { [Perform(d.field("l", d.string, fields))] }},
       {tag: "h", decode: (_) -> { [Handle(d.field("l", d.string, fields))] }},
+      {tag: "hs", decode: (_) -> { [Shallow(d.field("l", d.string, fields))] }},
       {tag: "hm", decode: (_) -> { [Mask(d.field("l", d.string, fields))] }},
       {tag: "b", decode: (_) -> { [Builtin(d.field("l", d.string, fields))] }},
       {tag: "#", decode: (_) -> { [ContentReference(d.field("l", link_decoder, fields))] }},
@@ -152,6 +153,7 @@ let parse = !fix((self, nodes) -> {
         NoCases(_) -> { {value: node("n", []), rest: tail} }
         Perform(value) -> { {value: node("p", [label(value)]), rest: tail} }
         Handle(value) -> { {value: node("h", [label(value)]), rest: tail} }
+        Shallow(value) -> { {value: node("hs", [label(value)]), rest: tail} }
         Mask(value) -> { {value: node("hm", [label(value)]), rest: tail} }
         Builtin(value) -> { {value: node("b", [label(value)]), rest: tail} }
         ContentReference(value) -> {
