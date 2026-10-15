@@ -2,14 +2,17 @@
 
 ## Running tests
 
-To test all the packages on the BEAM environment.
+The [CI workflow](.github/workflows/test.yml) lists every package checked on each runtime.
+EYG package tests use a CLI built from this checkout, run `gleam run -m compile` in packages/gleam_cli to build it locally.
+
+To test the core packages on the BEAM environment.
 ```sh
 # Erlang-target Gleam packages
 for pkg in packages/{gleam_analysis,gleam_hub,gleam_ir,gleam_parser,gleam_sha256,intelligence,overlay_llm,topological,touch_grass,untethered}; do
   ( cd "$pkg" && gleam format --check src test && gleam build --warnings-as-errors && gleam test )
 done
 ```
-To test all the packages on the JavaScript environment.
+To test the core packages on the JavaScript environment.
 Build the standalone native API before its tests import the bundle:
 ```sh
 ( cd packages/embed_js && bun install && gleam run -m build )
