@@ -90,7 +90,7 @@ jobs:
           rebar3-version: ${{matrix.rebar3}}
       - run: gleam build --warnings-as-errors
         working-directory: packages/hub  
-      - run: gleam dev migrate
+      - run: gleam run -m hub_dev -- migrate
         working-directory: packages/hub  
         env:
           POSTGRES_HOST: localhost
