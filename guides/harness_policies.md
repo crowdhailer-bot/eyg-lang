@@ -5,6 +5,22 @@ description: Gate computer and host effects with composable EYG functions.
 
 # Policies for embedded harnesses
 
+## Integration levels
+
+| Level | Boundary | Checked implementation |
+| --- | --- | --- |
+| 1 | Choose EYG as the scripting executable; CLI effects remain unrestricted | Pi's optional shell-only adapter |
+| 2 | Add an embedded EYG tool | OpenCode plugin and Pi extension |
+| 3 | Gate every effect performed by that tool | Shared runtime and configuration |
+| 3.a | Restrict children or approve an explicit replacement policy | Task and Escalate adapters |
+| 4 | Route the complete host tool set through EYG | Pi --eyg-only; native OpenCode dispatcher |
+
+Other action paths retain their host permissions until they are included in
+the boundary. The [OpenCode](../blog/eyg-in-opencode/README.md) and
+[Pi](../blog/eyg-in-pi/README.md) articles explain the integration choices.
+
+## Shared runtime
+
 [opencode_plugin](../packages/opencode_plugin/) provides the shared Gleam
 runtime. A trusted configuration returns policy, optional context and optional
 named agent policies. Agent code gets context in scope; each run starts fresh.

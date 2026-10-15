@@ -34,3 +34,13 @@ contract are documented in [guides/sandbox.md](guides/sandbox.md).
 - Crash-safe incremental journal persistence and store garbage collection.
 - Structural sharing of full model request histories.
 - Credential capabilities supplied outside portable input environments.
+
+## Agent integrations
+
+The shared policy runtime, OpenCode plugin and native dispatcher, and Pi
+extension implement the [integration levels](guides/harness_policies.md#integration-levels).
+They use pinned SDKs and minimal host bindings; runtime and tooling are Gleam.
+OpenHands remains an unimplemented integration candidate. Replacing Overlay's
+browser agent loop with pi-agent-core is a separate
+[proposed experiment](blog/eyg-in-pi/README.md#a-browser-agent-loop-is-a-separate-experiment).
+These integrations do not add an OS sandbox or durable policy persistence.
