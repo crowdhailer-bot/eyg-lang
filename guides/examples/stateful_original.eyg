@@ -1,0 +1,20 @@
+// Intentionally invalid: the original stateful.eyg, preserved for diagnosis.
+// check: Recursive; eval/run: unhandled final Increment.
+let count_calls = (f) -> {
+  let run = handle Increment((_, resume, count) -> { resume({})(!int_add(count, 1)) }, (_) -> {
+    handle Decrement((_, resume, count) -> { resume({})(!int_subtract(count, 1)) }, (_) -> {
+      let _ = f({})
+      let finish = (count) -> { count }
+      finish
+    })
+  })
+  run(0)
+}
+
+count_calls((_) -> {
+  let _ = perform Increment({})
+  let _ = perform Decrement({})
+  let _ = perform Increment({})
+  {}
+})
+// The intended net count is 1, not the original comment's 3.

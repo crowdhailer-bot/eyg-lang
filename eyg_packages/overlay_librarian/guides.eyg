@@ -43,7 +43,9 @@ let index = [
   {slug: "codex-subscription-models", title: "Codex subscription models", summary: "Use Codex credentials and preserve their JSON when refreshing.", keywords: "codex openai model llm provider subscription credentials oauth"},
   {slug: "preserve-json-documents", title: "Preserve JSON documents", summary: "Update existing string fields without losing unknown JSON fields.", keywords: "json document preserve update credentials unknown"},
   {slug: "overlay-contexts", title: "Overlay contexts", summary: "Find packages and guides before writing a program.", keywords: "librarian context catalogue search agent"},
-  {slug: "start-overlay-from-scripts", title: "Start Overlay from scripts", summary: "Use Overlay and TypeCheck from scripts with captured context functions.", keywords: "agent script overlay typecheck context closure"}
+  {slug: "start-overlay-from-scripts", title: "Start Overlay from scripts", summary: "Use Overlay and TypeCheck from scripts with captured context functions.", keywords: "agent script overlay typecheck context closure"},
+  {slug: "deep-effect-handlers", title: "Deep effect handlers", summary: "Resume operations with persistent delimiters and bounded continuations.", keywords: "effect handler deep continuation resume stack"},
+  {slug: "stateful-effect-handlers", title: "Stateful effect handlers", summary: "Thread state through deep resumptions.", keywords: "effect handler state counter resume"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
