@@ -3,31 +3,27 @@ import eyg/compiler/js
 import eyg/parser
 import gleam/dict
 import gleam/dynamic.{type Dynamic}
-import gleam/javascript/array.{type Array}
+import gleam/javascript/array
 import gleam/list
 import gleam/pair
 import gleeunit/should
 import plinth/browser/window.{eval}
-
-@external(javascript, "./js_ffi.mjs", "list")
-fn do_list(items: Array(Dynamic)) -> Dynamic
+import plinthx/javascript/foreign
 
 /// This is needed because dynamic.list creates nested head/tail tuples
 fn list(items, encode) {
-  items
-  |> list.map(encode)
-  |> array.from_list()
-  |> do_list
+  list.fold_right(
+    items,
+    foreign.to_dynamic(array.from_list([])),
+    fn(tail, item) { foreign.to_dynamic(array.from_list([encode(item), tail])) },
+  )
 }
-
-@external(javascript, "./js_ffi.mjs", "object")
-fn do_object(items: Array(#(String, Dynamic))) -> Dynamic
 
 /// This is needed because dynamic.properties creates a dictionary
 fn object(items) {
   items
   |> array.from_list
-  |> do_object
+  |> foreign.object
 }
 
 fn tagged(label, value) -> Dynamic {
@@ -288,6 +284,33 @@ pub fn effect_test() {
     let y = perform Ask({})
     !int_add(x, y)",
     dynamic.int(20),
+  )
+}
+
+pub fn deep_handler_shadows_outer_handler_test() {
+  // Shallow resumption would let the second Ping reach the outer handler: 101.
+  test_eval(
+    "handle Ping((_, resume) -> { resume(100) }, (_) -> {
+      handle Ping((_, resume) -> { resume(1) }, (_) -> {
+        let a = perform Ping({})
+        let b = perform Ping({})
+        !int_add(a, b)
+      })
+    })",
+    dynamic.int(2),
+  )
+}
+
+pub fn deep_handler_callback_effect_escapes_test() {
+  test_eval(
+    "handle Ping((_, resume) -> { resume(100) }, (_) -> {
+      handle Ping((_, resume) -> { resume(perform Ping({})) }, (_) -> {
+        let a = perform Ping({})
+        let b = perform Ping({})
+        !int_add(a, b)
+      })
+    })",
+    dynamic.int(200),
   )
 }
 

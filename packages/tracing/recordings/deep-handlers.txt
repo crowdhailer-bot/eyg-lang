@@ -1,0 +1,34 @@
+'/tmp/eyg-roadmap-pi-host/eyg' eval guides/examples/deep_handlers.eyg
+corin@assistance-bot:~/mono/repos/eyg-lang$ '/tmp/eyg-roadmap-pi-host/eyg' eval guides/examples/deep_handlers.
+eyg
+{
+  early_return: 99,
+  forwarded: 200,
+  multi_shot: 6,
+  repeated: 2,
+  shadowed: 2,
+  unrelated: 12,
+}
+corin@assistance-bot:~/mono/repos/eyg-lang$ '/tmp/eyg-roadmap-pi-host/eyg' eval guides/examples/stateful_handl
+er.eyg
+3
+corin@assistance-bot:~/mono/repos/eyg-lang$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
