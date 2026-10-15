@@ -256,6 +256,7 @@ fn trace(arg, meta, env, k) {
 fn move(delimited, acc) {
   case delimited {
     [] -> acc
+    [#(Trace(arg, env), meta), ..rest] -> move(rest, trace(arg, meta, env, acc))
     [#(step, meta), ..rest] -> move(rest, Stack(step, meta, acc))
   }
 }
