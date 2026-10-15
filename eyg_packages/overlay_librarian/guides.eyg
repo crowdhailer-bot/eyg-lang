@@ -58,7 +58,8 @@ let index = [
   {slug: "embedding-in-javascript-hosts", title: "Embedding in JavaScript hosts", summary: "Use a standalone typed shell from a native host.", keywords: "embed javascript typescript browser bundle shell host"},
   {slug: "querying-a-todo-list-with-eyg", title: "Querying a todo list with EYG", summary: "Script a todo model through limited typed operations.", keywords: "todo tasks query tag complete embed model"},
   {slug: "a-todo-host-using-the-native-api", title: "A todo host using the native API", summary: "Use the standalone shell through plain native task data.", keywords: "todo javascript typescript native embed bundle host"},
-  {slug: "playing-hashi-through-eyg", title: "Playing Hashi through EYG", summary: "Drive an original puzzle game through its typed operations.", keywords: "hashi puzzle game embed effects solver"}
+  {slug: "playing-hashi-through-eyg", title: "Playing Hashi through EYG", summary: "Drive an original puzzle game through its typed operations.", keywords: "hashi puzzle game embed effects solver"},
+  {slug: "compiled-eyg-in-nginx", title: "Compiled EYG in nginx", summary: "Await native subrequests in a compiled HTTP handler.", keywords: "nginx njs quickjs compile embed http subrequest"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
