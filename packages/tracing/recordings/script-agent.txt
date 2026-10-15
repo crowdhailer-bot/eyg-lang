@@ -1,0 +1,34 @@
+LANGFUSE_PUBLIC_KEY='' LANGFUSE_SECRET_KEY='' EYG_AGENT_MODEL_ORIGIN='http://127.0.0.1:7206' EYG_AGENT_MODEL='
+fixture' EYG_TRACE_DIR='/home/corin/mono/repos/eyg-lang/packages/tracing/.recordings/script-agent' '/tmp/eyg-r
+oadmap-pi-host/eyg' script examples/overlay_script/entry.eyg
+corin@assistance-bot:~/mono/repos/eyg-lang$ LANGFUSE_PUBLIC_KEY='' LANGFUSE_SECRET_KEY='' EYG_AGENT_MODEL_ORIG
+IN='http://127.0.0.1:7206' EYG_AGENT_MODEL='fixture' EYG_TRACE_DIR='/home/corin/mono/repos/eyg-lang/packages/t
+racing/.recordings/script-agent' '/tmp/eyg-roadmap-pi-host/eyg' script examples/overlay_script/entry.eyg
+Type: Integer
+>>> Use the script context to double 21.
+I will run the calculation.
+Executing EYG code.
+let _ = perform StandardOut("Hello from the script agent\n") context.twice(21)
+Hello from the script agent
+ok Output:
+Hello from the script agent
+
+Result:
+42
+Doubled 21 to 42 using the script context.
+>>> send a message
+trace saved to /home/corin/mono/repos/eyg-lang/packages/tracing/.recordings/script-agent/20261015T001951-ci6ae
+x7v5l.json
+upload failed: Langfuse responded with status 401: {"message":"Invalid authorization header. Confirm that you'
+ve configured the correct host.","error":"UnauthorizedError"}
+
+Script resumed after the agent.
+corin@assistance-bot:~/mono/repos/eyg-lang$
+
+
+
+
+
+
+
+

@@ -16,6 +16,13 @@ pub fn main() {
 }
 
 pub fn start() {
+  start_with(
+    "let _ = perform StandardOut(\"Hello from Gleam\") !int_add(20, 22)",
+    "Computed **42** and printed the greeting.",
+  )
+}
+
+pub fn start_with(code, reply) {
   let assert Ok(bun) = runtime.get()
   let assert Ok(response) = fetch.get_response()
   server.serve(
@@ -26,7 +33,7 @@ pub fn start() {
       let content = case
         string.contains(fetch.request_url(request), "/api/chat")
       {
-        True -> completion(body)
+        True -> completion(body, code, reply)
         False -> "[]"
       }
       let assert Ok(response) =
@@ -38,7 +45,7 @@ pub fn start() {
   )
 }
 
-fn completion(body) {
+fn completion(body, code, reply) {
   let assert Ok(roles) =
     json.parse(
       body,
@@ -60,12 +67,7 @@ fn completion(body) {
             #(
               "arguments",
               json.object([
-                #(
-                  "code",
-                  json.string(
-                    "let _ = perform StandardOut(\"Hello from Gleam\") !int_add(20, 22)",
-                  ),
-                ),
+                #("code", json.string(code)),
               ]),
             ),
           ]),
@@ -81,7 +83,7 @@ fn completion(body) {
         #(
           "content",
           json.string(case calls {
-            [] -> "Computed **42** and printed the greeting."
+            [] -> reply
             _ -> "I will run the calculation."
           }),
         ),

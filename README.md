@@ -28,6 +28,7 @@ Projects in this repo introduce extra contraints, over regular programming langu
 - Every `!builtin` is catalogued in [`guides/builtins_reference.md`](./guides/builtins_reference.md).
 - Full effect reference is in [`./guides/cli_effects_reference.md`](./guides/cli_effects_reference.md).
 - File and import path resolution is explained in [`guides/file_resolution.md`](./guides/file_resolution.md).
+- Start agents and invoke the type checker from EYG with the [script agent guide](./guides/script_agents.md).
 - Effect spans and named function profiles are explained in [`guides/tracing.md`](./guides/tracing.md).
 - Portable recording, replay and telemetry export are explained in [`guides/trajectories.md`](./guides/trajectories.md).
 - Updating JSON while retaining unknown fields is covered in [`guides/json_documents.md`](./guides/json_documents.md).
