@@ -1,9 +1,15 @@
 # Checks and recordings
 
 Gleam programs that drive EYG tools as a person would and keep evidence of
-what happened. The [trajectory guide](../../guides/trajectories.md) covers
-recording in the CLI and browser, offline replay, pi-mono/opencode formats and
-real backend checks.
+what happened.
+
+The [trajectory guide](../../guides/trajectories.md) covers recording in the CLI
+and browser, offline replay, pi-mono/opencode formats and real backend checks.
+The [performance viewer guide](../../guides/trace_performance.md) covers fresh
+effect/function captures, offline flame charts, printable exports and Jaeger
+verification. `gleam run -- capture`, `profile-capture`, `render` and `export`
+are implemented by the Gleam tracing entrypoint. The checked presentation is
+in [presentation](./presentation/index.html).
 
 - `gleam run -m tracing/terminal_fixture`: scripted Ollama on 7206 for the
   [terminal shell guide](../../guides/tui_shell.md).
