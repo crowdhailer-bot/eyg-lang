@@ -67,6 +67,8 @@ Another reason could be to imagine your own syntax, or even visual editor, and r
 - [gleam_parser](./packages/gleam_parser/) Parser for a curly braces syntax for EYG IR.
 - [hub](./packages/hub/) Backend application for [eyg.run](https://eyg.run). Stores modules, packages and signatories.
 - [morph](./packages/morph/) Higher level AST and transformation functions for structural edits. (Unpublished)
+- [opencode_plugin](./packages/opencode_plugin/) Shared policy runtime, public plugin and pinned native OpenCode dispatcher adapter.
+- [pi_extension](./packages/pi_extension/) Policy-aware Pi tools and restricted in-process subagents using pinned official SDKs.
 - [touch_grass](./packages/touch_grass/) Common effect definitions (types, decoders and encoders) for your Eat Your Greens (EYG) runtime.
 - [untethered](./packages/untethered/) Location independent datastructures to immutably record decisions. Foundation of EYG hub package signing. (Unpublished)
 - [vscode-eyg](./packages/vscode-eyg/) VS Code extension and canonical TextMate grammar, also used by the web guides.
@@ -89,6 +91,8 @@ carousel, video, and Bluesky viewer functions.
 The [`playwright`](./eyg_packages/playwright/) package checks and controls shown
 previews. The [artifact guide](./guides/overlay_artifacts.md) covers revision
 history, portable workspaces and public sharing.
+The [Spring '83 comparison](./blog/artifacts-and-spring-83/README.md) explains
+how executable artifacts differ from signed publishing boards and names future ideas.
 Other packages in this collection are for demo purposes i.e. `catfact`
 
 ### Previous experiments
