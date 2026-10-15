@@ -270,7 +270,11 @@ fn parse_block(code) {
   case parser.block_from_string(code) {
     Ok(#(#(assigns, tail), [])) -> {
       let end = string.length(code)
-      Ok(ir.from_block(assigns, option.unwrap(tail, #(ir.Vacant, #(end, end)))))
+      // The parser returns lexical order; from_block folds outward from the tail.
+      Ok(ir.from_block(
+        list.reverse(assigns),
+        option.unwrap(tail, #(ir.Vacant, #(end, end))),
+      ))
     }
     Ok(#(_, [#(token, at), ..])) ->
       Error(parser_parser.TrailingTokens(token, at))

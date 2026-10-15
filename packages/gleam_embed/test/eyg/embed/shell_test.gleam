@@ -45,6 +45,30 @@ pub fn effects_are_answered_by_the_host_test() {
   assert outcome == Returned(Some(v.Integer(2)))
 }
 
+pub fn dependent_bindings_and_effects_keep_lexical_order_test() {
+  let Run(state:, outcome:, ..) =
+    run(counter(), "let a = perform Add(2) let b = perform Add(a) b")
+  assert state.total == 4
+  assert outcome == Returned(Some(v.Integer(4)))
+}
+
+pub fn destructuring_and_shadowing_retain_the_final_bindings_test() {
+  let Run(shell:, outcome:, ..) =
+    run(
+      counter(),
+      "let x = 1 let x = !int_add(x, 1) let {answer} = {answer: x} answer",
+    )
+  assert outcome == Returned(Some(v.Integer(2)))
+  let Run(outcome:, ..) = run(shell, "!int_add(answer, 1)")
+  assert outcome == Returned(Some(v.Integer(3)))
+  let Run(outcome:, ..) =
+    run(
+      counter(),
+      "let {left, right} = {left: 1, right: 2} !int_add(left, right)",
+    )
+  assert outcome == Returned(Some(v.Integer(3)))
+}
+
 pub fn variables_and_their_types_are_kept_test() {
   let Run(shell:, outcome:, ..) =
     run(counter(), "let a = 5\nlet id = (x) -> { x }")
