@@ -59,7 +59,8 @@ let index = [
   {slug: "eyg-in-pi", title: "EYG in Pi", summary: "Make Pi tools policy-gated effects and retain child policies.", keywords: "pi extension tools policy task subagent usage embed"},
   {slug: "eyg-as-the-opencode-tool-dispatcher", title: "EYG as the OpenCode tool dispatcher", summary: "Route native and MCP tools through policies and retain child restrictions.", keywords: "opencode dispatcher tools mcp policy task subagent gate"},
   {slug: "eyg-as-an-opencode-plugin", title: "EYG as an OpenCode plugin", summary: "Use computer effects, prompt guidance and policy-aware SDK subagents.", keywords: "opencode plugin sdk task escalate permission policy"},
-  {slug: "viewing-execution-performance", title: "Viewing execution performance", summary: "Capture and inspect effect and function spans offline.", keywords: "trace otel profile performance flame chart elapsed self jaeger"}
+  {slug: "viewing-execution-performance", title: "Viewing execution performance", summary: "Capture and inspect effect and function spans offline.", keywords: "trace otel profile performance flame chart elapsed self jaeger"},
+  {slug: "presenting-agent-evaluations", title: "Presenting agent evaluations", summary: "Read the eval series and rebuild its offline talk with Gleam controls.", keywords: "eval presentation talk slides probability notes pdf"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
