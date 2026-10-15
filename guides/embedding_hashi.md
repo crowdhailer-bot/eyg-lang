@@ -45,3 +45,46 @@ Run [solver.eyg](../examples/hashi/solver.eyg) in the shell to retain `solve`,
 then run `solve({})`. It repeatedly adds bridges forced by the numbers and
 stops when no more are forced, returning IsSolved. It does not guess or search:
 the tests solve seed 1 and verify a partial, unsolved result on seed 2.
+
+## Browser shell and agent
+
+From examples/hashi:
+
+```sh
+eyg script bin/fetch_style.eyg
+gleam test
+gleam run -m dev
+```
+
+Open http://127.0.0.1:7822/?seed=1. The fetch script gets the upstream CSS
+from the same pinned commit into ignored vendor/. The Gleam tools build and
+serve the page, library and syntax guide. The seed query selects a reproducible
+board; it defaults to 1. New puzzle generates a random seed.
+
+Run `hashi.with_target(6)`. An island with target six and three neighbours
+needs two bridges to each. This program adds them:
+
+```eyg
+let big = hashi.with_target(6)
+hashi.each(big, (island) -> {
+  hashi.each(hashi.neighbours(island), (other) -> {
+    let _ = hashi.connect(island, other)
+    hashi.connect(island, other)
+  })
+})
+```
+
+Paste solver.eyg, run it, then run `solve({})`. The board shows Solved!
+Control/Command+Enter submits the editor. The Agent tab gives a model one run
+tool against the same shell and board. Pointer messages from the board view
+are ignored, so its changes come only through the game interface.
+OLLAMA_ORIGIN configures the model proxy, default http://127.0.0.1:11434;
+the page also offers Mistral. Rebuild and restart after changing source.
+
+The [checked recording](../packages/tracing/recordings/hashi.webm) solves seed 1
+from the shell and seed 3 through an explicitly scripted model fixture. It
+checks type rejection, correction of a misspelled field, retained solver
+bindings and the original game's completion state. It makes no live model call.
+Recreate it from packages/tracing with
+`EYG_BIN=/path/to/eyg CHROME_BIN=/path/to/chromium gleam run -m tracing/hashi_demo`.
+The driver fetches the pinned style, builds the app and stops its local services.
