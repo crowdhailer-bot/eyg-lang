@@ -1,5 +1,8 @@
 let aok = import "./index.eyg"
-let tests = import "./test.eyg"
+let original = import "./test.eyg"
+let expectations = import "./expect_test.eyg"
+let reversed = !list_fold(original, [], (test, rest) -> { [test, ..rest] })
+let tests = !list_fold(reversed, expectations, (test, rest) -> { [test, ..rest] })
 
 {
   tests,

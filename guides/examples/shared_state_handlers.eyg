@@ -1,0 +1,38 @@
+// See ../shared_state_handlers.md. All effects are handled locally.
+let with_state = (initial, f) -> {
+  // One parameter-passing handler owns the shared state.
+  let run = handle State((update, resume, state) -> {
+    let next = update(state)
+    resume(next)(next)
+  }, (_) -> {
+    // These handlers translate operations; they do not hold separate state.
+    let value = handle Increment((_, resume) -> {
+      let _ = perform State((state) -> { !int_add(state, 1) })
+      resume({})
+    }, (_) -> {
+      handle Decrement((_, resume) -> {
+        let _ = perform State((state) -> { !int_subtract(state, 1) })
+        resume({})
+      }, (_) -> {
+        handle Get((_, resume) -> {
+          resume(perform State((state) -> { state }))
+        }, f)
+      })
+    })
+
+    let finish = (state) -> { {state, value} }
+    finish
+  })
+  run(initial)
+}
+
+with_state(0, (_) -> {
+  let before = perform Get({})
+  let _ = perform Increment({})
+  let _ = perform Increment({})
+  let middle = perform Get({})
+  let _ = perform Decrement({})
+  let after = perform Get({})
+  [before, middle, after]
+})
+// {state: 1, value: [0, 2, 1]}

@@ -1,0 +1,196 @@
+// Ordered callback expectations using only existing EYG handlers.
+// Run from packages/gleam_cli:
+// gleam run -- check ../../guides/examples/ordered_callback_experiment.eyg
+// gleam run -- eval ../../guides/examples/ordered_callback_experiment.eyg
+// Each step changes the effects expected by the next runner, so compose steps
+// as functions rather than putting them in a homogeneous List.
+let fail = (reason) -> { !never(perform Abort(reason)) }
+let assert = {
+  equal: (actual, expected) -> {
+    match !equal(actual, expected) {
+      True(_) -> { {} }
+      False(_) -> { fail("values were not equal") }
+    }
+  }
+}
+
+// A matching handler consumes one operation. When its deep continuation
+// reinstalls it, subsequent operations are forwarded to the next expectation.
+let expectation = (handler, forward, name, check, next, body) -> {
+  let run = handler((lift, resume) -> {
+    (first) -> {
+      match first {
+        True(_) -> {
+          let lower = check(lift)
+          next((_) -> { resume(lower)(False({})) })
+        }
+        False(_) -> {
+          let lower = forward(lift)
+          resume(lower)(False({}))
+        }
+      }
+    }
+  }, (_) -> {
+    let value = body({})
+    let finish = (first) -> {
+      match first {
+        True(_) -> { fail(!string_append("missing expected effect: ", name)) }
+        False(_) -> { value }
+      }
+    }
+    finish
+  })
+  run(True({}))
+}
+
+let done = (body) -> { body({}) }
+let expect = {
+  stdout: expectation(handle StandardOut, perform StandardOut, "StandardOut"),
+  read_file: expectation(handle ReadFile, perform ReadFile, "ReadFile"),
+  done,
+  run: (program, scenario) -> {
+    handle StandardOut((_, _resume) -> {
+      fail("unexpected StandardOut")
+    }, (_) -> {
+      handle ReadFile((_, _resume) -> {
+        fail("unexpected ReadFile")
+      }, (_) -> { scenario(program) })
+    })
+  }
+}
+
+let read_name = (path) -> {
+  match perform ReadFile({path, offset: 0, limit: 100}) {
+    Ok(bytes) -> {
+      match !string_from_binary(bytes) {
+        Ok(name) -> { name }
+        Error(_) -> { fail("invalid UTF-8") }
+      }
+    }
+    Error(reason) -> { fail(reason) }
+  }
+}
+let program = (_) -> {
+  let _ = perform StandardOut("Loading name\n")
+  let name = read_name("/fixtures/name.txt")
+  let _ = perform StandardOut(!string_append("Hello ", !string_append(name, "\n")))
+  name
+}
+
+let first = expect.stdout((message) -> {
+  assert.equal(message, "Loading name\n")
+})
+let second = expect.read_file(({path}) -> {
+  let _ = assert.equal(path, "/fixtures/name.txt")
+  Ok(!string_to_binary("Ada"))
+})
+let third = expect.stdout((message) -> {
+  assert.equal(message, "Hello Ada\n")
+})
+
+let example_test = (_) -> {
+  let name = expect.run(program, first(second(third(expect.done))))
+  let _ = assert.equal(name, "Ada")
+  name
+}
+
+let run_test = (test) -> {
+  handle Abort((reason, _resume) -> { Fail(reason) }, (_) -> {
+    Pass(test({}))
+  })
+}
+let example = run_test(example_test)
+
+// Regression checks: callbacks run before resuming; later occurrences must
+// reach the next expectation, and the program must finish after the last one.
+let fourth = expect.read_file(({path}) -> {
+  let _ = assert.equal(path, "/fixtures/second.txt")
+  Ok(!string_to_binary("Grace"))
+})
+let fifth = expect.stdout((message) -> {
+  assert.equal(message, "Goodbye Grace\n")
+})
+let checks = [
+  {name: "stdout, read, stdout", actual: example, expected: Pass("Ada")},
+  {name: "five interleaved operations", actual: run_test((_) -> {
+    let extended = (_) -> {
+      let _ = program({})
+      let name = read_name("/fixtures/second.txt")
+      let _ = perform StandardOut(!string_append("Goodbye ", !string_append(name, "\n")))
+      name
+    }
+    expect.run(extended, first(second(third(fourth(fifth(expect.done))))))
+  }), expected: Pass("Grace")},
+  {name: "wrong order", actual: run_test((_) -> {
+    expect.run(program, second(first(third(expect.done))))
+  }), expected: Fail("unexpected StandardOut")},
+  {name: "read callback assertion fails", actual: run_test((_) -> {
+    let reject = expect.read_file(({path}) -> {
+      let _ = assert.equal(path, "/wrong/path")
+      Ok(!string_to_binary("unused"))
+    })
+    expect.run(program, first(reject(third(expect.done))))
+  }), expected: Fail("values were not equal")},
+  {name: "reply is computed from the lift", actual: run_test((_) -> {
+    let echo_path = expect.read_file(({path}) -> {
+      Ok(!string_to_binary(path))
+    })
+    expect.run((_) -> { read_name("/fixtures/name.txt") }, echo_path(expect.done))
+  }), expected: Pass("/fixtures/name.txt")},
+  {name: "three consecutive stdout effects", actual: run_test((_) -> {
+    let a = expect.stdout((message) -> { assert.equal(message, "a") })
+    let b = expect.stdout((message) -> { assert.equal(message, "b") })
+    let c = expect.stdout((message) -> { assert.equal(message, "c") })
+    expect.run((_) -> {
+      let _ = perform StandardOut("a")
+      let _ = perform StandardOut("b")
+      let _ = perform StandardOut("c")
+      "done"
+    }, a(b(c(expect.done))))
+  }), expected: Pass("done")},
+  {name: "callback abort stops resumption", actual: run_test((_) -> {
+    let reject = expect.stdout((_) -> { fail("callback failed") })
+    expect.run((_) -> {
+      let _ = perform StandardOut("hello")
+      fail("program should not have resumed")
+    }, reject(expect.done))
+  }), expected: Fail("callback failed")},
+  {name: "missing last output", actual: run_test((_) -> {
+    expect.run((_) -> {
+      let _ = perform StandardOut("Loading name\n")
+      read_name("/fixtures/name.txt")
+    }, first(second(third(expect.done))))
+  }), expected: Fail("missing expected effect: StandardOut")},
+  {name: "extra stdout", actual: run_test((_) -> {
+    expect.run((_) -> {
+      let name = program({})
+      let _ = perform StandardOut("extra")
+      name
+    }, first(second(third(expect.done))))
+  }), expected: Fail("unexpected StandardOut")},
+  {name: "extra read", actual: run_test((_) -> {
+    expect.run((_) -> {
+      let _ = program({})
+      read_name("/fixtures/extra.txt")
+    }, first(second(third(expect.done))))
+  }), expected: Fail("unexpected ReadFile")},
+  {name: "failure after last expected operation", actual: run_test((_) -> {
+    expect.run((_) -> {
+      let _ = program({})
+      fail("failed after last output")
+    }, first(second(third(expect.done))))
+  }), expected: Fail("failed after last output")},
+  {name: "empty scenario", actual: run_test((_) -> {
+    expect.run((_) -> { "done" }, expect.done)
+  }), expected: Pass("done")},
+]
+
+handle Abort((reason, _resume) -> { Fail(reason) }, (_) -> {
+  let checked = !list_fold(checks, 0, ({name, actual, expected}, count) -> {
+    match !equal(actual, expected) {
+      True(_) -> { !int_add(count, 1) }
+      False(_) -> { fail(!string_append("regression failed: ", name)) }
+    }
+  })
+  Pass({example, checked})
+})

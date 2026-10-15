@@ -1,0 +1,265 @@
+// Ordered computer-effect expectations. The subject's capabilities are mocked;
+// callbacks use the surrounding runtime. AokNext returns the next callback;
+// mask keeps its effects independent of the private queue and native mocks.
+let fail = (reason) -> { !never(perform Abort(reason)) }
+let first = import "./first.eyg"
+
+// Tags identify expectation functions, never native requests or replies.
+let acquire = {label: "Acquire", wrap: Acquire, unwrap: match {
+  Acquire(value) -> { value } | (_) -> { fail("invalid Acquire value") }
+}}
+let mount = {label: "Mount", wrap: Mount, unwrap: match {
+  Mount(value) -> { value } | (_) -> { fail("invalid Mount value") }
+}}
+let prompt = {label: "Prompt", wrap: Prompt, unwrap: match {
+  Prompt(value) -> { value } | (_) -> { fail("invalid Prompt value") }
+}}
+let read_key = {label: "ReadKey", wrap: ReadKey, unwrap: match {
+  ReadKey(value) -> { value } | (_) -> { fail("invalid ReadKey value") }
+}}
+let append_file = {label: "AppendFile", wrap: AppendFile, unwrap: match {
+  AppendFile(value) -> { value } | (_) -> { fail("invalid AppendFile value") }
+}}
+let create_key = {label: "CreateKey", wrap: CreateKey, unwrap: match {
+  CreateKey(value) -> { value } | (_) -> { fail("invalid CreateKey value") }
+}}
+let cwd = {label: "CWD", wrap: CWD, unwrap: match {
+  CWD(value) -> { value } | (_) -> { fail("invalid CWD value") }
+}}
+let decode_json = {label: "DecodeJSON", wrap: DecodeJSON, unwrap: match {
+  DecodeJSON(value) -> { value } | (_) -> { fail("invalid DecodeJSON value") }
+}}
+let delete_file = {label: "DeleteFile", wrap: DeleteFile, unwrap: match {
+  DeleteFile(value) -> { value } | (_) -> { fail("invalid DeleteFile value") }
+}}
+let env = {label: "Env", wrap: Env, unwrap: match {
+  Env(value) -> { value } | (_) -> { fail("invalid Env value") }
+}}
+let exit = {label: "Exit", wrap: Exit, unwrap: match {
+  Exit(value) -> { value } | (_) -> { fail("invalid Exit value") }
+}}
+let eyg_parse = {label: "EYGParse", wrap: EYGParse, unwrap: match {
+  EYGParse(value) -> { value } | (_) -> { fail("invalid EYGParse value") }
+}}
+let fetch = {label: "Fetch", wrap: Fetch, unwrap: match {
+  Fetch(value) -> { value } | (_) -> { fail("invalid Fetch value") }
+}}
+let flip = {label: "Flip", wrap: Flip, unwrap: match {
+  Flip(value) -> { value } | (_) -> { fail("invalid Flip value") }
+}}
+let hash = {label: "Hash", wrap: Hash, unwrap: match {
+  Hash(value) -> { value } | (_) -> { fail("invalid Hash value") }
+}}
+let make_directory = {label: "MakeDirectory", wrap: MakeDirectory, unwrap: match {
+  MakeDirectory(value) -> { value } | (_) -> { fail("invalid MakeDirectory value") }
+}}
+let now = {label: "Now", wrap: Now, unwrap: match {
+  Now(value) -> { value } | (_) -> { fail("invalid Now value") }
+}}
+let random = {label: "Random", wrap: Random, unwrap: match {
+  Random(value) -> { value } | (_) -> { fail("invalid Random value") }
+}}
+let read_directory = {label: "ReadDirectory", wrap: ReadDirectory, unwrap: match {
+  ReadDirectory(value) -> { value } | (_) -> { fail("invalid ReadDirectory value") }
+}}
+let read_file = {label: "ReadFile", wrap: ReadFile, unwrap: match {
+  ReadFile(value) -> { value } | (_) -> { fail("invalid ReadFile value") }
+}}
+let sign = {label: "Sign", wrap: Sign, unwrap: match {
+  Sign(value) -> { value } | (_) -> { fail("invalid Sign value") }
+}}
+let sleep = {label: "Sleep", wrap: Sleep, unwrap: match {
+  Sleep(value) -> { value } | (_) -> { fail("invalid Sleep value") }
+}}
+let stderr = {label: "StandardError", wrap: StandardError, unwrap: match {
+  StandardError(value) -> { value } | (_) -> { fail("invalid StandardError value") }
+}}
+let stdin = {label: "StandardIn", wrap: StandardIn, unwrap: match {
+  StandardIn(value) -> { value } | (_) -> { fail("invalid StandardIn value") }
+}}
+let stdout = {label: "StandardOut", wrap: StandardOut, unwrap: match {
+  StandardOut(value) -> { value } | (_) -> { fail("invalid StandardOut value") }
+}}
+let write_file = {label: "WriteFile", wrap: WriteFile, unwrap: match {
+  WriteFile(value) -> { value } | (_) -> { fail("invalid WriteFile value") }
+}}
+
+let step = (codec, check) -> {
+  {label: codec.label, check: codec.wrap(check)}
+}
+let relay = (codec, outside, lift, resume) -> {
+  let step = perform AokNext(codec.label)
+  let check = codec.unwrap(step.check)
+  let lower = outside((_) -> { check(lift) })
+  resume(lower)
+}
+let extend = (outside, mask_effect, body) -> {
+  outside((_) -> { mask_effect(body) })
+}
+
+// Each use of the let-bound relay gets its own effect-row instantiation.
+// Exit deliberately abandons its continuation. Its callback only asserts.
+let with_computer = (body) -> {
+  let outside = mask AokNext
+  handle AppendFile(relay(append_file, outside), (_) -> {
+  let outside = extend(outside, mask AppendFile)
+  handle CreateKey(relay(create_key, outside), (_) -> {
+  let outside = extend(outside, mask CreateKey)
+  handle CWD(relay(cwd, outside), (_) -> {
+  let outside = extend(outside, mask CWD)
+  handle DecodeJSON(relay(decode_json, outside), (_) -> {
+  let outside = extend(outside, mask DecodeJSON)
+  handle DeleteFile(relay(delete_file, outside), (_) -> {
+  let outside = extend(outside, mask DeleteFile)
+  handle Env(relay(env, outside), (_) -> {
+  let outside = extend(outside, mask Env)
+  handle Exit((status, _resume) -> {
+    let step = perform AokNext("Exit")
+    let check = exit.unwrap(step.check)
+    let _ = outside((_) -> { check(status) })
+    Exited(status)
+  }, (_) -> {
+  let outside = extend(outside, mask Exit)
+  handle EYGParse(relay(eyg_parse, outside), (_) -> {
+  let outside = extend(outside, mask EYGParse)
+  handle Fetch(relay(fetch, outside), (_) -> {
+  let outside = extend(outside, mask Fetch)
+  handle Flip(relay(flip, outside), (_) -> {
+  let outside = extend(outside, mask Flip)
+  handle Hash(relay(hash, outside), (_) -> {
+  let outside = extend(outside, mask Hash)
+  handle MakeDirectory(relay(make_directory, outside), (_) -> {
+  let outside = extend(outside, mask MakeDirectory)
+  handle Now(relay(now, outside), (_) -> {
+  let outside = extend(outside, mask Now)
+  handle Random(relay(random, outside), (_) -> {
+  let outside = extend(outside, mask Random)
+  handle ReadDirectory(relay(read_directory, outside), (_) -> {
+  let outside = extend(outside, mask ReadDirectory)
+  handle ReadFile(relay(read_file, outside), (_) -> {
+  let outside = extend(outside, mask ReadFile)
+  handle Sign(relay(sign, outside), (_) -> {
+  let outside = extend(outside, mask Sign)
+  handle Sleep(relay(sleep, outside), (_) -> {
+  let outside = extend(outside, mask Sleep)
+  handle StandardError(relay(stderr, outside), (_) -> {
+  let outside = extend(outside, mask StandardError)
+  handle StandardIn(relay(stdin, outside), (_) -> {
+  let outside = extend(outside, mask StandardIn)
+  handle StandardOut(relay(stdout, outside), (_) -> {
+  let outside = extend(outside, mask StandardOut)
+  handle WriteFile(relay(write_file, outside), (_) -> {
+  let outside = extend(outside, mask WriteFile)
+  handle Acquire(relay(acquire, outside), (_) -> {
+  let outside = extend(outside, mask Acquire)
+  handle Mount(relay(mount, outside), (_) -> {
+  let outside = extend(outside, mask Mount)
+  handle Prompt(relay(prompt, outside), (_) -> {
+  let outside = extend(outside, mask Prompt)
+  handle ReadKey(relay(read_key, outside), body)
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+  })
+}
+
+let at_step = (position, reason) -> {
+  !string_append("step ", !string_append(!int_to_string(position), !string_append(": ", reason)))
+}
+
+let interpret = (program, steps) -> {
+  // Checks execute outside the subject's handlers, so subject code cannot
+  // swallow assertion failures. Callback effects go to the surrounding runtime
+  // without consuming expectations; Abort remains the test-failure channel.
+  let execute = handle AokNext((label, resume) -> {
+    ({remaining, position}) -> {
+      match !list_pop(remaining) {
+        Ok({head, tail}) -> {
+          let _ = match !equal(head.label, label) {
+            True(_) -> { {} }
+            False(_) -> { fail(at_step(position, !string_append(
+              "expected ", !string_append(head.label, !string_append(", got ", label))
+            ))) }
+          }
+          resume(head)({remaining: tail, position: !int_add(position, 1)})
+        }
+        Error(_) -> { fail(at_step(position, !string_append("unexpected ", label))) }
+      }
+    }
+  }, (_) -> {
+    let outcome = with_computer((_) -> { Returned(program({})) })
+    let finish = ({remaining, position}) -> {
+      match !list_pop(remaining) {
+        Error(_) -> { outcome }
+        Ok({head}) -> { fail(at_step(position, !string_append("missing ", head.label))) }
+      }
+    }
+    finish
+  })
+  execute({remaining: steps, position: 1})
+}
+
+{
+  log: first.log,
+  standard_out: first.standard_out,
+  abort: first.abort,
+  run: (program, steps) -> {
+    match interpret(program, steps) {
+      Returned(value) -> { value }
+      Exited(_) -> { fail("program exited; use expect.run_exit") }
+    }
+  },
+  run_exit: (program, steps) -> {
+    match interpret(program, steps) {
+      Exited(status) -> { status }
+      Returned(_) -> { fail("expected Exit, program returned") }
+    }
+  },
+  acquire: step(acquire),
+  mount: step(mount),
+  prompt: step(prompt),
+  read_key: step(read_key),
+  append_file: step(append_file),
+  create_key: step(create_key),
+  cwd: step(cwd),
+  decode_json: step(decode_json),
+  delete_file: step(delete_file),
+  env: step(env),
+  exit: step(exit),
+  eyg_parse: step(eyg_parse),
+  fetch: step(fetch),
+  flip: step(flip),
+  hash: step(hash),
+  make_directory: step(make_directory),
+  now: step(now),
+  random: step(random),
+  read_directory: step(read_directory),
+  read_file: step(read_file),
+  sign: step(sign),
+  sleep: step(sleep),
+  stderr: step(stderr),
+  stdin: step(stdin),
+  stdout: step(stdout),
+  write_file: step(write_file)
+}

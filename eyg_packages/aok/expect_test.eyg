@@ -1,0 +1,285 @@
+let aok = import "./index.eyg"
+let {assert, expect} = aok
+let fail = (reason) -> { !never(perform Abort(reason)) }
+let failure = (test, reason) -> {
+  let _ = assert.equal(aok.run_test(test), Fail(reason))
+  {}
+}
+
+// The outer guard is independent of aok's adapters: a missing adapter must
+// fail the test, even when this suite is run with real computer capabilities.
+// Pass the native operation twice: subject calls and surrounding callback calls
+// need independent effect-row instantiations, not one monomorphic parameter.
+let effect_cases = (label, handler, perform_effect, callback_effect, make_step, lift, lower) -> {
+  let protect = (test) -> {
+    handler((_, _resume) -> { fail(!string_append("effect escaped: ", label)) }, (_) -> {
+      let _ = test({})
+      {}
+    })
+  }
+  let program = (_) -> { perform_effect(lift) }
+  [
+    {name: !string_append("expect handles ", label), test: (_) -> {
+      protect((_) -> {
+        let value = expect.run(program, [make_step((actual) -> {
+          let _ = assert.equal(actual, lift)
+          lower
+        })])
+        let _ = assert.equal(value, lower)
+        {}
+      })
+    }},
+    {name: !string_append("expect rejects unexpected ", label), test: (_) -> {
+      protect((_) -> {
+        failure((_) -> { expect.run(program, []) }, !string_append("step 1: unexpected ", label))
+      })
+    }},
+    {name: !string_append("expect callbacks use the surrounding ", label), test: (_) -> {
+      handler((actual, resume) -> {
+        let _ = assert.equal(actual, lift)
+        resume(lower)
+      }, (_) -> {
+        let value = expect.run(program, [make_step((_) -> { callback_effect(lift) })])
+        let _ = assert.equal(value, lower)
+        {}
+      })
+    }},
+    {name: !string_append("expect rejects invalid expectation for ", label), test: (_) -> {
+      protect((_) -> {
+        failure((_) -> {
+          expect.run(program, [{label, check: InvalidExpectation({})}])
+        }, !string_append("invalid ", !string_append(label, " value")))
+      })
+    }},
+  ]
+}
+
+let bytes = !string_to_binary("mock bytes")
+let key = Eddsa({kty: "OKP", crv: "Ed25519", x: bytes, d: bytes})
+let request = {method: GET({}), scheme: HTTPS({}), host: "example.invalid", port: None({}),
+  path: "/", query: None({}), headers: [], body: bytes}
+let response = Ok({status: 200, headers: [], body: bytes})
+
+let groups = [
+  effect_cases("Acquire", handle Acquire, perform Acquire, perform Acquire, expect.acquire,
+    {source: Http({url: "https://example.invalid/archive"}), expected: None({})},
+    Ok({root: "mock-cid", resolved: "mock-revision"})),
+  effect_cases("Mount", handle Mount, perform Mount, perform Mount, expect.mount,
+    {root: "mock-cid", path: "/mock/mount"}, Ok({})),
+  effect_cases("Prompt", handle Prompt, perform Prompt, perform Prompt, expect.prompt,
+    "Name? ", Ok("Ada")),
+  effect_cases("ReadKey", handle ReadKey, perform ReadKey, perform ReadKey, expect.read_key,
+    10, Some("ArrowLeft")),
+  effect_cases("AppendFile", handle AppendFile, perform AppendFile, perform AppendFile, expect.append_file,
+    {path: "/mock/file", contents: bytes}, Ok({})),
+  effect_cases("CreateKey", handle CreateKey, perform CreateKey, perform CreateKey, expect.create_key,
+    Eddsa({}), Ok(key)),
+  effect_cases("CWD", handle CWD, perform CWD, perform CWD, expect.cwd, {}, Ok("/mock")),
+  effect_cases("DecodeJSON", handle DecodeJSON, perform DecodeJSON, perform DecodeJSON, expect.decode_json,
+    !string_to_binary("42"), Ok([{term: Integer(42), depth: 0}])),
+  effect_cases("DeleteFile", handle DeleteFile, perform DeleteFile, perform DeleteFile, expect.delete_file,
+    "/mock/file", Ok({})),
+  effect_cases("Env", handle Env, perform Env, perform Env, expect.env, "NAME", Some("Ada")),
+  effect_cases("EYGParse", handle EYGParse, perform EYGParse, perform EYGParse, expect.eyg_parse,
+    "42", Ok([Integer(42)])),
+  effect_cases("Fetch", handle Fetch, perform Fetch, perform Fetch, expect.fetch, request, response),
+  effect_cases("Flip", handle Flip, perform Flip, perform Flip, expect.flip, {}, True({})),
+  effect_cases("Hash", handle Hash, perform Hash, perform Hash, expect.hash, {algorithm: SHA256({}), bytes}, bytes),
+  effect_cases("MakeDirectory", handle MakeDirectory, perform MakeDirectory, perform MakeDirectory, expect.make_directory,
+    "/mock/directory", Ok({})),
+  effect_cases("Now", handle Now, perform Now, perform Now, expect.now, {}, 123456),
+  effect_cases("Random", handle Random, perform Random, perform Random, expect.random, 10, 7),
+  effect_cases("ReadDirectory", handle ReadDirectory, perform ReadDirectory, perform ReadDirectory, expect.read_directory,
+    "/mock", Ok([{name: "file", type: File({size: 10})}])),
+  effect_cases("ReadFile", handle ReadFile, perform ReadFile, perform ReadFile, expect.read_file,
+    {path: "/mock/file", offset: 0, limit: 100}, Ok(bytes)),
+  effect_cases("Sign", handle Sign, perform Sign, perform Sign, expect.sign, {key, data: bytes}, Ok(bytes)),
+  effect_cases("Sleep", handle Sleep, perform Sleep, perform Sleep, expect.sleep, 1000, {}),
+  effect_cases("StandardError", handle StandardError, perform StandardError, perform StandardError, expect.stderr, "error", {}),
+  effect_cases("StandardIn", handle StandardIn, perform StandardIn, perform StandardIn, expect.stdin, {}, Ok(bytes)),
+  effect_cases("StandardOut", handle StandardOut, perform StandardOut, perform StandardOut, expect.stdout, "output", {}),
+  effect_cases("WriteFile", handle WriteFile, perform WriteFile, perform WriteFile, expect.write_file,
+    {path: "/mock/file", contents: bytes}, Ok({})),
+]
+
+let program = (_) -> {
+  let _ = perform StandardOut("Loading\n")
+  let name = assert.ok(!string_from_binary(assert.ok(perform ReadFile({path: "/mock/name", offset: 0, limit: 100}))))
+  let _ = perform StandardOut(!string_append("Hello ", name))
+  name
+}
+let first = expect.stdout((message) -> {
+  let _ = assert.equal(message, "Loading\n")
+  {}
+})
+let second = expect.read_file(({path, offset, limit}) -> {
+  let _ = assert.equal(path, "/mock/name")
+  let _ = assert.equal(offset, 0)
+  let _ = assert.equal(limit, 100)
+  Ok(!string_to_binary("Ada"))
+})
+let third = expect.stdout((message) -> {
+  let _ = assert.equal(message, "Hello Ada")
+  {}
+})
+let steps = [first, second, third]
+let guard_exit = (body) -> {
+  handle Exit((_, _resume) -> { fail("Exit escaped to platform") }, body)
+}
+let exit_program = (_) -> {
+  let _ = perform Exit(7)
+  fail("Exit resumed its continuation")
+}
+let exit_step = expect.exit((status) -> {
+  let _ = assert.equal(status, 7)
+  {}
+})
+
+let protocol = [
+  {name: "expect orders stdout, read, stdout and returns the result", test: (_) -> {
+    let _ = assert.equal(expect.run(program, steps), "Ada")
+    {}
+  }},
+  {name: "expect reports wrong kind before invoking callback", test: (_) -> {
+    failure((_) -> {
+      expect.run(program, [expect.read_file((_) -> { fail("callback should not run") })])
+    }, "step 1: expected ReadFile, got StandardOut")
+  }},
+  {name: "expect detects missing later operations", test: (_) -> {
+    failure((_) -> {
+      expect.run((_) -> { perform StandardOut("Loading\n") }, steps)
+    }, "step 2: missing ReadFile")
+  }},
+  {name: "expect detects extra operations after the last expectation", test: (_) -> {
+    failure((_) -> { expect.run(program, [first, second]) }, "step 3: unexpected StandardOut")
+  }},
+  {name: "expect preserves Abort from a callback and does not resume", test: (_) -> {
+    failure((_) -> {
+      expect.run((_) -> {
+        let _ = perform StandardOut("hello")
+        fail("subject resumed")
+      }, [expect.stdout((_) -> { fail("callback assertion") })])
+    }, "callback assertion")
+  }},
+  {name: "subject cannot swallow a callback assertion", test: (_) -> {
+    failure((_) -> {
+      expect.run((_) -> {
+        handle Abort((_, _resume) -> { {} }, (_) -> { perform StandardOut("hello") })
+      }, [expect.stdout((_) -> { fail("outside subject") })])
+    }, "outside subject")
+  }},
+  {name: "expect observes failure after the final effect", test: (_) -> {
+    failure((_) -> {
+      expect.run((_) -> { let _ = program({}) fail("after final output") }, steps)
+    }, "after final output")
+  }},
+  {name: "expect handles an empty script", test: (_) -> {
+    let _ = assert.equal(expect.run((_) -> { 42 }, []), 42)
+    {}
+  }},
+  {name: "expect mock computes its reply from the request", test: (_) -> {
+    let returned = expect.run((_) -> { perform Env("NAME") }, [expect.env((name) -> { Some(name) })])
+    let _ = assert.equal(returned, Some("NAME"))
+    {}
+  }},
+  {name: "expect delivers a mocked Error reply", test: (_) -> {
+    let returned = expect.run((_) -> { perform ReadFile({path: "/mock", offset: 0, limit: 1}) }, [
+      expect.read_file((_) -> { Error("missing") }),
+    ])
+    let _ = assert.equal(returned, Error("missing"))
+    {}
+  }},
+  {name: "expect can be nested within a callback", test: (_) -> {
+    let returned = expect.run((_) -> { perform Env("NAME") }, [expect.env((_) -> {
+      expect.run((_) -> { perform Env("INNER") }, [expect.env((_) -> { Some("nested") })])
+    })])
+    let _ = assert.equal(returned, Some("nested"))
+    {}
+  }},
+  {name: "callback Now does not consume the subject's Now expectation", test: (_) -> {
+    handle Now((_, resume) -> { resume(123456) }, (_) -> {
+      let value = expect.run((_) -> {
+        let _ = perform StandardOut("time")
+        perform Now({})
+      }, [
+        expect.stdout((message) -> {
+          let _ = assert.equal(message, "time")
+          let _ = assert.equal(perform Now({}), 123456)
+          {}
+        }),
+        expect.now((_) -> { 42 }),
+      ])
+      let _ = assert.equal(value, 42)
+      {}
+    })
+  }},
+  {name: "run_exit checks status without exiting or resuming", test: (_) -> {
+    guard_exit((_) -> {
+      let _ = assert.equal(expect.run_exit(exit_program, [exit_step]), 7)
+      {}
+    })
+  }},
+  {name: "unexpected Exit is a failure", test: (_) -> {
+    guard_exit((_) -> { failure((_) -> { expect.run_exit(exit_program, []) }, "step 1: unexpected Exit") })
+  }},
+  {name: "run_exit accepts the Never reply type", test: (_) -> {
+    guard_exit((_) -> {
+      let status = expect.run_exit((_) -> { !never(perform Exit(0)) }, [expect.exit((code) -> {
+        let _ = assert.equal(code, 0)
+        {}
+      })])
+      let _ = assert.equal(status, 0)
+      {}
+    })
+  }},
+  {name: "Exit callback Abort fails the test", test: (_) -> {
+    guard_exit((_) -> {
+      failure((_) -> { expect.run_exit(exit_program, [expect.exit((_) -> { fail("exit assertion") })]) }, "exit assertion")
+    })
+  }},
+  {name: "Exit from a callback reaches the surrounding handler", test: (_) -> {
+    failure((_) -> {
+      handle Exit((status, _resume) -> {
+        let _ = assert.equal(status, 2)
+        fail("callback reached outer Exit")
+      }, (_) -> {
+        expect.run_exit(exit_program, [expect.exit((_) -> { !never(perform Exit(2)) })])
+      })
+    }, "callback reached outer Exit")
+  }},
+  {name: "invalid Exit expectation tag is rejected", test: (_) -> {
+    guard_exit((_) -> {
+      failure((_) -> { expect.run_exit(exit_program, [{label: "Exit", check: InvalidExpectation({})}]) }, "invalid Exit value")
+    })
+  }},
+  {name: "Exit must be the last expectation", test: (_) -> {
+    guard_exit((_) -> {
+      failure((_) -> { expect.run_exit(exit_program, [exit_step, first]) }, "step 2: missing StandardOut")
+    })
+  }},
+  {name: "run requires normal completion", test: (_) -> {
+    guard_exit((_) -> {
+      failure((_) -> { expect.run(exit_program, [exit_step]) }, "program exited; use expect.run_exit")
+    })
+  }},
+  {name: "run_exit requires an exit", test: (_) -> {
+    failure((_) -> { expect.run_exit((_) -> { {} }, []) }, "expected Exit, program returned")
+  }},
+  {name: "an expected Exit is missing on normal completion", test: (_) -> {
+    failure((_) -> { expect.run_exit((_) -> { {} }, [exit_step]) }, "step 1: missing Exit")
+  }},
+  {name: "equal_string still aborts with the quoted mismatch", test: (_) -> {
+    failure((_) -> { assert.equal_string("a", "b") }, "`a` does not equal `b`")
+  }},
+  {name: "false still aborts on True", test: (_) -> {
+    failure((_) -> { assert.false(True({})) }, "value was not `False`")
+  }},
+  {name: "debug still aborts for a missing test", test: (_) -> {
+    failure((_) -> { aok.debug([], "missing") }, "no test named missing")
+  }},
+]
+
+let reversed = !list_fold(groups, [], (group, acc) -> {
+  !list_fold(group, acc, (test, acc) -> { [test, ..acc] })
+})
+!list_fold(reversed, protocol, (test, acc) -> { [test, ..acc] })

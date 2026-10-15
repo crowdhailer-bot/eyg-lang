@@ -58,7 +58,7 @@ let assert = {
   })
 }
 
-let expect = import "./first.eyg"
+let expect = import "./expect.eyg"
 
 
 // Invoke a single test closure with `{}` under a deep `Abort` handler.

@@ -1,0 +1,7 @@
+corin@assistance-bot:~/mono/repos/eyg-lang$ '/tmp/eyg-roadmap-pi-host/eyg' eval guides/examples/computer_effec
+t_test.eyg
+Pass({})
+corin@assistance-bot:~/mono/repos/eyg-lang$ '/tmp/eyg-roadmap-pi-host/eyg' eval guides/examples/shared_state_h
+andlers.eyg
+{state: 1, value: [0, 2, 1]}
+corin@assistance-bot:~/mono/repos/eyg-lang$

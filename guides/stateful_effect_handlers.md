@@ -24,6 +24,15 @@ storage. [increment_counter.eyg](./examples/increment_counter.eyg) extracts this
 pattern as a reusable function; [stateful_handler.eyg](./examples/stateful_handler.eyg)
 uses it three times.
 
+Deferred answers must only pass state: returned closures capture variables,
+not ambient handlers. [stateful_eager_counter.eyg](./examples/stateful_eager_counter.eyg)
+runs the subject's effects before returning its state function.
+Independent counters can return nested answers, as
+[composed_stateful_handlers.eyg](./examples/composed_stateful_handlers.eyg) shows;
+the initial-state application order follows the nesting order.
+Use [one shared command protocol](./shared_state_handlers.md) when several
+operations must change the same state.
+
 The two self-contained workload fixtures measure one counter and interleaved
 counters. Their fold input comes from the host so workload recursion cannot
 distort the handler measurement. The interpreter and compiled JavaScript tests

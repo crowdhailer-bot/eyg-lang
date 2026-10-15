@@ -1,0 +1,29 @@
+// A net-count-only repair of stateful_original.eyg; see ../shared_state_handlers.md.
+let count_calls = (f) -> {
+  // Resume while surrounding handlers are still in scope; defer only arithmetic.
+  // This builds one pending state transformer per operation.
+  let run = handle Increment((_, resume) -> {
+    let next = resume({})
+    let step = (count) -> { next(!int_add(count, 1)) }
+    step
+  }, (_) -> {
+    handle Decrement((_, resume) -> {
+      let next = resume({})
+      let step = (count) -> { next(!int_subtract(count, 1)) }
+      step
+    }, (_) -> {
+      let _ = f({})
+      let finish = (count) -> { count }
+      finish
+    })
+  })
+  run(0)
+}
+
+count_calls((_) -> {
+  let _ = perform Increment({})
+  let _ = perform Decrement({})
+  let _ = perform Increment({})
+  {}
+})
+// 1

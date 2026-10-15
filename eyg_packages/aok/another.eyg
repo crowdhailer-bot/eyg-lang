@@ -1,0 +1,6 @@
+handle Get((_, resume) -> {
+  resume((x) -> { !int_add(x, 1) })
+}, (_) -> {
+    let f = perform Get({})
+    mask Get((_) -> { f(41) })
+})

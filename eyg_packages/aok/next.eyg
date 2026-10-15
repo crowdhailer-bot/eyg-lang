@@ -1,0 +1,34 @@
+handle State((update, resume, state) -> {
+  match !list_pop(state) {
+    Ok({head, tail}) -> { resume(Ok(head))(tail) }
+    Error(_) -> { resume(Error({}))([]) }
+  }
+}, (_) -> {
+  handle ReadFile((lift, resume) -> {
+    match perform State({}) {
+      Ok(expectation) -> { match expectation {
+        ReadFile(assertion) -> { resume(mask State((_) -> { assertion(lift) })) }
+        | (_) -> { (_) -> { Error("unexpected readfile") } }
+      } }
+      Error(_) -> { (_) -> { Error("Unexpected Readfile") } }
+    }
+  }, (_) -> {
+    handle StandardOut((lift, resume) -> {
+      match perform State({}) {
+        Ok(expectation) -> { match expectation {
+          StandardOut(assertion) -> { resume(mask State((_) -> { assertion(lift) })) }
+          | (_) -> { (_) -> { Error("unexpected stdout") } }
+        } }
+        Error(_) -> { (_) -> { Error("Unexpected stdout!") } }
+      }
+    }, (_) -> {
+      let x = perform ReadFile({})
+      let y = perform StandardOut({})
+      let f = (state) -> {
+        // remaining
+        Ok(state)
+      }
+      f
+    })
+  })
+})([ReadFile((lift) -> { Ok(!string_to_binary("hi")) })])

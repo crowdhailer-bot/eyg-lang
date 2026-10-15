@@ -1,0 +1,166 @@
+// A self-contained, ordered interaction test. TestInteraction is a local
+// normalization effect, not a new CLI/platform effect. Both adapters feed the
+// same cursor, so ordering is checked across effect kinds, not just per kind.
+let fail = (reason) -> { !never(perform Abort(reason)) }
+let assert_equal = (actual, expected, reason) -> {
+  match !equal(actual, expected) {
+    True(_) -> { {} }
+    False(_) -> { fail(reason) }
+  }
+}
+
+let expect = {
+  stdout: (expected) -> {
+    match {
+      StandardOut(actual) -> {
+        let _ = assert_equal(actual, expected, "stdout payload did not match")
+        StdoutReply({})
+      }
+      | (_) -> { fail("expected StandardOut") }
+    }
+  },
+  read_file: (expected, reply) -> {
+    match {
+      ReadFile(actual) -> {
+        let _ = assert_equal(actual, expected, "read request did not match")
+        ReadFileReply(reply)
+      }
+      | (_) -> { fail("expected ReadFile") }
+    }
+  }
+}
+
+let run = (program, steps) -> {
+  handle Abort((reason, _resume) -> { Fail(reason) }, (_) -> {
+    let execute = handle TestInteraction((event, resume) -> {
+      (remaining) -> {
+        match !list_pop(remaining) {
+          Ok({head: check, tail}) -> {
+            // Assert BEFORE resuming. The next operation consumes the tail.
+            let reply = check(event)
+            resume(reply)(tail)
+          }
+          Error(_) -> { fail("unexpected extra interaction") }
+        }
+      }
+    }, (_) -> {
+      let value = handle StandardOut((message, resume) -> {
+        match perform TestInteraction(StandardOut(message)) {
+          StdoutReply(reply) -> { resume(reply) }
+          | (_) -> { fail("wrong reply kind for StandardOut") }
+        }
+      }, (_) -> {
+        handle ReadFile((request, resume) -> {
+          match perform TestInteraction(ReadFile(request)) {
+            ReadFileReply(reply) -> { resume(reply) }
+            | (_) -> { fail("wrong reply kind for ReadFile") }
+          }
+        }, program)
+      })
+      let finish = (remaining) -> {
+        match !list_pop(remaining) {
+          Error(_) -> { value }
+          Ok(_) -> { fail("program returned before all expectations were met") }
+        }
+      }
+      finish
+    })
+    Pass(execute(steps))
+  })
+}
+
+// Assertion-style API for an aok test: return the program value on success,
+// and raise Abort on failure so an ignored return value cannot hide a failure.
+let expect_interactions = (program, steps) -> {
+  match run(program, steps) {
+    Pass(value) -> { value }
+    Fail(reason) -> { fail(reason) }
+  }
+}
+
+let request = {path: "/fixtures/name.txt", offset: 0, limit: 100}
+let load_name = (_) -> {
+  let _ = perform StandardOut("Loading name\n")
+  match perform ReadFile(request) {
+    Ok(bytes) -> {
+      match !string_from_binary(bytes) {
+        Ok(name) -> { name }
+        Error(_) -> { fail("invalid UTF-8") }
+      }
+    }
+    Error(reason) -> { fail(reason) }
+  }
+}
+let program = (_) -> {
+  let name = load_name({})
+  let _ = perform StandardOut(!string_append("Hello ", !string_append(name, "\n")))
+  name
+}
+
+// The test itself: expect output, reply to a read, expect different output.
+let steps = [
+  expect.stdout("Loading name\n"),
+  expect.read_file(request, Ok(!string_to_binary("Ada"))),
+  expect.stdout("Hello Ada\n"),
+]
+let example = handle Abort((reason, _resume) -> { Fail(reason) }, (_) -> {
+  let name = expect_interactions(program, steps)
+  let _ = assert_equal(name, "Ada", "wrong final result")
+  Pass(name)
+})
+
+// Checks for the runner itself, including failures after the final expected
+// operation. A passing script must also reach normal completion.
+let cases = [
+  {name: "ordered interaction", actual: example, expected: Pass("Ada")},
+  {name: "wrong order", actual: run(program, [
+    expect.read_file(request, Ok(!string_to_binary("Ada"))),
+    expect.stdout("Loading name\n"),
+    expect.stdout("Hello Ada\n"),
+  ]), expected: Fail("expected ReadFile")},
+  {name: "wrong first output", actual: run(program, [
+    expect.stdout("unexpected"),
+  ]), expected: Fail("stdout payload did not match")},
+  {name: "wrong last output", actual: run(program, [
+    expect.stdout("Loading name\n"),
+    expect.read_file(request, Ok(!string_to_binary("Ada"))),
+    expect.stdout("Hello Grace\n"),
+  ]), expected: Fail("stdout payload did not match")},
+  {name: "wrong read request", actual: run(program, [
+    expect.stdout("Loading name\n"),
+    expect.read_file({path: "wrong", offset: 0, limit: 100}, Ok(!string_to_binary("Ada"))),
+  ]), expected: Fail("read request did not match")},
+  {name: "missing last output", actual: run(load_name, steps),
+    expected: Fail("program returned before all expectations were met")},
+  {name: "extra output", actual: run((_) -> {
+    let value = program({})
+    let _ = perform StandardOut("extra")
+    value
+  }, steps), expected: Fail("unexpected extra interaction")},
+  {name: "failure after final output", actual: run((_) -> {
+    let _ = program({})
+    fail("failure after final output")
+  }, steps), expected: Fail("failure after final output")},
+  {name: "mocked read error", actual: run(program, [
+    expect.stdout("Loading name\n"),
+    expect.read_file(request, Error("file missing")),
+  ]), expected: Fail("file missing")},
+  {name: "empty script", actual: run((_) -> { "done" }, []), expected: Pass("done")},
+  {name: "wrong mock reply kind", actual: run(program, [
+    expect.stdout("Loading name\n"),
+    (_) -> { StdoutReply({}) },
+  ]), expected: Fail("wrong reply kind for ReadFile")},
+  {name: "assertion API cannot silently return a failure", actual:
+    handle Abort((reason, _resume) -> { Fail(reason) }, (_) -> {
+      let _ = expect_interactions(program, [])
+      Pass("unreachable")
+    }), expected: Fail("unexpected extra interaction")},
+]
+
+handle Abort((reason, _resume) -> { Fail(reason) }, (_) -> {
+  let checked = !list_fold(cases, 0, ({name, actual, expected}, count) -> {
+    let _ = assert_equal(actual, expected, !string_append("runner regression: ", name))
+    !int_add(count, 1)
+  })
+  Pass({checked, example})
+})
