@@ -14,6 +14,8 @@ eyg_ir = { path = "../gleam_ir" }
 eyg_parser = { path = "../gleam_parser" }
 filepath = ">= 1.1.2 and < 2.0.0"
 gleam_javascript = ">= 1.0.0 and < 2.0.0"
+gleam_json = ">= 3.1.0 and < 4.0.0"
+javascript_mutable_reference = ">= 1.0.0 and < 2.0.0"
 loam = { path = "../loam" }
 ogre = ">= 1.1.0 and < 2.0.0"
 overlay = { path = "../overlay" }
@@ -23,7 +25,6 @@ plinthx = { path = "../plinthx" }
 [dev_dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
 simplifile = ">= 2.4.0 and < 3.0.0"
-gleam_json = ">= 3.1.0 and < 4.0.0"
 
 [javascript]
 runtime = "bun"

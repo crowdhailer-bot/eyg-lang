@@ -68,3 +68,15 @@ schema. Null object fields are omitted. Structured replies use snake case names
 recursively; native byte arrays pass through unchanged. The model-facing type
 description marks optional fields with ?, selects the first anyOf alternative
 and describes numeric tool fields as Integer, matching EYG's numeric values.
+
+`opencode_plugin/router` wraps a host's tool dispatcher. Only exposes one EYG
+tool, Gate keeps direct tool calls and runs each through the same policy path,
+and Off returns the original tools. The host supplies each tool's schema and
+normal execution callback, preserving its own validation, permissions and events.
+This is the routing layer; installing it into a host needs that dispatcher hook.
+
+A Task callback reports the child session id before running it. The router
+stores the requested restricted policy against that id, so later calls keep
+it even when looking up the parent would give a broader policy. Named agent
+policies are trusted starting points. Recreate the router after configuration
+changes. Missing or cyclic parent ancestry fails execution.
