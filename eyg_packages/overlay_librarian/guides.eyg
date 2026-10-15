@@ -51,7 +51,8 @@ let index = [
   {slug: "ordered-effect-tests", title: "Ordered effect tests", summary: "Mock ordered computer operations with isolated callbacks.", keywords: "aok test mock expect order callback"},
   {slug: "shared-state-handlers", title: "Shared state handlers", summary: "Share state across several named operations.", keywords: "effect handler state counter command"},
   {slug: "shallow-handlers", title: "Shallow handlers", summary: "Resume raw continuations under explicitly chosen handlers.", keywords: "effect handler shallow continuation resume step"},
-  {slug: "json-boundaries-for-embedded-eyg", title: "JSON boundaries for embedded EYG", summary: "Exchange plain data and declare closed effect types.", keywords: "embed host json type effect codec"}
+  {slug: "json-boundaries-for-embedded-eyg", title: "JSON boundaries for embedded EYG", summary: "Exchange plain data and declare closed effect types.", keywords: "embed host json type effect codec"},
+  {slug: "agents-in-an-embedded-shell", title: "Agents in an embedded shell", summary: "Give an agent the same typed effects as a person.", keywords: "embed host agent shell run model tool"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
