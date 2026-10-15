@@ -113,3 +113,4 @@ From packages/gleam_embed, `gleam run --runtime bun -m browser_check` checks a
 real local HTTP response and a stopped-server failure. Unit tests check hashing
 on Node and Bun. The check starts and stops its own ephemeral server.
 Use these callbacks with the [module graph loader](./loading_modules.md).
+For precompiled programs, use the [ES module export](./compiled_modules.md).

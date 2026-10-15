@@ -9,6 +9,9 @@ pub fn native_arrays_objects_and_functions_cross_the_dynamic_boundary_test() {
   assert foreign.length(items) == 2
   assert foreign.index(items, 1) == dynamic.int(2)
   let record = foreign.object(array.from_list([#("answer", dynamic.int(42))]))
+  assert foreign.has_own(record, "answer")
+  assert !foreign.has_own(record, "toString")
+  assert foreign.property(record, "answer") == dynamic.int(42)
   assert decode.run(record, decode.field("answer", decode.int, decode.success))
     == Ok(42)
   let function = foreign.to_dynamic(fn(value) { value })
