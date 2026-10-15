@@ -52,7 +52,8 @@ let index = [
   {slug: "shared-state-handlers", title: "Shared state handlers", summary: "Share state across several named operations.", keywords: "effect handler state counter command"},
   {slug: "shallow-handlers", title: "Shallow handlers", summary: "Resume raw continuations under explicitly chosen handlers.", keywords: "effect handler shallow continuation resume step"},
   {slug: "json-boundaries-for-embedded-eyg", title: "JSON boundaries for embedded EYG", summary: "Exchange plain data and declare closed effect types.", keywords: "embed host json type effect codec"},
-  {slug: "agents-in-an-embedded-shell", title: "Agents in an embedded shell", summary: "Give an agent the same typed effects as a person.", keywords: "embed host agent shell run model tool"}
+  {slug: "agents-in-an-embedded-shell", title: "Agents in an embedded shell", summary: "Give an agent the same typed effects as a person.", keywords: "embed host agent shell run model tool"},
+  {slug: "loading-module-graphs", title: "Loading module graphs", summary: "Load a hub release and its complete dependency graph.", keywords: "embed host hub cache module graph fetch load"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
