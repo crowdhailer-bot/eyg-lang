@@ -159,10 +159,18 @@ pub fn save_video(video: Video, path: String) -> Promise(Result(Nil, String))
 pub fn screenshot(page: Page, path: String) -> Promise(Result(Nil, String))
 
 @external(javascript, "./playwright_ffi.mjs", "pdf")
-pub fn pdf(page: Page, path: String, options: String) -> Promise(Result(Nil, String))
+pub fn pdf(
+  page: Page,
+  path: String,
+  options: String,
+) -> Promise(Result(Nil, String))
 
 @external(javascript, "./playwright_ffi.mjs", "viewport")
-pub fn viewport(page: Page, width: Int, height: Int) -> Promise(Result(Nil, String))
+pub fn viewport(
+  page: Page,
+  width: Int,
+  height: Int,
+) -> Promise(Result(Nil, String))
 
 @external(javascript, "./playwright_ffi.mjs", "closeContext")
 pub fn close_context(context: Context) -> Promise(Result(Nil, String))
