@@ -1,0 +1,10 @@
+corin@assistance-bot:~/mono/repos/eyg-lang$ cd packages/pi_extension && gleam run -m session_test
+   Compiled in 0.13s
+    Running session_test.main
+PASS actual Pi tools: Read fruit; Write notes; Mock refused fruit overwrite; Bash unavailable; nested Edit cha
+nged two to three.
+PASS only-mode: the model sees [eyg], and Read remains callable as an effect.
+PASS Task: child sees [eyg], reads fruit, cannot write notes, and reports model token usage.
+PASS Escalate: no UI approval, no subagent started. Temporary projects removed.
+PASS Pi policy guide
+corin@assistance-bot:~/mono/repos/eyg-lang/packages/pi_extension$
