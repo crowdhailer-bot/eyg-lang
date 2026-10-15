@@ -263,3 +263,7 @@ Generic types instantiate at each use. New entries shadow older context
 bindings; the first occurrence in a supplied list takes precedence.
 `infer.check_with_references(context, references, source)` returns the completed
 analysis when the host already has its referenced module types.
+
+## Reusable host loop
+
+On JavaScript the [eyg_embed](../packages/gleam_embed/) package packages this loop, with async effects and module resolution.
