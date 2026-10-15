@@ -14,3 +14,6 @@ pub fn tool(input: Dynamic) -> Dynamic
 
 @external(javascript, "./sdk_ffi.mjs", "stringSchema")
 pub fn string_schema() -> Dynamic
+
+@external(javascript, "./sdk_ffi.mjs", "createOpencodeClient")
+pub fn create_client(options: Dynamic) -> Dynamic

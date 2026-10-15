@@ -6,6 +6,7 @@
       "name": "opencode-eyg",
       "dependencies": {
         "@opencode-ai/plugin": "1.19.0",
+        "@opencode-ai/sdk": "1.19.0",
         "ai": "6.0.168",
       },
       "devDependencies": {

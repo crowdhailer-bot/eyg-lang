@@ -37,6 +37,7 @@ pub fn main() {
           [
             "build/dev/javascript/opencode_plugin/core.mjs",
             "build/dev/javascript/opencode_plugin/dispatch.mjs",
+            "build/dev/javascript/opencode_plugin/eyg.mjs",
           ],
           json.string,
         ),
@@ -45,12 +46,18 @@ pub fn main() {
       #("naming", json.object([#("entry", json.string("[name].mjs"))])),
       #("format", json.string("esm")),
       #("target", json.string("node")),
-      #("external", json.array(["ai", "@opencode-ai/plugin"], json.string)),
+      #(
+        "external",
+        json.array(
+          ["ai", "@opencode-ai/plugin", "@opencode-ai/sdk/client"],
+          json.string,
+        ),
+      ),
     ])
     |> json.to_string
   use built <- promise.map(bundle.build(bun, options))
   let assert Ok(built) = built
   assert bundle.success(built)
     as "Unable to build the standalone policy runtime"
-  io.println("Built dist/core.mjs and dist/dispatch.mjs")
+  io.println("Built dist/core.mjs, dist/dispatch.mjs and dist/eyg.mjs")
 }

@@ -50,6 +50,24 @@ pub fn new(config: core.Config) {
   Router(config, reference.new(dict.new()))
 }
 
+/// Trusted adapters keep policy assignments shared with later host callbacks.
+pub fn known(router: Router, id: String) {
+  dict.get(reference.get(router.policies), id)
+}
+
+pub fn remember(router: Router, id: String, policy: Policy) {
+  let _ =
+    reference.set(
+      router.policies,
+      dict.insert(reference.get(router.policies), id, policy),
+    )
+  Nil
+}
+
+pub fn policy(router: Router, session: Session, parent) {
+  policy_for(router, session, parent, [])
+}
+
 fn text(value, field) {
   decode.run(value, decode.field(field, decode.string, decode.success))
   |> result.unwrap("")
@@ -127,14 +145,7 @@ fn hosts(router: Router, policy, available: List(Tool)) {
               |> dict.to_list
               |> array.from_list
               |> foreign.object
-            tool.execute(input, fn(id) {
-              let _ =
-                reference.set(
-                  router.policies,
-                  dict.insert(reference.get(router.policies), id, child),
-                )
-              Nil
-            })
+            tool.execute(input, fn(id) { remember(router, id, child) })
           }
           _ -> tool.execute(input, fn(_) { Nil })
         }
