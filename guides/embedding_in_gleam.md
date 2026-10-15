@@ -100,3 +100,15 @@ executes it. Recreate it from packages/tracing with
 The [JSON boundary](./embedding_json.md) exchanges plain data and describes
 closed effect signatures for hosts outside Gleam.
 An [embedded agent](./embedded_agents.md) can share the same retained shell.
+
+## Browser platform callbacks
+
+`eyg/embed/browser` supplies `fetch` and `hash` callbacks in the continuation
+shape used by `midas/effect` and the hub cache. `send(request)` is the direct
+promise variant: it reads the whole response body and retains HTTP status and
+headers. HTTP error statuses remain responses; network failures are errors.
+`hash` uses the platform's Web Crypto digest, including for byte-array slices.
+
+From packages/gleam_embed, `gleam run --runtime bun -m browser_check` checks a
+real local HTTP response and a stopped-server failure. Unit tests check hashing
+on Node and Bun. The check starts and stops its own ephemeral server.
