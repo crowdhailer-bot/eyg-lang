@@ -154,7 +154,9 @@ pub fn in_terminal(bun, root, env, work) {
   use _ <- promise.await(
     command(root, "tmux", ["kill-session", "-t", tmux_name]),
   )
-  let _ = subprocess.kill(xterm, "SIGTERM")
+  // This window belongs to the recorder. Terminate it even if its tmux client
+  // switched to another existing session after the recorded session closed.
+  let _ = subprocess.kill(xterm, "SIGKILL")
   use _ <- promise.map(subprocess.exited(xterm))
   case outcome {
     Ok(_) -> Nil
