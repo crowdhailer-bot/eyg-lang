@@ -2,6 +2,7 @@
 
 import filepath
 import gleam/http/request
+import gleam/int
 import gleam/io
 import gleam/javascript/promise
 import gleam/list
@@ -19,16 +20,32 @@ import tracing/package_fixture
 import tracing/record_browser
 import tracing/scripted_model as model
 
-const origin = "http://127.0.0.1:7820"
-
 pub fn main() {
+  example("todomvc_lustre", "todomvc", 7820)
+}
+
+/// Run the same capability, UI and cache checks against either host boundary.
+pub fn example(folder: String, recording: String, port: Int) {
+  let origin = "http://127.0.0.1:" <> int.to_string(port)
   let assert Ok(cwd) = simplifile.current_directory()
   let root = filepath.join(cwd, "../..")
-  let project = filepath.join(root, "examples/todomvc_lustre")
+  let project = filepath.join(root, "examples/" <> folder)
   use installed <- promise.await(
-    system.run(system.command("bun", ["install"], project)),
+    system.run(system.command(
+      "bun",
+      ["install"],
+      filepath.join(root, "examples/todomvc_lustre"),
+    )),
   )
   let assert Ok(_) = installed
+  use sdk <- promise.await(
+    system.run(system.command(
+      "gleam",
+      ["run", "-m", "build"],
+      filepath.join(root, "packages/embed_js"),
+    )),
+  )
+  let assert Ok(_) = sdk
   use built <- promise.await(
     system.run(system.command("gleam", ["run", "-m", "build"], project)),
   )
@@ -59,7 +76,7 @@ pub fn main() {
       pair.0 != "PORT" && pair.0 != "EYG_HUB" && pair.0 != "OLLAMA_ORIGIN"
     })
     |> list.append([
-      #("PORT", "7820"),
+      #("PORT", int.to_string(port)),
       #("EYG_HUB", "http://127.0.0.1:7207"),
       #("OLLAMA_ORIGIN", model.origin),
     ])
@@ -77,8 +94,10 @@ pub fn main() {
     )
   let outcome =
     {
-      use _ <- promise.await(ready(100))
-      record_browser.run("todomvc", fn(page) { walkthrough(page, hub, model) })
+      use _ <- promise.await(ready(origin, 100))
+      record_browser.run(recording, fn(page) {
+        walkthrough(page, origin, hub, model)
+      })
     }
     |> promise.map(Ok)
     |> promise.rescue(Error)
@@ -93,7 +112,7 @@ pub fn main() {
   )
 }
 
-fn ready(attempts) {
+fn ready(origin, attempts) {
   assert attempts > 0 as "TodoMVC did not start"
   let assert Ok(request) = request.to(origin)
   use response <- promise.await(
@@ -103,7 +122,7 @@ fn ready(attempts) {
     Ok(response) if response.status == 200 -> promise.resolve(Nil)
     _ -> {
       use _ <- promise.await(timers.sleep(100))
-      ready(attempts - 1)
+      ready(origin, attempts - 1)
     }
   }
 }
@@ -132,7 +151,12 @@ fn run(page, code) {
   done(browser.press(input, "Control+Enter"))
 }
 
-fn walkthrough(page, hub: package_fixture.Fixture, model: model.Fixture) {
+fn walkthrough(
+  page,
+  origin,
+  hub: package_fixture.Fixture,
+  model: model.Fixture,
+) {
   let errors = reference.new([])
   browser.on_error(page, fn(error) {
     reference.set(errors, [error, ..reference.get(errors)])
