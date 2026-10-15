@@ -21,3 +21,26 @@ reject crossing bridges and more than two bridges between a pair of islands.
 From examples/hashi, run `gleam test` and `gleam test --runtime node`.
 The board tests exercise actual upstream transitions, crossing and invalid
 endpoints, double bridges, removal, undo/redo and solved-board refusal.
+
+## Retained shell and solver
+
+`hashi/play.start(library)` creates a shell with the game effects and the
+[library](../examples/hashi/library.eyg) in scope as `hashi`. Keep the returned
+shell and board after each `play.run`; variables persist between runs.
+The library has no package references, so these programs make no hub requests.
+Keeping the shell retains its checked functions and values; recreating it
+rechecks them. The host owns this lifetime.
+
+```eyg
+let islands = hashi.unfinished({})
+hashi.map(islands, (island) -> { {x: island.x, y: island.y, missing: hashi.missing(island)} })
+```
+
+The helpers query islands and neighbours, count existing bridges and connect
+or disconnect pairs. Game refusals are ordinary tagged results. Type errors,
+including unavailable effects, stop the whole program before any move.
+
+Run [solver.eyg](../examples/hashi/solver.eyg) in the shell to retain `solve`,
+then run `solve({})`. It repeatedly adds bridges forced by the numbers and
+stops when no more are forced, returning IsSolved. It does not guess or search:
+the tests solve seed 1 and verify a partial, unsolved result on seed 2.
