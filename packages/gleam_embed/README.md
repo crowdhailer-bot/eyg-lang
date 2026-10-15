@@ -88,3 +88,6 @@ changing the counter, then successfully uses the retained function on a string.
 The [checked recording](../tracing/recordings/embedding-shell.mp4)
 executes it. Recreate it from packages/tracing with
 `gleam run -m tracing/embedding_shell_demo`.
+
+The [JSON boundary](../../guides/embedding_json.md) exchanges plain data and describes
+closed effect signatures for hosts outside Gleam.
