@@ -174,6 +174,13 @@ pub fn expression(tokens) {
   use #(#(token, start), rest) <- try(pop(tokens))
 
   use #(exp, rest) <- try(case token {
+    t.Name("mask") -> {
+      case rest {
+        [#(t.Uppername(label), end), ..rest] ->
+          Ok(#(#(ir.Mask(label), #(start, end + string.length(label))), rest))
+        _ -> Ok(#(#(ir.Variable("mask"), #(start, start + 4)), rest))
+      }
+    }
     t.Name(label) -> {
       let span = #(start, start + string.length(label))
       Ok(#(#(ir.Variable(label), span), rest))

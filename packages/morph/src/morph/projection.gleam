@@ -347,6 +347,7 @@ pub fn text(scope) {
         e.Tag(content) -> Ok(#(content, e.Tag))
         e.Perform(label) -> Ok(#(label, e.Perform))
         e.Deep(label) -> Ok(#(label, e.Deep))
+        e.Mask(label) -> Ok(#(label, e.Mask))
         e.Builtin(identifier) -> Ok(#(identifier, e.Builtin))
         _ -> Error(Nil)
       })

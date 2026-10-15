@@ -1,0 +1,8 @@
+corin@assistance-bot:~/mono/repos/eyg-lang$ '/tmp/eyg-roadmap-pi-host/eyg' eval -c 'handle Ping((_, resume) ->
+ { resume(100) }, (_) -> {   handle Ping((_, resume) -> { resume(1) }, (_) -> {     let outer = mask Ping((_)
+-> { perform Ping({}) })     let inner = perform Ping({})     !int_add(outer, inner)   }) })'
+101
+corin@assistance-bot:~/mono/repos/eyg-lang$ '/tmp/eyg-roadmap-pi-host/eyg' eval -c '!pure((x) -> { !int_add(x,
+ 1) })(41)'
+42
+corin@assistance-bot:~/mono/repos/eyg-lang$

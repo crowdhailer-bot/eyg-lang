@@ -470,6 +470,7 @@ fn rewrite(
     ir.NoCases -> ir.NoCases
     ir.Perform(label) -> ir.Perform(label)
     ir.Handle(label) -> ir.Handle(label)
+    ir.Mask(label) -> ir.Mask(label)
     ir.Builtin(identifier) -> ir.Builtin(identifier)
   }
   #(exp, Nil)

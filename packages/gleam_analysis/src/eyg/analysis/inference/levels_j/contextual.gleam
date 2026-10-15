@@ -447,6 +447,8 @@ pub fn do_infer(source, env, eff, level, bindings) -> Step(_) {
       prim(perform(label), env, eff, level, bindings, ir.Perform(label))
     ir.Handle(label) ->
       prim(handle(label), env, eff, level, bindings, ir.Handle(label))
+    ir.Mask(label) ->
+      prim(mask(label), env, eff, level, bindings, ir.Mask(label))
     ir.Builtin(id) ->
       case builtin(id) {
         Ok(poly) -> prim(poly, env, eff, level, bindings, ir.Builtin(id))
@@ -573,6 +575,18 @@ pub fn handle(label) {
   t.Fun(handler, t.Empty, t.Fun(exec, tail, return))
 }
 
+// Masking skips one enclosing handler. The body uses the residual row;
+// the mask expression accounts for the skipped handler's independent signature.
+pub fn mask(label) {
+  let effects = q(0)
+  let return = q(1)
+  t.Fun(
+    t.Fun(t.unit, effects, return),
+    t.EffectExtend(label, #(q(2), q(3)), effects),
+    return,
+  )
+}
+
 // equal fn should be open in fn that takes boolean and other union
 fn builtin(name) {
   list.key_find(builtins(), name)
@@ -589,6 +603,8 @@ pub fn builtins() {
     #("fix", fix()),
     // TODO do we want a never type
     #("never", pure1(t.Never, q(1))),
+    // Constrain the argument before widening the returned function at its use.
+    #("pure", pure1(pure1(q(0), q(1)), pure1(q(0), q(1)))),
 
     // Eval is effectful and so should be an effect, does that mean that Serialize also needs to be an effect
     // #(

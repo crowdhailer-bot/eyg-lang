@@ -18,6 +18,16 @@ pub fn call_test() {
   |> should_equal(source)
 }
 
+pub fn mask_round_trip_test() {
+  let source = ir.mask("Ping")
+  source
+  |> et.from_annotated
+  |> should_equal(et.Mask("Ping"))
+  |> et.to_annotated([])
+  |> ir.clear_annotation
+  |> should.equal(source)
+}
+
 pub fn destructure_test() {
   let source =
     ir.lambda(

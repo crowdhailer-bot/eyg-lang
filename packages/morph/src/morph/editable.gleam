@@ -28,6 +28,7 @@ pub type Expression {
   )
   Perform(String)
   Deep(String)
+  Mask(String)
   Builtin(String)
   Reference(ir.Reference)
 }
@@ -163,6 +164,7 @@ pub fn from_annotated(node) {
     ir.Tag(label) -> Tag(label)
     ir.Perform(label) -> Perform(label)
     ir.Handle(label) -> Deep(label)
+    ir.Mask(label) -> Mask(label)
 
     ir.Builtin(identifier) -> Builtin(identifier)
     ir.Reference(reference) -> Reference(reference)
@@ -420,6 +422,7 @@ pub fn to_annotated(source, rev) {
     Tag(label) -> #(ir.Tag(label), rev)
     Perform(label) -> #(ir.Perform(label), rev)
     Deep(label) -> #(ir.Handle(label), rev)
+    Mask(label) -> #(ir.Mask(label), rev)
     Builtin(identifier) -> #(ir.Builtin(identifier), rev)
     Reference(reference) -> #(ir.Reference(reference), rev)
   }

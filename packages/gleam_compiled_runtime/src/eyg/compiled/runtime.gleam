@@ -15,12 +15,16 @@ pub type Step {
   Bind(value: Dynamic, then: fn(Dynamic) -> Dynamic)
   Handle(label: String, handler: Dynamic, body: Dynamic)
   Perform(label: String, value: Dynamic)
+  MaskCall(label: String, body: Dynamic)
+  PureCall(function: Dynamic, argument: Dynamic)
   Resume(value: Dynamic, frames: List(Frame))
 }
 
 pub type Frame {
   Then(fn(Dynamic) -> Dynamic)
   Delimiter(String, Dynamic)
+  MaskBoundary(String)
+  PureBoundary
 }
 
 pub type Metrics {
@@ -37,6 +41,8 @@ pub type Runtime {
     bind_builtin: fn(Dynamic) -> fn(Dynamic) -> Dynamic,
     handle: fn(String, Dynamic, Dynamic) -> Dynamic,
     perform: fn(String, Dynamic) -> Dynamic,
+    mask: fn(String, Dynamic) -> Dynamic,
+    pure_: fn(Dynamic) -> Dynamic,
     fix: fn(Dynamic) -> Dynamic,
     list_fold: fn(Dynamic) -> fn(Dynamic) -> fn(Dynamic) -> Dynamic,
     binary_fold: fn(Dynamic) -> fn(Dynamic) -> fn(Dynamic) -> Dynamic,
@@ -63,6 +69,8 @@ pub fn create(host: Dynamic) -> Runtime {
       foreign.to_dynamic(Handle(label, handler, body))
     },
     perform: fn(label, value) { foreign.to_dynamic(Perform(label, value)) },
+    mask: fn(label, body) { foreign.to_dynamic(MaskCall(label, body)) },
+    pure_: guarded(_, host, metrics),
     fix: fixed(_, host, metrics),
     list_fold: fn(items) {
       fn(initial) { fn(reducer) { fold_list(items, initial, reducer) } }
@@ -114,14 +122,19 @@ fn loop(value, stack, host, metrics) {
         host,
         metrics,
       )
+    Some(MaskCall(label, body)) ->
+      loop(call(body, unit()), [MaskBoundary(label), ..stack], host, metrics)
+    Some(PureCall(function, argument)) ->
+      loop(call(function, argument), [PureBoundary, ..stack], host, metrics)
     Some(Perform(label, value)) ->
-      case find(stack, label, []) {
-        None -> {
+      case find(stack, label, [], 0) {
+        Error(kind) -> fail(kind, dynamic.string(label))
+        Ok(None) -> {
           let next =
             foreign.apply(host, array.from_list([dynamic.string(label), value]))
           loop(next, stack, host, metrics)
         }
-        Some(#(handler, outside, frames)) -> {
+        Ok(Some(#(handler, outside, frames))) -> {
           let previous = reference.get(metrics)
           reference.set(
             metrics,
@@ -157,18 +170,40 @@ fn loop(value, stack, host, metrics) {
         [] -> value
         [Then(then), ..rest] -> loop(then(value), rest, host, metrics)
         [Delimiter(..), ..rest] -> loop(value, rest, host, metrics)
+        [MaskBoundary(_), ..rest] | [PureBoundary, ..rest] ->
+          loop(value, rest, host, metrics)
       }
     }
   }
 }
 
 // Captured frames are reversed for reinstallation, without links outside the delimiter.
-fn find(stack, label, frames) {
+fn find(stack, label, frames, skip) {
   case stack {
-    [] -> None
+    [] if skip > 0 -> Error("MaskedEffect")
+    [] -> Ok(None)
+    [PureBoundary, ..] -> Error("ImpureEffect")
+    [MaskBoundary(found) as frame, ..rest] if found == label ->
+      find(rest, label, [frame, ..frames], skip + 1)
+    [Delimiter(found, _) as frame, ..rest] if found == label && skip > 0 ->
+      find(rest, label, [frame, ..frames], skip - 1)
     [Delimiter(found, handler) as frame, ..rest] if found == label ->
-      Some(#(handler, rest, [frame, ..frames]))
-    [frame, ..rest] -> find(rest, label, [frame, ..frames])
+      Ok(Some(#(handler, rest, [frame, ..frames])))
+    [frame, ..rest] -> find(rest, label, [frame, ..frames], skip)
+  }
+}
+
+fn guarded(function, host, metrics) {
+  case foreign.is_function(function) {
+    False -> fail("IncorrectTerm", dynamic.string("Function"))
+    True ->
+      function_(
+        foreign.to_dynamic(fn(argument) {
+          foreign.to_dynamic(PureCall(function, argument))
+        }),
+        host,
+        metrics,
+      )
   }
 }
 
