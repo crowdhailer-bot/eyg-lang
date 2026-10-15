@@ -60,7 +60,8 @@ let index = [
   {slug: "a-todo-host-using-the-native-api", title: "A todo host using the native API", summary: "Use the standalone shell through plain native task data.", keywords: "todo javascript typescript native embed bundle host"},
   {slug: "playing-hashi-through-eyg", title: "Playing Hashi through EYG", summary: "Drive an original puzzle game through its typed operations.", keywords: "hashi puzzle game embed effects solver"},
   {slug: "compiled-eyg-in-nginx", title: "Compiled EYG in nginx", summary: "Await native subrequests in a compiled HTTP handler.", keywords: "nginx njs quickjs compile embed http subrequest"},
-  {slug: "policies-for-embedded-harnesses", title: "Policies for embedded harnesses", summary: "Compose gates for computer and host effects.", keywords: "policy gate harness embed opencode pi task parent child"}
+  {slug: "policies-for-embedded-harnesses", title: "Policies for embedded harnesses", summary: "Compose gates for computer and host effects.", keywords: "policy gate harness embed opencode pi task parent child"},
+  {slug: "eyg-in-pi", title: "EYG in Pi", summary: "Make Pi tools policy-gated effects and retain child policies.", keywords: "pi extension tools policy task subagent usage embed"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
