@@ -61,7 +61,8 @@ let index = [
   {slug: "playing-hashi-through-eyg", title: "Playing Hashi through EYG", summary: "Drive an original puzzle game through its typed operations.", keywords: "hashi puzzle game embed effects solver"},
   {slug: "compiled-eyg-in-nginx", title: "Compiled EYG in nginx", summary: "Await native subrequests in a compiled HTTP handler.", keywords: "nginx njs quickjs compile embed http subrequest"},
   {slug: "policies-for-embedded-harnesses", title: "Policies for embedded harnesses", summary: "Compose gates for computer and host effects.", keywords: "policy gate harness embed opencode pi task parent child"},
-  {slug: "eyg-in-pi", title: "EYG in Pi", summary: "Make Pi tools policy-gated effects and retain child policies.", keywords: "pi extension tools policy task subagent usage embed"}
+  {slug: "eyg-in-pi", title: "EYG in Pi", summary: "Make Pi tools policy-gated effects and retain child policies.", keywords: "pi extension tools policy task subagent usage embed"},
+  {slug: "eyg-as-the-opencode-tool-dispatcher", title: "EYG as the OpenCode tool dispatcher", summary: "Route native and MCP tools through policies and retain child restrictions.", keywords: "opencode dispatcher tools mcp policy task subagent gate"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
