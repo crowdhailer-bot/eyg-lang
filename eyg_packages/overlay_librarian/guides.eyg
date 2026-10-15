@@ -57,7 +57,8 @@ let index = [
   {slug: "exporting-compiled-eyg-modules", title: "Exporting compiled EYG modules", summary: "Import compiled programs and supply native effect callbacks.", keywords: "compile module export javascript async effect host"},
   {slug: "embedding-in-javascript-hosts", title: "Embedding in JavaScript hosts", summary: "Use a standalone typed shell from a native host.", keywords: "embed javascript typescript browser bundle shell host"},
   {slug: "querying-a-todo-list-with-eyg", title: "Querying a todo list with EYG", summary: "Script a todo model through limited typed operations.", keywords: "todo tasks query tag complete embed model"},
-  {slug: "a-todo-host-using-the-native-api", title: "A todo host using the native API", summary: "Use the standalone shell through plain native task data.", keywords: "todo javascript typescript native embed bundle host"}
+  {slug: "a-todo-host-using-the-native-api", title: "A todo host using the native API", summary: "Use the standalone shell through plain native task data.", keywords: "todo javascript typescript native embed bundle host"},
+  {slug: "playing-hashi-through-eyg", title: "Playing Hashi through EYG", summary: "Drive an original puzzle game through its typed operations.", keywords: "hashi puzzle game embed effects solver"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
