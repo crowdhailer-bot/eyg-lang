@@ -5,6 +5,7 @@ import glasshouse/helpers.{sha256}
 import glasshouse/store
 import glasshouse/value
 import gleam/dict
+import multiformats/cid/v1
 
 fn round_trip(input) {
   let encoded = value.encode(input)
@@ -61,6 +62,19 @@ pub fn closure_round_trips_test() {
   let assert Ok(decoded) = round_trip(closure)
   let assert Ok(result) = expression.call(decoded, [#(v.Integer(5), Nil)])
   assert result == v.Integer(15)
+}
+
+pub fn matching_inlines_content_references_on_both_sides_test() {
+  let #(store, id) = store.put_node(store.new(), ir.integer(42), sha256)
+  let assert Ok(#(cid, _)) = v1.from_string(id)
+  let assert Ok(referenced) =
+    expression.execute(ir.lambda("_", ir.reference(cid)), [])
+  let assert Ok(literal) =
+    expression.execute(ir.lambda("_", ir.integer(42)), [])
+  assert value.matches(referenced, value.encode(referenced), store)
+  assert value.matches(referenced, value.encode(literal), store)
+  assert value.matches(literal, value.encode(referenced), store)
+  assert !value.matches(literal, value.encode(referenced), store.new())
 }
 
 pub fn externalize_moves_large_binaries_test() {
