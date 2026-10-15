@@ -1,0 +1,16 @@
+corin@assistance-bot:~/mono/repos/eyg-lang$ cd packages/gleam_embed && gleam run --runtime node -m host_shell
+   Compiled in 0.05s
+    Running host_shell.main
+> let n = perform Add(5)
+let id = (x) -> { x }
+{}
+> !int_add(id(n), 1)
+6
+> let _ = perform Add(1)
+perform Launch({})
+The code did not type check, nothing ran.
+line 2: missing row 'Launch'
+> id("still here")
+"still here"
+PASS retained bindings, polymorphism and checking before effects
+corin@assistance-bot:~/mono/repos/eyg-lang/packages/gleam_embed$

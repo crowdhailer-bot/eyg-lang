@@ -73,3 +73,26 @@ retain a global cache. Mutable package names need an explicit freshness policy.
 Use pinned references for reproducible scripts. The embedding guides for
 [Erlang](./embedding_erlang.md), [Elixir](./embedding_elixir.md),
 [Ash](./embedding_ash.md) and [Pi](./embedding_pi.md) show concrete cache owners.
+
+## Retained shell
+
+Use `shell.new(effects)` and `shell.run(session, code, state, handler)` for
+user-written code. Each run parses and checks the whole block before executing;
+successful runs retain bindings and their generic types. A trailing `let` has no
+returned value. `run_async` awaits a host handler that returns a promise.
+
+`with_value` supplies a trusted value and its type. `with_module` evaluates a
+pure library, whose exported functions may later perform the host's effects.
+`with_references` supplies module values and types together.
+
+Parse or type failures keep both the old shell and host state. A runtime stop
+keeps the old bindings, while host effects already performed remain visible.
+The host owns those mutations and any transaction policy.
+
+From packages/gleam_embed, run `gleam run --runtime node -m host_shell`.
+The [example](../packages/gleam_embed/dev/host_shell.gleam) retains an integer and
+generic identity function, returns 6, rejects an unavailable operation before
+changing the counter, then successfully uses the retained function on a string.
+The [checked recording](../packages/tracing/recordings/embedding-shell.mp4)
+executes it. Recreate it from packages/tracing with
+`gleam run -m tracing/embedding_shell_demo`.
