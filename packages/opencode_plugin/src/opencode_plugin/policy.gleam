@@ -43,19 +43,29 @@ pub fn restrict(
   child: execute.Value,
 ) -> Result(Policy, String) {
   case cast.as_record(child) {
-    Ok(fields) ->
-      parent.gates
-      |> dict.to_list
-      |> list.filter_map(fn(entry) {
-        let #(field, gates) = entry
-        case dict.get(fields, field) {
-          Ok(gate) -> Ok(#(field, [gate, ..gates]))
-          Error(Nil) -> Error(Nil)
-        }
-      })
-      |> dict.from_list
-      |> Policy
-      |> Ok
+    Ok(fields) -> {
+      // An empty chain is an explicit denial. Keep it through descendants so
+      // omitted gates cannot reopen effects that are available by default.
+      let inherited =
+        dict.map_values(parent.gates, fn(name, gates) {
+          case gates, dict.get(fields, name) {
+            [_, ..], Ok(gate) -> [gate, ..gates]
+            _, _ -> []
+          }
+        })
+      let defaults = list.append(unchecked, captured) |> list.map(field)
+      let gates =
+        list.fold(dict.to_list(fields), inherited, fn(gates, entry) {
+          let #(name, gate) = entry
+          case
+            !dict.has_key(parent.gates, name) && list.contains(defaults, name)
+          {
+            True -> dict.insert(gates, name, [gate])
+            False -> gates
+          }
+        })
+      Ok(Policy(gates))
+    }
     Error(_) -> Error("a policy must be a record of gate functions")
   }
 }
@@ -69,6 +79,7 @@ pub type Access {
 
 pub fn access(policy: Policy, label: String) -> Access {
   case dict.get(policy.gates, field(label)) {
+    Ok([]) -> Unavailable
     Ok(gates) -> Gated(gates)
     Error(Nil) ->
       case list.contains(unchecked, label) || list.contains(captured, label) {
@@ -79,7 +90,15 @@ pub fn access(policy: Policy, label: String) -> Access {
 }
 
 pub fn fields(policy: Policy) -> List(String) {
-  dict.keys(policy.gates) |> list.sort(string.compare)
+  policy.gates
+  |> dict.to_list
+  |> list.filter_map(fn(entry) {
+    case entry.1 {
+      [] -> Error(Nil)
+      _ -> Ok(entry.0)
+    }
+  })
+  |> list.sort(string.compare)
 }
 
 /// The policy field for an effect label, `ReadFile` is decided by `read_file`, `CWD` by `cwd`.
