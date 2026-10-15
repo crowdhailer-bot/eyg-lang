@@ -10,8 +10,12 @@ for pkg in packages/{gleam_analysis,gleam_embedding,gleam_hub,gleam_ir,gleam_par
 done
 ```
 To test all the packages on the JavaScript environment.
+Build the standalone native API before its tests import the bundle:
 ```sh
-for pkg in packages/{glasshouse,gleam_analysis,gleam_cli,gleam_compiler,gleam_compiled_runtime,gleam_embed,gleam_hub,gleam_interpreter,gleam_ir,gleam_parser,gleam_sha256,gleam_x,intelligence,loam,morph,otel,overlay_eval,overlay_llm,overlay_web,plinthx,topological,touch_grass,untethered,website}; do
+( cd packages/embed_js && bun install && gleam run -m build )
+```
+```sh
+for pkg in packages/{embed_js,glasshouse,gleam_analysis,gleam_cli,gleam_compiler,gleam_compiled_runtime,gleam_embed,gleam_hub,gleam_interpreter,gleam_ir,gleam_parser,gleam_sha256,gleam_x,intelligence,loam,morph,otel,overlay_eval,overlay_llm,overlay_web,plinthx,topological,touch_grass,untethered,website}; do
   ( cd "$pkg" && gleam format --check src test && gleam build --target javascript --warnings-as-errors && gleam test --target javascript --runtime bun )
 done
 ```

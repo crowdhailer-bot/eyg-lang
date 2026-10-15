@@ -1,7 +1,15 @@
+import { Result$Ok, Result$Error } from "../../gleam.mjs";
 const bodies = new WeakMap();
 export const identity = value => value;
 export const apply = (fn, args) => Reflect.apply(fn, undefined, args);
 export const isFunction = value => typeof value === "function";
+export const isUndefined = value => value === undefined;
+export const isThenable = value => value != null && typeof value.then === "function";
+export const error = message => new Error(message);
+export function tryApply(fn, args) {
+  try { return Result$Ok(Reflect.apply(fn, undefined, args)); }
+  catch (error) { return Result$Error(error); }
+}
 export function wrap(body, invoke) {
   const fn = arg => invoke(fn, arg);
   bodies.set(fn, body);

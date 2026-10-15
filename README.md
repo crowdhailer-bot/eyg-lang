@@ -43,6 +43,7 @@ Projects in this repo introduce extra contraints, over regular programming langu
 - Embedding guides cover [Erlang](./guides/embedding_erlang.md),
   [Elixir](./guides/embedding_elixir.md), [Ash](./guides/embedding_ash.md) and
   [Raspberry Pi](./guides/embedding_pi.md), including package-cache ownership.
+- The [JavaScript host bundle](./guides/embedding_javascript.md) exposes a retained typed shell without a Gleam toolchain.
 
 ## Packages
 
