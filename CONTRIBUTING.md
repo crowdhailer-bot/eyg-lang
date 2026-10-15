@@ -5,6 +5,11 @@
 The [CI workflow](.github/workflows/test.yml) lists every package checked on each runtime.
 EYG package tests use a CLI built from this checkout, run `gleam run -m compile` in packages/gleam_cli to build it locally.
 
+The artifact browser job rebuilds the preview bundles, migrates its isolated
+PostgreSQL database and checks real saves, recovery, sharing and preview controls.
+Run `gleam run -m tracing/artifact_check` from `packages/tracing` with the database
+environment described in the [artifact guide](./guides/overlay_artifacts.md).
+
 To test the core packages on the BEAM environment.
 ```sh
 # Erlang-target Gleam packages
