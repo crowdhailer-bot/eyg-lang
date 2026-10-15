@@ -9,3 +9,7 @@ The [session guide](../../guides/session_evals.md) runs complete Overlay session
 against fixtures, grades outcomes, records/replays model exchanges and writes
 trial, comparison and judge-calibration reports. `gleam run -m session_check`
 checks the actual CLI over HTTP and then replays with its fixture stopped.
+
+The [evaluation guide](../../guides/overlay_evals.md) covers task validity and
+interpreting comparisons. [Historical evidence](./evidence/2026-10-04/README.md)
+retains source-branch failures, reports and cassettes with explicit provenance.

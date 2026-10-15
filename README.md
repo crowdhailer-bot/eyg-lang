@@ -33,6 +33,7 @@ Projects in this repo introduce extra contraints, over regular programming langu
 - Portable recording, replay and telemetry export are explained in [`guides/trajectories.md`](./guides/trajectories.md).
 - Updating JSON while retaining unknown fields is covered in [`guides/json_documents.md`](./guides/json_documents.md).
 - Model-written pure programs can be checked with the [evaluation guide](./guides/pure_model_evals.md).
+- Choose tasks and interpret results with the [agent evaluation guide](./guides/overlay_evals.md).
 - Immutable acquisition, private sandboxes and offline evaluation are explained in [`guides/sandbox.md`](./guides/sandbox.md).
 - To install from source see [`./guides/install_from_source.md`](./guides/install_from_source.md).
 - To boot the CLI on a Raspberry Pi image see [`./guides/embedding_pi.md`](./guides/embedding_pi.md).

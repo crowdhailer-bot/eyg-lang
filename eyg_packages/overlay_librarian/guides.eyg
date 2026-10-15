@@ -15,6 +15,7 @@ let index = [
   {slug: "writing-tests-with-aok", title: "Writing tests with aok", summary: "Write and run tests for EYG packages.", keywords: "test tests assert aok"},
   {slug: "evaluate-model-written-eyg", title: "Evaluate model-written EYG", summary: "Type-check and evaluate one pure model-written program.", keywords: "eval evals evaluate benchmark grade fibonacci pure bounded"},
   {slug: "evaluate-overlay-sessions", title: "Evaluate Overlay sessions", summary: "Validate tasks, run trials, grade sessions and replay model exchanges.", keywords: "eval evals evaluate benchmark grade judge task check context measure cassette"},
+  {slug: "evaluating-overlay-agents", title: "Evaluating Overlay agents", summary: "Choose outcome checks, validate controls and report honest comparisons.", keywords: "eval evals evaluate benchmark grade judge calibration reliability measure"},
   {slug: "embedding-eyg-in-gleam-programs", title: "Embedding EYG in Gleam programs", summary: "Run EYG from Gleam and give programs effects.", keywords: "gleam embed interpreter host effects"},
   {slug: "managing-signatories", title: "Managing signatories", summary: "Create and protect identities for publishing packages.", keywords: "publish signatory identity key package release"},
   {slug: "install-a-prebuilt-binary", title: "Install a prebuilt binary", summary: "Install the eyg CLI.", keywords: "install cli binary download"},
