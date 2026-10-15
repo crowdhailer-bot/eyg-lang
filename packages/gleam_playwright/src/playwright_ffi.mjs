@@ -38,5 +38,7 @@ export const setInputFiles = (locator, path) => done(() => locator.setInputFiles
 export const video = page => page.video();
 export const saveVideo = (video, path) => done(() => video.saveAs(path));
 export const screenshot = (page, path) => done(() => page.screenshot({ path }));
+export const pdf = (page, path, options) => done(() => page.pdf({ ...JSON.parse(options), path }));
+export const viewport = (page, width, height) => done(() => page.setViewportSize({width,height}));
 export const closeContext = context => done(() => context.close());
 export const closeBrowser = browser => done(() => browser.close());
