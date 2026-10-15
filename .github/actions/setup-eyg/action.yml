@@ -1,0 +1,22 @@
+name: Set up the checked EYG toolchain
+description: Gleam, BEAM, Bun and Node versions used by roadmap checks
+inputs:
+  elixir:
+    description: Optional Elixir version for native examples
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "28.4"
+        gleam-version: "1.19.0"
+        rebar3-version: "3.25"
+        elixir-version: ${{ inputs.elixir }}
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: "1.3.14"
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "24.15.0"

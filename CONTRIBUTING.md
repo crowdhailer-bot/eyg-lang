@@ -2,14 +2,29 @@
 
 ## Running tests
 
-To test all the packages on the BEAM environment.
+The [CI workflow](.github/workflows/test.yml) covers the BEAM and JavaScript
+libraries, browser examples, native Erlang/Elixir/Ash hosts, standalone SDK
+bundles and offline recording tools. Its shared setup uses Gleam 1.19.0,
+Bun 1.3.14 and Node 24.15.0. Native tests build their bundles first; EYG tests
+compile the CLI from this checkout. Pi's shell-adapter check needs that CLI
+on PATH. Run `gleam run -m compile` in packages/gleam_cli to build it locally.
+
+Matrix concurrency is capped and the dependency bootstrap retries three times
+before reporting a dependency error. A committed manifest must remain unchanged.
+HEXPM_READ_API_KEY is optional for a higher authenticated Hex rate limit; a
+resolution failure occurs before tests run. Runtime, source and suite checks
+still fail immediately. Benchmark validation reuses saved samples in CI; fresh
+latency measurements should be run separately while other work is idle.
+
+The workflow contains the complete package matrices. To test the core libraries
+on the BEAM environment:
 ```sh
 # Erlang-target Gleam packages
 for pkg in packages/{gleam_analysis,gleam_embedding,gleam_hub,gleam_ir,gleam_parser,gleam_sha256,intelligence,overlay_llm,topological,touch_grass,untethered}; do
   ( cd "$pkg" && gleam format --check src test && gleam build --warnings-as-errors && gleam test )
 done
 ```
-To test all the packages on the JavaScript environment.
+To test the core libraries on the JavaScript environment:
 Build the standalone native API before its tests import the bundle:
 ```sh
 ( cd packages/embed_js && bun install && gleam run -m build )

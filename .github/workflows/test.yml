@@ -10,7 +10,6 @@ permissions:
 env:
   POSTGRES_PASSWORD: banana-penguin-truck
   SECRET_KEY_BASE: word-button-noodle
-  EYG_CLI_VERSION: gleam_cli-v0.0.4
   HEXPM_READ_API_KEY: ${{ secrets.HEXPM_READ_API_KEY }}
 
 jobs:
@@ -18,157 +17,235 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 4 # Cap repeated path-dependency resolution against Hex.
       matrix:
-        gleam: ["1.19.2"]
-        otp: ["28.4"]
-        rebar3: ["3.25"]
-        package: [
-          "gleam_analysis",
-          # "gleam_cli",
-          # "gleam_compiler",
-          "gleam_hub",
-          "gleam_interpreter",
-          "gleam_ir",
-          "gleam_parser",
-          "intelligence",
-          # "gleam_x",
-          # "morph",
-          overlay_llm,
-          "topological",
-          "touch_grass",
-          "untethered"
-          # "website"
-        ]
+        package: [gleam_analysis, gleam_embedding, gleam_hub, gleam_interpreter,
+          gleam_ir, gleam_parser, gleam_sha256, html_parser, intelligence,
+          overlay_llm, topological, touch_grass, untethered]
     steps:
       - uses: actions/checkout@v4
-      - uses: erlef/setup-beam@v1
+      - uses: ./.github/actions/setup-eyg
+      - uses: ./.github/actions/gleam-deps
         with:
-          otp-version: ${{matrix.otp}}
-          gleam-version: ${{matrix.gleam}}
-          rebar3-version: ${{matrix.rebar3}}
-      - run: gleam deps download
-        shell: bash # Required for git deps
-        working-directory: packages/${{matrix.package}}
-      - name: Manifest is in sync
-        # `gleam deps download` regenerates manifest.toml when its
-        # contents drift from gleam.toml. A non-empty diff means the
-        # committed manifest was stale.
-        run: git diff --exit-code manifest.toml
-        working-directory: packages/${{matrix.package}}
-      - run: gleam build --target erlang --warnings-as-errors
-        working-directory: packages/${{matrix.package}}
-      - run: gleam test --target erlang
-        working-directory: packages/${{matrix.package}}
+          path: packages/${{ matrix.package }}
       - run: gleam format --check src test
-        working-directory: packages/${{matrix.package}}
-  test-db:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        gleam: ["1.19.2"]
-        otp: ["28.4"]
-        rebar3: ["3.25"]
-    services:
-      postgres:
-        image: postgres:17
-        ports:
-          - 5432:5432
-        env:
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: ${{matrix.otp}}
-          gleam-version: ${{matrix.gleam}}
-          rebar3-version: ${{matrix.rebar3}}
-      - run: gleam build --warnings-as-errors
-        working-directory: packages/hub  
-      - run: gleam run -m hub_dev -- migrate
-        working-directory: packages/hub  
-        env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          SECRET_KEY_BASE: ${{ env.SECRET_KEY_BASE }}
-      - run: gleam test
-        working-directory: packages/hub  
-        env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          SECRET_KEY_BASE: ${{ env.SECRET_KEY_BASE }}
+        working-directory: packages/${{ matrix.package }}
+      - run: gleam build --target erlang --warnings-as-errors
+        working-directory: packages/${{ matrix.package }}
+      - run: gleam test --target erlang
+        working-directory: packages/${{ matrix.package }}
+
   test-bun:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
-        gleam: ["1.19.2"]
-        otp: ["28.4"]
-        bun: ["1.3.13",]
-        package: [
-          "gleam_analysis",
-          "gleam_cli",
-          "gleam_compiler",
-          "gleam_hub",
-          "gleam_interpreter",
-          "gleam_ir",
-          "gleam_parser",
-          "gleam_x",
-          "intelligence",
-          "loam",
-          "morph",
-          "overlay_llm",
-          "overlay_public",
-          "overlay_web",
-          "pal",
-          "topological",
-          "touch_grass",
-          "untethered",
-          "website"
-        ]
+        path:
+          - packages/example_tools
+          - packages/embed_js
+          - packages/eyg_pi
+          - packages/glasshouse
+          - packages/glasshouse_mock
+          - packages/gleam_analysis
+          - packages/gleam_cli
+          - packages/gleam_compiler
+          - packages/gleam_compiled_runtime
+          - packages/gleam_embed
+          - packages/gleam_hub
+          - packages/gleam_interpreter
+          - packages/gleam_ir
+          - packages/gleam_opentui
+          - packages/gleam_parser
+          - packages/gleam_playwright
+          - packages/gleam_sha256
+          - packages/gleam_shiki
+          - packages/gleam_vite
+          - packages/gleam_x
+          - packages/html_parser
+          - packages/intelligence
+          - packages/loam
+          - packages/morph
+          - packages/opencode_plugin
+          - packages/otel
+          - packages/overlay
+          - packages/overlay_eval
+          - packages/overlay_public
+          - packages/overlay_puppet
+          - packages/overlay_terminal
+          - packages/overlay_tui_core
+          - packages/overlay_tui_lustre
+          - packages/overlay_tui_signals
+          - packages/overlay_web
+          - packages/pal
+          - packages/pi_extension
+          - packages/plinthx
+          - packages/topological
+          - packages/touch_grass
+          - packages/tracing
+          - packages/untethered
+          - packages/website
+          - examples/hashi
+          - examples/njs
+          - examples/todomvc_lustre
+          - examples/todomvc_native
+          - examples/helpdesk/browser
+          - examples/phoenix_counters/browser
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/setup-eyg
+      - uses: ./.github/actions/gleam-deps
         with:
-          bun-version: ${{matrix.bun}}
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: ${{matrix.otp}}
-          gleam-version: ${{matrix.gleam}}
-      - run: gleam deps download
-        shell: bash # Required for git deps
-        working-directory: packages/${{matrix.package}}
-      - name: Manifest is in sync
-        run: git diff --exit-code manifest.toml
-        working-directory: packages/${{matrix.package}}
+          path: ${{ matrix.path }}
+      - name: Install native libraries
+        working-directory: ${{ matrix.path }}
+        run: if test -f package.json; then bun install --frozen-lockfile; fi
+      - name: Build the standalone API for its native Todo consumer
+        if: matrix.path == 'examples/todomvc_native'
+        working-directory: packages/embed_js
+        run: bun install --frozen-lockfile && gleam run -m build
+      - name: Build public SDK bundles before testing their consumers
+        if: contains(fromJSON('["packages/embed_js", "packages/opencode_plugin", "packages/pi_extension"]'), matrix.path)
+        working-directory: ${{ matrix.path }}
+        run: gleam run -m build
+      - name: Build the CLI needed by Pi's optional shell adapter check
+        if: matrix.path == 'packages/pi_extension'
+        working-directory: packages/gleam_cli
+        run: |
+          gleam run -m compile
+          printf '%s\n' "$GITHUB_WORKSPACE/packages/gleam_cli/dist" >> "$GITHUB_PATH"
+      - name: Format
+        working-directory: ${{ matrix.path }}
+        run: |
+          gleam format --check src
+          if test -d test; then gleam format --check test; fi
+          if test -d dev; then gleam format --check dev; fi
       - run: gleam build --target javascript --warnings-as-errors
-        working-directory: packages/${{matrix.package}}
-      - run: gleam test --target javascript --runtime bun
-        working-directory: packages/${{matrix.package}}
-      - run: gleam format --check src test
-        working-directory: packages/${{matrix.package}}
+        working-directory: ${{ matrix.path }}
+      - name: Unit and native integration checks
+        working-directory: ${{ matrix.path }}
+        run: if test -d test; then gleam test --target javascript --runtime bun; fi
+      - name: Check compiled runtime freshness
+        if: matrix.path == 'packages/gleam_compiled_runtime'
+        working-directory: ${{ matrix.path }}
+        run: gleam run -m generate -- --check
+      - name: Run the actual pinned OpenCode dispatcher
+        if: matrix.path == 'packages/opencode_plugin'
+        working-directory: ${{ matrix.path }}
+        run: gleam run -m upstream_check
+      - name: Check SDK bundles under Node too
+        if: contains(fromJSON('["packages/embed_js", "packages/opencode_plugin", "packages/pi_extension"]'), matrix.path)
+        working-directory: ${{ matrix.path }}
+        run: gleam test --runtime node
+      - name: Check the Pi game as EYG
+        if: matrix.path == 'packages/eyg_pi'
+        working-directory: packages/gleam_cli
+        run: gleam run -- script ../eyg_pi/test/pong_test.eyg
+
+  test-db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      POSTGRES_HOST: localhost
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-eyg
+      - uses: ./.github/actions/gleam-deps
+        with:
+          path: packages/hub
+      - run: gleam build --warnings-as-errors
+        working-directory: packages/hub
+      - run: gleam run -m hub_dev -- migrate
+        working-directory: packages/hub
+      - run: gleam test
+        working-directory: packages/hub
+
   test-eyg-packages:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install the eyg CLI
+      - uses: ./.github/actions/setup-eyg
+      - uses: ./.github/actions/gleam-deps
+        with:
+          path: packages/gleam_cli
+      - name: Build the CLI from this checkout
+        working-directory: packages/gleam_cli
+        run: gleam run -m compile
+      - name: Run all EYG packages with the new CLI
+        run: packages/gleam_cli/dist/eyg script entry.eyg
+      - name: Validate agent tasks without a model
+        working-directory: packages/overlay_eval
         run: |
-          mkdir -p "$RUNNER_TEMP/bin"
-          curl -fsSL \
-            -o "$RUNNER_TEMP/bin/eyg-linux-x64" \
-            "https://github.com/CrowdHailer/eyg-lang/releases/download/${EYG_CLI_VERSION}/eyg-linux-x64"
-          curl -fsSL \
-            -o "$RUNNER_TEMP/SHA256SUMS" \
-            "https://github.com/CrowdHailer/eyg-lang/releases/download/${EYG_CLI_VERSION}/SHA256SUMS"
-          cd "$RUNNER_TEMP/bin"
-          sha256sum --check --ignore-missing "$RUNNER_TEMP/SHA256SUMS"
-          mv eyg-linux-x64 eyg
-          chmod +x eyg
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Run EYG package tests
-        run: eyg script entry.eyg
+          gleam run -m overlay/eval -- validate suites/fibonacci.eyg
+          gleam run -m overlay/eval -- validate suites/contexts.eyg
+          gleam run -m overlay/eval -- validate suites/programs.eyg
+
+  test-beam-hosts:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        path: [packages/ash_eyg, examples/phoenix_counters, examples/helpdesk]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-eyg
+        with:
+          elixir: "1.20.4"
+      - name: Install Mix dependencies
+        working-directory: ${{ matrix.path }}
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
+      - name: Install browser libraries
+        working-directory: ${{ matrix.path }}
+        run: if test -f browser/package.json; then cd browser && bun install --frozen-lockfile; fi
+      - run: mix test
+        working-directory: ${{ matrix.path }}
+
+  test-erlang-host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-eyg
+      - uses: ./.github/actions/gleam-deps
+        with:
+          path: examples/erl_counter
+      - run: gleam test
+        working-directory: examples/erl_counter
+
+  test-recording-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-eyg
+      - name: Install browser library and Chromium
+        working-directory: packages/tracing
+        run: bun install --frozen-lockfile && bunx playwright install --with-deps chromium
+      - name: Check offline performance viewer
+        working-directory: packages/tracing
+        env:
+          DEMO_OUTPUT_DIR: .recordings/ci
+        run: gleam run -m tracing/performance_demo
+      - name: Check talk controls and PDF
+        working-directory: packages/tracing
+        env:
+          DEMO_OUTPUT_DIR: .recordings/ci
+        run: gleam run -m tracing/build_slides && gleam run -m tracing/eval_slides_demo
+      - name: Validate retained native benchmark matrices
+        working-directory: packages/overlay_tui_bench
+        run: bun install --frozen-lockfile && gleam run -- report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-checks
+          path: packages/tracing/.recordings

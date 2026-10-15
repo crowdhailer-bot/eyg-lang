@@ -1,0 +1,22 @@
+name: Resolve Gleam dependencies
+description: Retry transient Hex failures before checking the committed manifest
+inputs:
+  path:
+    description: Package directory
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: ${{ inputs.path }}
+      # This bootstrap runs before the package's Gleam tools can compile.
+      run: |
+        for attempt in 1 2 3; do
+          if gleam deps download; then
+            git diff --exit-code -- manifest.toml
+            exit $?
+          fi
+          if test "$attempt" -lt 3; then sleep 5; fi
+        done
+        printf '%s\n' '::error title=Gleam dependencies::Dependency resolution failed after three attempts; tests did not run. Check Hex availability, rate limits and the committed constraints.'
+        exit 1
