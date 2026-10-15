@@ -1,4 +1,7 @@
+import eyg/interpreter/expression
 import eyg/interpreter/value as v
+import eyg/ir/dag_json as ir_json
+import eyg/ir/tree as ir
 import glasshouse/helpers.{sha256}
 import glasshouse/journal
 import glasshouse/lock
@@ -13,6 +16,56 @@ import gleam/option.{Some}
 import gleam/string
 
 const token = Secret("github", "ghp_s3cr3t")
+
+pub fn closure_literals_and_captured_secrets_are_redacted_and_restored_test() {
+  let body =
+    ir.record([
+      #("literal", ir.string("Bearer ghp_s3cr3t")),
+      #("binary", ir.binary(<<"ghp_s3cr3t">>)),
+      #("captured", ir.variable("saved")),
+      #("unchanged", ir.integer(42)),
+    ])
+  let closure = v.Closure("_", body, [#("saved", v.String("ghp_s3cr3t"))])
+  let redacted = secret.redact(closure, [token])
+  let encoded = value.encode(redacted)
+  assert !string.contains(ir_json.to_string(encoded), token.value)
+  let assert Ok(result) = expression.call(redacted, [#(v.unit(), Nil)])
+  assert result
+    == v.Record(
+      dict.from_list([
+        #("literal", v.String("Bearer ⟦secret:github⟧")),
+        #("binary", v.Binary(<<"⟦secret:github⟧":utf8>>)),
+        #("captured", v.String("⟦secret:github⟧")),
+        #("unchanged", v.Integer(42)),
+      ]),
+    )
+  assert secret.restore(redacted, [token]) == closure
+}
+
+pub fn unused_captured_graphs_are_not_traversed_test() {
+  let shared = shared(35, v.String(token.value))
+  let redacted = secret.redact(shared, [token])
+  let assert Ok(result) = expression.call(redacted, [#(v.unit(), Nil)])
+  assert result == v.Integer(42)
+  assert !string.contains(
+    ir_json.to_string(value.encode(redacted)),
+    token.value,
+  )
+}
+
+fn shared(depth, value) {
+  case depth {
+    0 -> value
+    _ ->
+      shared(
+        depth - 1,
+        v.Closure("_", ir.integer(42), [
+          #("left", value),
+          #("right", value),
+        ]),
+      )
+  }
+}
 
 pub fn redact_replaces_in_nested_values_test() {
   let request =
