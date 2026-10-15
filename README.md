@@ -44,6 +44,8 @@ Projects in this repo introduce extra contraints, over regular programming langu
   [Elixir](./guides/embedding_elixir.md), [Ash](./guides/embedding_ash.md) and
   [Raspberry Pi](./guides/embedding_pi.md), including package-cache ownership.
 - The [JavaScript host bundle](./guides/embedding_javascript.md) exposes a retained typed shell without a Gleam toolchain.
+- Harness integrations cover [Pi](./guides/pi_extension.md), the [OpenCode plugin](./guides/opencode_plugin.md)
+  and its [native tool dispatcher](./guides/opencode_dispatcher.md).
 
 ## Packages
 

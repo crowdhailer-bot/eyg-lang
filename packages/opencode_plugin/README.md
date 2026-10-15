@@ -20,3 +20,9 @@ The [OpenCode dispatcher guide](../../guides/opencode_dispatcher.md) covers the
 pinned installer, only/gate/off modes and the checked upstream recording.
 `gleam run -m upstream_check` runs the real patched upstream function with
 deterministic services and official SDK packages, without a model call.
+
+The [public plugin guide](../../guides/opencode_plugin.md) covers dist/eyg.mjs,
+computer effects, prompt guidance and SDK-backed Task/Escalate. The native
+entry exports EygPlugin; the package subpath opencode-eyg/plugin selects it.
+`gleam run -m extension_test` checks that path with the official SDK and a
+deterministic fetch service. Keep the dispatcher and plugin installations separate.

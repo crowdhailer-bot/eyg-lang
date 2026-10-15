@@ -1,0 +1,9 @@
+cd packages/opencode_plugin && gleam run -m extension_test
+corin@assistance-bot:~/mono/repos/eyg-lang$ cd packages/opencode_plugin && gleam run -m extension_test
+   Compiled in 0.21s
+    Running extension_test.main
+PASS public EYG tool: real Zod schema, files, mocks, context and prompt guidance
+PASS official SDK Task: child policy assigned before prompt, retained on later calls
+PASS Escalate: refused permission creates no session; approval replaces child policy
+PASS configuration reload rejects invalid policy
+corin@assistance-bot:~/mono/repos/eyg-lang/packages/opencode_plugin$
