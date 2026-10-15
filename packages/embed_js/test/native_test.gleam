@@ -95,6 +95,15 @@ pub fn tagged_records_cross_the_bundle_boundary_as_plain_data_test() {
   assert foreign.property(result, "value") == dynamic.int(0)
 }
 
+pub fn bundled_shell_rebuilds_dependent_and_destructured_bindings_in_order_test() {
+  use shell <- promise.map(create(options))
+  let result =
+    run(shell, "let a = 1 let {b} = {b: !int_add(a, 1)} b", object([]))
+  assert foreign.property(result, "value") == dynamic.int(2)
+  assert foreign.property(run(shell, "b", object([])), "value")
+    == dynamic.int(2)
+}
+
 pub fn offered_effects_and_host_replies_are_checked_test() {
   use shell <- promise.map(create(options))
   let result = run(shell, "perform Launch({})", counter())
