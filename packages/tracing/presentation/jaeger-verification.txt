@@ -1,0 +1,8 @@
+Fresh captures checked on 2026-10-15; all span IDs, parents and names matched Jaeger 2.22.0.
+01-paced-workflow: 7 spans verified
+02-http-workflow: 9 spans verified
+03-retry: 8 spans verified
+04-recovered-error: 7 spans verified
+05-failed-run: 4 spans verified
+profile-compute: 218 spans verified
+profile-slow-effect: 218 spans verified
