@@ -1,7 +1,9 @@
 import { Result$Ok, Result$Error } from "../../gleam.mjs";
 const bodies = new WeakMap();
 export const identity = value => value;
+export const nullValue = () => null;
 export const apply = (fn, args) => Reflect.apply(fn, undefined, args);
+export const call = (object, method, args) => Reflect.apply(object[method], object, args);
 export const isFunction = value => typeof value === "function";
 export const isUndefined = value => value === undefined;
 export const isThenable = value => value != null && typeof value.then === "function";
