@@ -321,3 +321,33 @@ pub fn a_gate_cannot_read_an_import_behind_the_programs_policy_test() {
   assert !string.contains(opencode_plugin.report_text(report), "hidden module")
   assert opencode_plugin.report_effects(report) == ["ReadFile"]
 }
+
+pub fn native_file_tool_paths_are_absolute_before_gates_and_callbacks_test() {
+  use config <- promise.await(configured(
+    "let check = (r) -> {
+    match !string_starts_with(r.path, \"/\") {
+      True(_) -> { Pass(r) }
+      False(_) -> { Mock(Error(\"relative path\")) }
+    }
+  } {policy: {read: check, write: check, edit: check}}",
+  ))
+  let callback =
+    foreign.to_dynamic(fn(input, _) {
+      promise.resolve(foreign.property(input, "path"))
+    })
+  let hosts = [
+    opencode_plugin.host("Read", "{path: String}", "String", callback),
+    opencode_plugin.host("Write", "{path: String}", "String", callback),
+    opencode_plugin.host("Edit", "{path: String}", "String", callback),
+  ]
+  use report <- promise.map(opencode_plugin.run(
+    "let read = perform Read({path: \"./notes.md\"}) let write = perform Write({path: \"nested/../notes.md\"}) let edit = perform Edit({path: \"notes.md\"}) match !equal(read, write) { True(_) -> { !equal(write, edit) } False(_) -> { False({}) } }",
+    opencode_plugin.config_policy(config),
+    opencode_plugin.config_context(config),
+    directory(),
+    hosts,
+  ))
+  assert opencode_plugin.report_ok(report)
+  assert opencode_plugin.report_text(report) == "True({})"
+  assert opencode_plugin.report_effects(report) == ["Read", "Write", "Edit"]
+}

@@ -301,6 +301,10 @@ fn absolute(label, lift, directory) {
     "ReadFile", v.Record(fields)
     | "WriteFile", v.Record(fields)
     | "AppendFile", v.Record(fields)
+    | "Mount", v.Record(fields)
+    | "Read", v.Record(fields)
+    | "Write", v.Record(fields)
+    | "Edit", v.Record(fields)
     ->
       case dict.get(fields, "path") {
         Ok(v.String(path)) ->
