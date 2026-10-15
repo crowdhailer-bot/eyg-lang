@@ -9,6 +9,8 @@ pub type Reason(m, c) {
   Vacant
   NoMatch(term: v.Value(m, c))
   UnhandledEffect(String, v.Value(m, c))
+  ImpureEffect(String, v.Value(m, c))
+  MaskedEffect(String, v.Value(m, c))
   IncorrectTerm(expected: String, got: v.Value(m, c))
   MissingField(String)
   // The expression is unrepresentable on the runtime.

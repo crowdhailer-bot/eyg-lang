@@ -289,6 +289,11 @@ pub fn expression(exp, rev, errors) {
         h.span([a.class(keyword)], [text("handle ")]),
         h.span([a.class(effect), exp_key(rev)], [text(label)]),
       ])
+    e.Mask(label) ->
+      frame.Inline([
+        h.span([a.class(keyword)], [text("mask ")]),
+        h.span([a.class(effect), exp_key(rev)], [text(label)]),
+      ])
     e.Builtin(identifier) ->
       frame.Inline([
         h.span([a.class(builtin), exp_key(rev)], [text("!"), text(identifier)]),

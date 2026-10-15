@@ -91,6 +91,23 @@ References are encoded as Content IDentifiers (CIDs).
 {"0": "#", "p": string, "r": integer, "l": cid}
 ```
 
+## Masking and purity
+
+`Mask(label)` is encoded as `{"0":"hm","l":"E"}`. It takes a body thunk
+and skips one enclosing matching handler for operations crossing its boundary.
+Handlers installed inside the body still apply. Mask frames are retained in
+captured continuations. An outstanding mask at the platform boundary produces
+`MaskedEffect`, not host dispatch.
+
+Its type is `({} -> e A) -> <E(P,Q) | e> A`. The skipped signature is independent
+of any outer signature of the same label. Effect rows retain scoped duplicates.
+
+`!pure(f)` returns a wrapper that guards one application. An effect reaching the
+guard fails with `ImpureEffect` before any outer handler or platform operation.
+Inner handlers remain usable; returned functions do not inherit the guard.
+These semantics apply even without type checking. Shared fixtures are in
+`masking.json` and `masking_errors.json`.
+
 ## Builtins
 
 Builtins must behave the same way for all implementations.
@@ -112,4 +129,3 @@ It is possible to track use of builtins if you want these gurantees.
 For example a program without `fix` is total an guaranteed to terminate.
 It is a non-goal of the eyg libraries to support all these usecases.
 However if you have a need for them please reach out.
-

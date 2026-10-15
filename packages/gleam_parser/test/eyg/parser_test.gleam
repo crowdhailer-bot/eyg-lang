@@ -40,6 +40,12 @@ pub fn literal_test() {
   // |> should.equal(#(ir.String("hello"), #(0, 7)))
 }
 
+pub fn mask_contextual_keyword_test() {
+  parser.all_from_string("mask Ping")
+  |> should.equal(Ok(#(ir.Mask("Ping"), #(0, 9))))
+  parser.all_from_string("let mask = (x) -> { x } mask(42)") |> should.be_ok
+}
+
 pub fn negative_integer_test() {
   "-100"
   |> parser.all_from_string()

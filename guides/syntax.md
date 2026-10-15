@@ -366,6 +366,20 @@ handle Log
 
 ---
 
+### Mask
+
+`mask EffectName` is a first-class function taking a body called with `{}`.
+Inside that body, operations skip one enclosing handler for that label:
+
+```eyg
+mask State((_) -> { assertion(request) })
+```
+
+Handlers installed inside the body still apply. The mask has dynamic extent and
+is preserved when execution suspends and resumes. `mask` remains a variable name
+when it is not followed by an uppercase effect label. See
+[masking and purity](./masking_effects.md) for typing and unchecked-runtime rules.
+
 ## Builtins
 
 Builtins call built-in runtime operations. They start with `!` followed by a lowercase identifier.

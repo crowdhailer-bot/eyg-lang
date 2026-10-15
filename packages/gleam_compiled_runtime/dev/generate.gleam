@@ -41,7 +41,7 @@ pub fn main() {
     <> "pub const source =\n  "
     <> json.to_string(json.string(source))
     <> "\n\n"
-    <> "pub fn defines(name) {\n  case name {\n    \"bind\" | \"fix\" | \"list_fold\" | \"binary_fold\" | \"never\" -> True\n    _ -> False\n  }\n}\n"
+    <> "pub fn defines(name) {\n  case name {\n    \"bind\" | \"fix\" | \"list_fold\" | \"binary_fold\" | \"never\" | \"pure\" -> True\n    _ -> False\n  }\n}\n"
   case argv.load().arguments {
     ["--check"] -> {
       let assert Ok(current) = simplifile.read(output)

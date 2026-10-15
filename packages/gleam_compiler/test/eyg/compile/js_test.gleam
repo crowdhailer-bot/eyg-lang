@@ -346,6 +346,21 @@ int_add(1)(2)",
   test_eval("!list_fold([1, 2, 3], 0, !int_add)", dynamic.int(6))
 }
 
+pub fn pure_builtin_test() {
+  test_eval("!pure(!int_add(1))(41)", dynamic.int(42))
+  test_eval(
+    "let n = 1 let f = (x) -> { !int_add(n, x) } !pure(f)(41)",
+    dynamic.int(42),
+  )
+  test_eval("let f = (x) -> { x } !equal(f, !pure(f))", tagged("False", unit()))
+  test_eval(
+    "handle Get((_, resume) -> { resume((x) -> { !int_add(x, 1) }) }, (_) -> {
+      let f = !pure(perform Get({})) f(41)
+    })",
+    dynamic.int(42),
+  )
+}
+
 // Regressions from the compiler investigation, before replacing the backend.
 pub fn builtin_semantics_regressions_test() {
   test_eval("!int_compare(2, 1)", tagged("Gt", unit()))

@@ -180,7 +180,12 @@ pub fn top_content(projection) {
         e.Function(_, _) -> [insert_function(), call_with()]
         e.Block(_, _, _) -> []
         e.Vacant -> [use_variable(), insert_number(), insert_text()]
-        e.Integer(_) | e.Binary(_) | e.String(_) | e.Perform(_) | e.Deep(_) -> [
+        e.Integer(_)
+        | e.Binary(_)
+        | e.String(_)
+        | e.Perform(_)
+        | e.Deep(_)
+        | e.Mask(_) -> [
           edit(),
           call_with(),
         ]

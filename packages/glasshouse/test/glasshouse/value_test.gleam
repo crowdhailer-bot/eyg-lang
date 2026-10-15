@@ -1,3 +1,4 @@
+import eyg/interpreter/break
 import eyg/interpreter/expression
 import eyg/interpreter/value as v
 import eyg/ir/tree as ir
@@ -62,6 +63,22 @@ pub fn closure_round_trips_test() {
   let assert Ok(decoded) = round_trip(closure)
   let assert Ok(result) = expression.call(decoded, [#(v.Integer(5), Nil)])
   assert result == v.Integer(15)
+}
+
+pub fn recorded_masks_and_pure_functions_keep_their_boundaries_test() {
+  let assert Ok(mask) = round_trip(v.Partial(v.Mask("Log"), []))
+  let assert Ok(callback) =
+    expression.execute(
+      ir.lambda("_", ir.apply(ir.perform("Log"), ir.integer(42))),
+      [],
+    )
+  let assert Error(#(break.MaskedEffect("Log", v.Integer(42)), _, _, _)) =
+    expression.call(mask, [#(callback, Nil)])
+  let assert Ok(guarded) =
+    expression.call(v.Partial(v.Builtin("pure"), []), [#(callback, Nil)])
+  let assert Ok(restored) = round_trip(guarded)
+  let assert Error(#(break.ImpureEffect("Log", v.Integer(42)), _, _, _)) =
+    expression.call(restored, [#(v.unit(), Nil)])
 }
 
 pub fn matching_inlines_content_references_on_both_sides_test() {

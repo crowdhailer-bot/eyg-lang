@@ -181,6 +181,14 @@ let test_cid_reference = (_) -> {
   )
 }
 
+let test_mask = (_) -> {
+  check(
+    "{\"0\":\"hm\",\"l\":\"Ping\"}",
+    [Mask("Ping")],
+    "baguqeerasmabgv7kmy3kv42xydltjby63pi5w7lztqzkc2uru4vd6gfpjova"
+  )
+}
+
 let test_release = (_) -> {
   check(
     "{\"0\":\"@\",\"l\":{\"/\":\"baguqeeraqyvjt4lhfr66jw66yhg37xaj7tvdde5pifx7eqdq2a4zgzpffwaq\"},\"p\":\"welcome\",\"r\":1}",
@@ -190,6 +198,7 @@ let test_release = (_) -> {
 }
 
 [
+  {name: "ast ir suite mask", test: test_mask},
   {name: "ast ir suite variable", test: test_variable},
   {name: "ast ir suite function", test: test_function},
   {name: "ast ir suite apply", test: test_apply},

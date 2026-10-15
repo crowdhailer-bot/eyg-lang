@@ -27,6 +27,8 @@ pub type Switch(context) {
   NoCases
   Perform(String)
   Handle(String)
+  Mask(String)
+  Pure
   Resume(context)
   Builtin(String)
 }

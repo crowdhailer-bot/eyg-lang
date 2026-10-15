@@ -45,7 +45,8 @@ let index = [
   {slug: "overlay-contexts", title: "Overlay contexts", summary: "Find packages and guides before writing a program.", keywords: "librarian context catalogue search agent"},
   {slug: "start-overlay-from-scripts", title: "Start Overlay from scripts", summary: "Use Overlay and TypeCheck from scripts with captured context functions.", keywords: "agent script overlay typecheck context closure"},
   {slug: "deep-effect-handlers", title: "Deep effect handlers", summary: "Resume operations with persistent delimiters and bounded continuations.", keywords: "effect handler deep continuation resume stack"},
-  {slug: "stateful-effect-handlers", title: "Stateful effect handlers", summary: "Thread state through deep resumptions.", keywords: "effect handler state counter resume"}
+  {slug: "stateful-effect-handlers", title: "Stateful effect handlers", summary: "Thread state through deep resumptions.", keywords: "effect handler state counter resume"},
+  {slug: "masking-handlers-and-enforcing-purity", title: "Masking handlers and enforcing purity", summary: "Skip one handler or guard a pure application.", keywords: "effect mask handler pure callback"}
 ]
 
 // Fetch a guide as markdown text from eyg.run.
