@@ -41,6 +41,8 @@ Projects in this repo introduce extra contraints, over regular programming langu
 - Choose tasks and interpret results with the [agent evaluation guide](./guides/overlay_evals.md).
 - The [eval articles and talk](./guides/eval_presentations.md) explain the design and its historical evidence.
 - Immutable acquisition, private sandboxes and offline evaluation are explained in [`guides/sandbox.md`](./guides/sandbox.md).
+- The [terminal shell](./guides/tui_shell.md) has direct, Lustre and signals frontends;
+  [native benchmarks](./guides/terminal_benchmarks.md) compare their measured frame costs.
 - To install from source see [`./guides/install_from_source.md`](./guides/install_from_source.md).
 - Embedding guides cover [Erlang](./guides/embedding_erlang.md),
   [Elixir](./guides/embedding_elixir.md), [Ash](./guides/embedding_ash.md) and

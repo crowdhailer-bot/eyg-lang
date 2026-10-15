@@ -1,0 +1,6 @@
+{
+  "name": "eyg-terminal-benchmarks",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@opentui/core": "0.5.14" }
+}
