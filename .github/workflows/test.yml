@@ -223,6 +223,50 @@ jobs:
       - run: gleam test
         working-directory: examples/erl_counter
 
+  test-artifacts:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      POSTGRES_HOST: localhost
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-eyg
+      - uses: ./.github/actions/gleam-deps
+        with:
+          path: packages/hub
+      - uses: ./.github/actions/gleam-deps
+        with:
+          path: packages/overlay_puppet
+      - uses: ./.github/actions/gleam-deps
+        with:
+          path: packages/overlay_public
+      - uses: ./.github/actions/gleam-deps
+        with:
+          path: packages/tracing
+      - name: Install browser and Overlay libraries
+        run: |
+          (cd packages/overlay_public && bun install --frozen-lockfile)
+          (cd packages/tracing && bun install --frozen-lockfile && bunx playwright install --with-deps chromium)
+      - name: Rebuild the preview and EYG viewer bundles
+        working-directory: packages/overlay_puppet
+        run: gleam run --runtime bun -m bundle
+      - name: Check real previews, workspace recovery, sharing and browser controls
+        working-directory: packages/tracing
+        run: gleam run -m tracing/artifact_check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: artifact-browser-checks
+          path: packages/tracing/.recordings
+
   test-recording-tools:
     runs-on: ubuntu-latest
     steps:

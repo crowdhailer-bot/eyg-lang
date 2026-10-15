@@ -9,6 +9,11 @@ Bun 1.3.14 and Node 24.15.0. Native tests build their bundles first; EYG tests
 compile the CLI from this checkout. Pi's shell-adapter check needs that CLI
 on PATH. Run `gleam run -m compile` in packages/gleam_cli to build it locally.
 
+The artifact browser job rebuilds the preview bundles, migrates its isolated
+PostgreSQL database and checks real saves, recovery, sharing and preview controls.
+Run `gleam run -m tracing/artifact_check` from `packages/tracing` with the database
+environment described in the [artifact guide](./guides/overlay_artifacts.md).
+
 Matrix concurrency is capped and the dependency bootstrap retries three times
 before reporting a dependency error. A committed manifest must remain unchanged.
 HEXPM_READ_API_KEY is optional for a higher authenticated Hex rate limit; a

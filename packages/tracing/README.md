@@ -9,6 +9,10 @@ are implemented by the Gleam tracing entrypoint. The checked presentation is
 in [presentation](./presentation/index.html).
 
 - `gleam run -m tracing/model_fixture`: scripted Ollama and built debugger on 7201.
+- `gleam run -m tracing/artifact_check`: run both real artifact browser workflows
+  against a caller-owned PostgreSQL database. Starts and stops the hub on 7812,
+  Overlay on 5280 and the model fixture on 7201; saves checks under `.recordings`.
+  See the [artifact guide](../../guides/overlay_artifacts.md) for setup.
 - `gleam run -m tracing/browser_demo`: record the actual Overlay/debugger workflow
   and verify archive closure and all pinned runs. Requires Overlay on 5280 and
   the built website. It starts/stops its own fixture.
