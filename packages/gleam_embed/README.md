@@ -104,3 +104,4 @@ headers. HTTP error statuses remain responses; network failures are errors.
 From packages/gleam_embed, `gleam run --runtime bun -m browser_check` checks a
 real local HTTP response and a stopped-server failure. Unit tests check hashing
 on Node and Bun. The check starts and stops its own ephemeral server.
+Use these callbacks with the [module graph loader](../../guides/loading_modules.md).
