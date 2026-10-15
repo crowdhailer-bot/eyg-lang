@@ -166,9 +166,9 @@ pub fn inline(encoded: Encoded, store: Store) -> Result(Encoded, String) {
 
 /// Is a runtime value equal to a recorded value.
 pub fn matches(value: v.Value(m, c), recorded: Encoded, store: Store) -> Bool {
-  case inline(recorded, store) {
-    Ok(recorded) -> encode(value) == recorded
-    Error(_) -> False
+  case inline(encode(value), store), inline(recorded, store) {
+    Ok(actual), Ok(recorded) -> actual == recorded
+    _, _ -> False
   }
 }
 
