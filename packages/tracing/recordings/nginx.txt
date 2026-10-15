@@ -1,0 +1,10 @@
+cd examples/njs && gleam run -m nginx -- check
+corin@assistance-bot:~/mono/repos/eyg-lang$ cd examples/njs && gleam run -m nginx -- check
+   Compiled in 0.21s
+    Running nginx.main
+nginx listening on http://127.0.0.1:8196
+GET /a/b -> 200 EYG handled 5 headers, path /a/b. Upstream said: a plain nginx location
+POST /a/b -> 405 Only GET is handled by EYG
+Stopped eyg-roadmap-njs
+PASS actual nginx QuickJS compiled EYG, awaited subrequest and method refusal
+corin@assistance-bot:~/mono/repos/eyg-lang/examples/njs$
