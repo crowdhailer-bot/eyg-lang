@@ -1,6 +1,7 @@
 //// `eyg tui`, the shell drawn with étui. The loop owns the terminal and the
 //// shell: it advances the shell's work a slice at a time and polls for keys
-//// in between, so the screen stays responsive while EYG runs.
+//// in between, so the screen stays responsive while EYG runs. `tui/host` holds
+//// what differs between targets.
 
 import etui/backend
 import etui/backend/default
@@ -9,6 +10,7 @@ import etui/terminal
 import eyg/cli/internal/config
 import eyg/cli/tui/agent.{type Agent}
 import eyg/cli/tui/completion
+import eyg/cli/tui/host
 import eyg/cli/tui/model.{type Model}
 import eyg/cli/tui/shell.{type Shell}
 import eyg/cli/tui/structural
@@ -17,7 +19,6 @@ import eyg/ir/tree
 import gleam/bit_array
 import gleam/int
 import gleam/io
-import gleam/javascript/promise.{type Promise}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -25,7 +26,6 @@ import gleam/string as text
 import loam/execute
 import loam/system
 import overlay/llm/tool
-import plinthx/javascript/string
 import simplifile
 
 /// Work the shell has been asked to do, returning to the loop when finished.
@@ -44,14 +44,16 @@ type Work {
   Working(
     id: Int,
     started: Float,
-    next: Promise(Result(#(List(shell.Event), shell.Progress(Outcome)), String)),
+    next: host.Pending(
+      Result(#(List(shell.Event), shell.Progress(Outcome)), String),
+    ),
   )
   Waiting(id: Int, started: Float, resume: fn(String) -> system.Effect(Outcome))
 }
 
 /// Work that changes the model when it finishes, such as finding packages.
 type Task =
-  Promise(fn(Model) -> #(Model, List(model.Command)))
+  host.Pending(fn(Model) -> #(Model, List(model.Command)))
 
 type State(backend) {
   State(
@@ -70,24 +72,25 @@ type State(backend) {
 const frame = 16
 
 /// `eyg tui`, the shell.
-pub fn run(input) -> Promise(Nil) {
+pub fn run(input) -> host.Pending(Nil) {
   open(False, fn(config) { system.map(shell.start(input, config), Started) })
 }
 
 /// `eyg tui overlay`, an Overlay agent.
-pub fn overlay(input) -> Promise(Nil) {
+pub fn overlay(input) -> host.Pending(Nil) {
   open(True, fn(config) { system.map(agent.start(input, config), AgentStarted) })
 }
 
-fn open(overlay, starting) -> Promise(Nil) {
-  use loaded <- promise.await(system.run(config.load()))
-  use home <- promise.await(system.run(system.env("HOME")))
+fn open(overlay, starting) -> host.Pending(Nil) {
+  use loaded <- host.await(host.run(config.load()))
+  use home <- host.await(host.run(system.env("HOME")))
+  let home = result.unwrap(home, None)
   case loaded {
-    Error(_) -> {
+    Ok(Error(_)) | Error(_) -> {
       io.println_error("failed to load config")
-      promise.resolve(Nil)
+      host.resolve(Nil)
     }
-    Ok(config) -> {
+    Ok(Ok(config)) -> {
       let directory = simplifile.current_directory() |> result.unwrap(".")
       // The home directory is shown as ~, as a shell prompt does.
       let directory = case home {
@@ -118,11 +121,11 @@ fn open(overlay, starting) -> Promise(Nil) {
   }
 }
 
-fn loop(state: State(_)) -> Promise(Nil) {
+fn loop(state: State(_)) -> host.Pending(Nil) {
   case state.quit {
     True -> {
       terminal.restore(state.term)
-      promise.resolve(Nil)
+      host.resolve(Nil)
     }
     False -> {
       let state = draw(state)
@@ -131,22 +134,22 @@ fn loop(state: State(_)) -> Promise(Nil) {
         list.flatten([
           case state.work {
             Working(id:, started:, next:) -> [
-              promise.map(next, fn(progressed) {
+              host.map(next, fn(progressed) {
                 progress(_, id, started, progressed)
               }),
             ]
             Idle | Waiting(..) -> []
           },
           list.map(state.background, fn(task) {
-            promise.map(task.1, fn(update) { finish(_, task.0, update) })
+            host.map(task.1, fn(update) { finish(_, task.0, update) })
           }),
         ])
       case pending {
         [] -> poll(state, frame)
         _ -> {
-          let waited =
-            promise.map(promise.wait(frame), fn(_) { fn(state) { state } })
-          use update <- promise.await(promise.race_list([waited, ..pending]))
+          use update <- host.await(
+            host.first(pending, frame, fn(state) { state }),
+          )
           poll(update(state), 0)
         }
       }
@@ -155,7 +158,7 @@ fn loop(state: State(_)) -> Promise(Nil) {
 }
 
 fn poll(state: State(_), timeout) {
-  use polled <- promise.await(terminal.poll(state.term, timeout))
+  use polled <- host.await(terminal.poll(state.term, timeout))
   case polled {
     Ok(#(event, term)) -> loop(input(State(..state, term:), event))
     Error(_) -> loop(State(..state, quit: True))
@@ -178,11 +181,7 @@ fn start(state: State(_), id, effect) {
 }
 
 fn advance(effect) {
-  shell.advance(effect, int.to_float(frame))
-  |> promise.map(Ok)
-  |> promise.rescue(fn(error) {
-    Error(string.from(error) |> result.unwrap("Unknown JavaScript error"))
-  })
+  host.advance(effect, int.to_float(frame))
 }
 
 fn progress(state: State(_), id, started, progressed) {
@@ -258,18 +257,24 @@ fn finish(state: State(_), task, update) {
 
 /// Published packages, found without holding up evaluation.
 fn discover(shell: Shell) -> Task {
-  system.run(execute.pull(shell.execution))
-  |> promise.map(fn(execution) { model.discovered(_, execution) })
-  |> promise.rescue(fn(_) { fn(model) { #(model, []) } })
+  use pulled <- host.map(host.run(execute.pull(shell.execution)))
+  case pulled {
+    Ok(execution) -> model.discovered(_, execution)
+    Error(_) -> fn(model) { #(model, []) }
+  }
 }
 
 /// The type of a referenced module, for structural editing.
 fn load(reference, shell: Shell) -> Task {
   let failed = "Unable to load " <> tree.reference_to_string(reference)
-  system.run(structural.load_reference(reference, shell.execution))
-  |> promise.map(fn(loaded) { result.replace_error(loaded.0, failed) })
-  |> promise.rescue(fn(_) { Error(failed) })
-  |> promise.map(fn(type_) { model.loaded(_, reference, type_) })
+  use loaded <- host.map(
+    host.run(structural.load_reference(reference, shell.execution)),
+  )
+  let type_ = case loaded {
+    Ok(#(Ok(type_), _)) -> Ok(type_)
+    _ -> Error(failed)
+  }
+  model.loaded(_, reference, type_)
 }
 
 fn failed(state: State(_), id, message) {

@@ -1,5 +1,6 @@
 import eyg/cli/helpers
 import eyg/cli/tui/agent
+import eyg/cli/tui/host
 import eyg/cli/tui/model
 import eyg/cli/tui/shell
 import gleam/int
@@ -90,7 +91,8 @@ fn config(server, policy) {
 }
 
 fn advanced(effect) {
-  use #(events, progress) <- promise.await(shell.advance(effect, 1000.0))
+  use stepped <- promise.await(host.advance(effect, 1000.0))
+  let assert Ok(#(events, progress)) = stepped
   case progress {
     shell.Paused(effect) -> {
       use #(more, progress) <- promise.map(advanced(effect))

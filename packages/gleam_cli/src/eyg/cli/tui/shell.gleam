@@ -9,16 +9,16 @@ import eyg/interpreter/simple_debug
 import eyg/ir/tree
 import gleam/dict
 import gleam/http/request
-import gleam/javascript/promise.{type Promise}
+import gleam/int
 import gleam/list
 import gleam/option.{type Option, None}
+import gleam/regexp
 import gleam/result
 import gleam/string
+import gleam/time/timestamp
 import gleam/uri
 import loam/execute
 import loam/system
-import plinthx/browser/performance
-import plinthx/node/util
 
 pub type Shell {
   Shell(
@@ -132,70 +132,28 @@ pub type Progress(a) {
   Paused(system.Effect(a))
 }
 
-/// Advance an effect until it finishes, asks for input or exits, or until
-/// `budget` milliseconds have passed, so the screen keeps up with long work.
-pub fn advance(
-  effect: system.Effect(a),
-  budget: Float,
-) -> Promise(#(List(Event), Progress(a))) {
-  use #(events, progress) <- promise.map(go(effect, [], now() +. budget))
-  #(list.reverse(events), progress)
-}
-
-fn go(effect, events, deadline) {
-  let print = fn(text, error, resume) {
-    go(resume(Nil), [Output(clean(text), error), ..events], deadline)
-  }
-  case effect {
-    system.Done(value) -> promise.resolve(#(events, Finished(value)))
-    system.Exit(status) -> promise.resolve(#(events, Exited(status)))
-    system.Prompt(text, resume) ->
-      promise.resolve(#(
-        events,
-        Asking(last_line(text), fn(answer) { resume(Ok(answer)) }),
-      ))
-    system.Stdin(resume) ->
-      promise.resolve(#(
-        events,
-        Asking("Standard input", fn(answer) { resume(Ok(answer)) }),
-      ))
-    // The tui owns the keyboard, so no key reaches the program.
-    system.ReadKey(milliseconds, resume) ->
-      promise.await(promise.wait(milliseconds), fn(_) {
-        go(resume(None), events, deadline)
-      })
-    _ ->
-      case now() >. deadline {
-        True -> promise.resolve(#(events, Paused(effect)))
-        False ->
-          case effect {
-            system.Stdout(text, resume) -> print(text <> "\n", False, resume)
-            system.WriteStdout(text, resume) -> print(text, False, resume)
-            system.WriteStderr(text, resume) -> print(text, True, resume)
-            system.Fetch(request, _) | system.FetchStream(request, _) -> {
-              let events = [Fetched(public_url(request)), ..events]
-              promise.await(system.step(effect), go(_, events, deadline))
-            }
-            _ -> promise.await(system.step(effect), go(_, events, deadline))
-          }
-      }
-  }
-}
-
-fn last_line(text) {
+/// The last line of a prompt, as the editor shows it.
+pub fn prompt_text(text) {
   clean(text) |> string.split("\r") |> list.last |> result.unwrap("")
 }
 
-fn clean(text) {
-  util.strip_vt_control_characters(text)
+/// Remove terminal control sequences from output.
+pub fn clean(text) {
+  let assert Ok(control) =
+    regexp.from_string(
+      "[\u{1b}\u{9b}][\\[\\]()#;?]*(?:\\d{1,4}(?:[;:]\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]",
+    )
+  regexp.replace(control, text, "")
 }
 
-fn public_url(req) {
+pub fn public_url(req) {
   let parsed = request.to_uri(req)
   uri.to_string(uri.Uri(..parsed, userinfo: None, query: None, fragment: None))
 }
 
+/// Milliseconds since the epoch.
 pub fn now() -> Float {
-  let assert Ok(clock) = performance.get()
-  performance.now(clock)
+  let #(seconds, nanoseconds) =
+    timestamp.system_time() |> timestamp.to_unix_seconds_and_nanoseconds
+  int.to_float(seconds) *. 1000.0 +. int.to_float(nanoseconds) /. 1_000_000.0
 }
