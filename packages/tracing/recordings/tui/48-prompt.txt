@@ -1,0 +1,32 @@
+
+  eyg / tui                                ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+    let y = {
+
+
+
+
+    a: 1 }
+
+
+
+
+    y.a
+
+
+    1
+
+
+    match perform StandardIn({}) { Ok(bytes) -> { !string_from_binary(bytes) } Error(e) -> {
+    Error(e) } }
+
+
+    ● Running…
+
+  │
+  │  Standard input
+  │  Write EYG…
+  │
+  │
+
+  Waiting for input                                    f2 structure  ·  ctrl+e effects  ·  f1 help

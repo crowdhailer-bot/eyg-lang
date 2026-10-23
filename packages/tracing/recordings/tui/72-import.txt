@@ -1,0 +1,32 @@
+
+  eyg / tui                                ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+
+    error: unhandled effect ExecutionLimit("interpreter reduction budget exhausted")
+    hint: handle this effect or run the program in a runtime that supports it
+
+    → in <repl>:1
+     1 | let forever = (f) -> { f(f) } forever(forever)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      in <repl>:1 (fn(f) { ... })
+
+
+    @standard.integer.add(1, 2)
+
+
+    3
+
+    ▸ 0 effects · 2 hub requests  245 ms
+
+
+    import "./greeting.eyg"
+
+
+    "hello from a file"
+
+  │
+  │  Write EYG…
+  │
+  │
+
+  Ready                                                f2 structure  ·  ctrl+e effects  ·  f1 help

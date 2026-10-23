@@ -8,3 +8,4 @@ export function newResponse(constructor, body, status, headers) {
   try { return Result$Ok(new constructor(body, { status, headers: Array.from(headers) })); }
   catch (error) { return Result$Error(String(error)); }
 }
+export const requestUrl = request => request.url;

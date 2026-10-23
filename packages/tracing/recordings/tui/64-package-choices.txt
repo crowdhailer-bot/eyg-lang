@@ -1,0 +1,32 @@
+
+  eyg / tui                                ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+
+    Ok("Corin 🌱")
+
+    ▾ 1 effects  293 ms
+
+      StandardIn({})
+      ↳ Ok(Binary(10 bytes): Q29yaW4g8J+MsQ==)
+
+
+    let forever = (f) -> { f(f) } forever(forever)
+
+
+    error: unhandled effect ExecutionLimit("interpreter reduction budget exhausted")
+    hint: handle this effect or run the program in a runtime that supports it
+
+    → in <repl>:1
+     1 | let forever = (f) -> { f(f) } forever(forever)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      in <repl>:1 (fn(f) { ... })
+
+
+    › @standard  hub package
+
+  │
+  │  @sta
+  │
+  │
+
+  Ready                                                f2 structure  ·  ctrl+e effects  ·  f1 help

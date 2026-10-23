@@ -1,0 +1,32 @@
+
+  eyg / tui                                ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+
+    x
+
+
+    42
+
+
+    /type x
+
+
+    Integer
+
+
+    !int_add(1, "a")
+
+
+    error: unexpected term, expected: Integer got: "a"
+    hint: check the value passed to this operation has the expected shape
+
+    → in <repl>:1
+     1 | !int_add(1, "a")
+         ^^^^^^^^^^^^^^^^
+
+  │
+  │  Write EYG…
+  │
+  │
+
+  Ready                                                f2 structure  ·  ctrl+e effects  ·  f1 help

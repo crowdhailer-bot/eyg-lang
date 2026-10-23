@@ -1,0 +1,32 @@
+
+  eyg / tui  ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+
+    1
+
+
+    match perform StandardIn({}) { Ok(bytes) -> {
+    !string_from_binary(bytes) } Error(e) -> { Error(e) } }
+
+
+    Ok("Corin 🌱")
+
+    ▾ 1 effects  293 ms
+
+      StandardIn({})
+      ↳ Ok(Binary(10 bytes): Q29yaW4g8J+MsQ==)
+
+  │
+  │  Write EYG…
+  │
+  │
+
+  Ready                  f2 structure  ·  ctrl+e effects  ·  f1 help
+
+
+
+
+
+
+
+

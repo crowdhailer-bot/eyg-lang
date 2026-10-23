@@ -1,0 +1,32 @@
+
+  eyg / tui                                ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+    error: unexpected term, expected: Integer got: "a"
+    hint: check the value passed to this operation has the expected shape
+
+    → in <repl>:1
+     1 | !int_add(1, "a")
+         ^^^^^^^^^^^^^^^^
+
+
+    let y = {
+
+
+
+
+    a: 1 }
+
+
+
+
+    y.a
+
+
+    1
+
+  │
+  │  let banner = "🌱緑é" import "./greeting.eyg
+  │
+  │
+
+  Ready                                                f2 structure  ·  ctrl+e effects  ·  f1 help

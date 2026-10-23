@@ -1,0 +1,32 @@
+
+  eyg / tui                                ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+
+
+
+    Eat Your Greens
+
+    An expression. A useful result.
+
+    Try @standard.integer.add(20, 22)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  │
+  │  You can draft while this runs…
+  │
+  │
+
+  Starting EYG…                                        f2 structure  ·  ctrl+e effects  ·  f1 help

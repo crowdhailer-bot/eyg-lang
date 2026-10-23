@@ -16,3 +16,6 @@ pub fn new_response(
   status: Int,
   headers: List(#(String, String)),
 ) -> Result(Response, String)
+
+@external(javascript, "./fetch_ffi.mjs", "requestUrl")
+pub fn request_url(request: Request) -> String

@@ -1,0 +1,32 @@
+
+  eyg / tui                                ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      in <repl>:1 (fn(f) { ... })
+
+
+    @standard.integer.add(1, 2)
+
+
+    3
+
+    ▸ 0 effects · 2 hub requests  245 ms
+
+
+    import "./greeting.eyg"
+
+
+    "hello from a file"
+
+
+    !int_add(20, 22)
+
+    Integer
+
+  │
+  │  insert integer · Enter confirm · Escape cancel
+  │  20
+  │
+  │
+
+  Ready                                                     f2 text  ·  ctrl+e effects  ·  f1 help

@@ -1,0 +1,32 @@
+
+  eyg / tui                                ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+    perform StandardOut("hello")
+
+
+    hello
+
+    {}
+
+    ▾ 1 effects  15 ms
+
+      StandardOut("hello")
+      ↳ {}
+
+
+    let x = !int_add(20, 22)
+
+
+
+
+    x
+
+
+    42
+
+  │
+  │  Write EYG…
+  │
+  │
+
+  Ready                                                f2 structure  ·  ctrl+e effects  ·  f1 help
