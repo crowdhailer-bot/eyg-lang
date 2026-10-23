@@ -1,0 +1,32 @@
+
+  eyg / overlay  ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui  ·  scripted-terminal-gui
+
+
+
+    ▾ run  27 ms · code
+    let _ = perform StandardOut("Hello from Gleam") !int_add(20, 22)
+
+
+    Output:
+    Hello from Gleam
+    Result:
+    42
+
+    ▾ 1 effects  27 ms
+
+      StandardOut("Hello from Gleam")
+      ↳ passed · {}
+
+    Computed **42** and printed the greeting.
+
+
+    Enter send · Alt+Enter newline · Ctrl+E effects · Ctrl+O code · PgUp/PgDn scroll · F1 close
+    help
+    /export <file> chat · /exit · Ctrl+C quit
+
+  │
+  │  Ask anything…
+  │
+  │
+
+  Ready                                                 ctrl+o code  ·  ctrl+e effects  ·  f1 help

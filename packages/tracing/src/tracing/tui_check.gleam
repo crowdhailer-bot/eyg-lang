@@ -3,8 +3,10 @@
 //// asciinema cast of the session are kept as evidence.
 ////
 //// Build the CLI first: `gleam build` in packages/gleam_cli. Then
-//// `gleam run -m tracing/tui_check` here. Packages come from a local hub.
+//// `gleam run -m tracing/tui_check -- shell|overlay` here. Packages come from a
+//// local hub and Overlay replies from a scripted model.
 
+import argv
 import filepath
 import gleam/int
 import gleam/io
@@ -16,6 +18,7 @@ import plinthx/bun/server
 import shellout
 import simplifile
 import tracing/package_fixture
+import tracing/terminal_fixture
 
 pub type Step {
   Type(String)
@@ -40,8 +43,15 @@ pub fn main() {
     Ok(fixture) -> promise.resolve(fixture)
     Error(reason) -> panic as reason
   })
-  use failures <- promise.await(run(root))
-  use _ <- promise.map(server.stop(package.server, True))
+  let assert Ok(model) = terminal_fixture.start()
+  let names = case argv.load().arguments {
+    [] -> ["shell", "overlay"]
+    names -> names
+  }
+  use failures <- promise.await(sequence(names, run(root, _)))
+  let failures = list.flatten(failures)
+  use _ <- promise.await(server.stop(package.server, True))
+  use _ <- promise.map(server.stop(model, True))
   case failures {
     [] -> io.println("PASS eyg tui showed every check")
     _ -> {
@@ -59,13 +69,44 @@ fn normal(path) {
 }
 
 /// `eyg tui` from the CLI's build, so it starts in the fixture directory.
-fn command(root) {
+fn command(root, name) {
   let module =
     root <> "/packages/gleam_cli/build/dev/javascript/eyg_cli/eyg_cli.mjs"
-  "bun -e \"import('" <> module <> "').then((cli) => cli.main())\" eyg tui"
+  "bun -e \"import('"
+  <> module
+  <> "').then((cli) => cli.main())\" eyg tui"
+  <> case name {
+    "overlay" -> " overlay local.eyg"
+    _ -> ""
+  }
 }
 
-pub fn script() -> List(Step) {
+pub fn script(name) -> List(Step) {
+  case name {
+    "overlay" -> overlay()
+    _ -> shell()
+  }
+}
+
+fn overlay() {
+  [
+    Check("started", "Ask a question or describe a task to get started."),
+    Type("Print a greeting and calculate 20 plus 22."),
+    Key("Enter"),
+    Check("answered", "Computed **42** and printed the greeting."),
+    Key("C-o"),
+    Check("code", "let _ = perform StandardOut(\"Hello from Gleam\")"),
+    Key("C-e"),
+    Check("effects", "↳ passed · {}"),
+    Key("F1"),
+    Check("help", "/export <file> chat"),
+    Key("F1"),
+    Type("/exit"),
+    Key("Enter"),
+  ]
+}
+
+fn shell() {
   [
     Check("started", "Try @standard.integer.add(20, 22)"),
     Type("perform StandardOut(\"hello\")"),
@@ -162,9 +203,16 @@ pub fn script() -> List(Step) {
   ]
 }
 
-fn run(root) {
+fn run(root, name) {
+  io.println("Script " <> name)
   let fixture = root <> "/packages/tracing/fixtures/tui"
-  let out = root <> "/packages/tracing/recordings/tui"
+  let out =
+    root
+    <> "/packages/tracing/recordings/tui"
+    <> case name {
+      "overlay" -> "-overlay"
+      _ -> ""
+    }
   let _ = simplifile.delete(out)
   let assert Ok(_) = simplifile.create_directory_all(out)
   // A fresh hub cache, so every run fetches the same modules.
@@ -174,7 +222,7 @@ fn run(root) {
     "env XDG_CACHE_HOME="
     <> cache
     <> " EYG_ORIGIN=http://127.0.0.1:7207 asciinema rec --overwrite -q -c '"
-    <> string.replace(command(root), "'", "'\\''")
+    <> string.replace(command(root, name), "'", "'\\''")
     <> "' "
     <> out
     <> ".cast"
@@ -194,7 +242,7 @@ fn run(root) {
       recorded,
     ]),
   )
-  use failures <- promise.await(perform(script(), out, [], 0))
+  use failures <- promise.await(perform(script(name), out, [], 0))
   use _ <- promise.await(wait_closed(30))
   let _ = simplifile.delete(cache)
   use _ <- promise.map(tmux(["kill-session", "-t", session]))
@@ -312,6 +360,17 @@ fn wait_closed(attempts) {
     Ok(_), _ -> {
       use _ <- promise.await(promise.wait(200))
       wait_closed(attempts - 1)
+    }
+  }
+}
+
+fn sequence(items, work) {
+  case items {
+    [] -> promise.resolve([])
+    [item, ..rest] -> {
+      use first <- promise.await(work(item))
+      use others <- promise.map(sequence(rest, work))
+      [first, ..others]
     }
   }
 }

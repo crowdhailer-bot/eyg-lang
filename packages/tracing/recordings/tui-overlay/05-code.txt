@@ -1,0 +1,32 @@
+
+  eyg / overlay  ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui  ·  scripted-terminal-gui
+
+    Print a greeting and calculate 20 plus 22.
+
+
+    trace saved to
+    /home/clara/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui/.eyg/traces/20261023T09211
+    3-icdcoj7hgv.json
+
+    I will run the calculation.
+
+
+    ▾ run  27 ms · code
+    let _ = perform StandardOut("Hello from Gleam") !int_add(20, 22)
+
+
+    Output:
+    Hello from Gleam
+    Result:
+    42
+
+    ▸ 1 effects  27 ms
+
+    Computed **42** and printed the greeting.
+
+  │
+  │  Ask anything…
+  │
+  │
+
+  Ready                                                 ctrl+o code  ·  ctrl+e effects  ·  f1 help

@@ -1,0 +1,32 @@
+
+  eyg / overlay                            ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+
+
+
+    Eat Your Greens
+
+    An agent with tools you can inspect.
+
+    Ask a question or describe a task to get started.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  │
+  │  You can draft while this runs…
+  │
+  │
+
+  Starting EYG…                                         ctrl+o code  ·  ctrl+e effects  ·  f1 help
