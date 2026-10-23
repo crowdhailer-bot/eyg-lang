@@ -101,6 +101,16 @@ pub fn files(prefix, cursor, cwd) {
   })
 }
 
+/// Hints that contain the value, as when answering a structural edit.
+pub fn hints(value: String, hints: List(#(String, String))) {
+  hints
+  |> list.filter(fn(hint) { string.contains(hint.0, value) })
+  |> list.take(30)
+  |> list.map(fn(hint) {
+    Completion(hint.0, hint.1, hint.0, 0, string.length(value))
+  })
+}
+
 pub fn apply(source, choice: Completion) {
   let prefix = string.slice(source, 0, choice.from) <> choice.insert
   // Use grapheme slicing on both sides. The pinned stdlib's JS drop_start

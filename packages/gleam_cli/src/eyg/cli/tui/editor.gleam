@@ -1,13 +1,14 @@
 //// The text being written, with readline's keys under étui's key names.
-//// The cursor counts graphemes.
+//// The cursor counts graphemes. Selected text is replaced by what is typed next.
 
+import gleam/bool
 import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
 
 pub type Editor {
-  Editor(text: String, cursor: Int)
+  Editor(text: String, cursor: Int, selected: Bool)
 }
 
 /// What a key did to the editor.
@@ -18,13 +19,22 @@ pub type Outcome {
 }
 
 pub fn new() {
-  Editor("", 0)
+  Editor("", 0, False)
+}
+
+/// Text with the cursor at its end.
+pub fn from(text, selected) {
+  Editor(text, string.length(text), selected)
 }
 
 pub fn insert(editor: Editor, text: String) {
+  let editor = case editor.selected {
+    True -> new()
+    False -> editor
+  }
   let before = string.slice(editor.text, 0, editor.cursor)
   let after = string.drop_start(editor.text, editor.cursor)
-  Editor(before <> text <> after, editor.cursor + string.length(text))
+  Editor(before <> text <> after, editor.cursor + string.length(text), False)
 }
 
 pub fn key(editor: Editor, key: String) -> Outcome {
@@ -62,10 +72,12 @@ fn printable(key) {
 }
 
 fn move(editor: Editor, cursor) {
-  Editor(..editor, cursor: int.clamp(cursor, 0, string.length(editor.text)))
+  let cursor = int.clamp(cursor, 0, string.length(editor.text))
+  Editor(..editor, cursor:, selected: False)
 }
 
 fn delete(editor: Editor, from, to) {
+  use <- bool.guard(editor.selected, new())
   let from = int.max(0, from)
   let to = int.min(to, string.length(editor.text))
   case from < to {
@@ -74,6 +86,7 @@ fn delete(editor: Editor, from, to) {
       Editor(
         string.slice(editor.text, 0, from) <> string.drop_start(editor.text, to),
         from,
+        False,
       )
   }
 }

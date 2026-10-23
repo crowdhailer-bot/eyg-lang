@@ -136,6 +136,23 @@ pub fn handle_recorded(code, scope, defs, state) {
   }
 }
 
+/// Execute structural IR directly, preserving binary values and vacant nodes.
+/// Structural definitions participate in subsequent text `/type` queries too.
+pub fn handle_source_recorded(code, scope, defs, state) {
+  let assignments = definitions(tree.map_annotation(code, fn(_) { #(0, 0) }))
+  evaluate(code, assignments, scope, defs, state)
+}
+
+fn definitions(code) {
+  case code {
+    #(tree.Let(label, value, rest), at) -> [
+      #(label, value, at),
+      ..definitions(rest)
+    ]
+    _ -> []
+  }
+}
+
 fn evaluate(code, assignments, scope, defs, state) {
   use cwd <- system.then(system.cwd())
   let cwd = result.unwrap(cwd, "")

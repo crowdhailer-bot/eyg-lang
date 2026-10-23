@@ -3,12 +3,16 @@ import eyg/cli/tui/completion
 import eyg/cli/tui/editor
 import eyg/cli/tui/highlight as h
 import eyg/cli/tui/model
+import eyg/cli/tui/projection
 import eyg/cli/tui/shell
+import eyg/ir/tree as ir
 import gleam/javascript/promise
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import loam/sandbox
+import morph/editable
+import morph/render
 
 fn started() {
   let assert Ok(started) = shell.start(None, helpers.config) |> in_sandbox
@@ -126,17 +130,126 @@ pub fn file_completion_replaces_only_the_import_path_test() {
 }
 
 pub fn tab_accepts_the_chosen_completion_test() {
-  let #(model, commands) =
-    model.discovered(model.started(model.new("."), started()), [
-      "standard",
-      "stats",
-    ])
-  assert commands == [model.Complete]
-  let model = model.Model(..model, editor: editor.insert(model.editor, "@st"))
+  let model = model.started(model.new("."), started())
+  let model =
+    model.Model(
+      ..model,
+      packages: ["standard", "stats"],
+      editor: editor.insert(model.editor, "@st"),
+    )
   let choices = completion.complete("@st", 3, model.packages, ".")
   let model = model.completed_choices(model, choices)
   let #(model, _) = model.key(model, "down")
   let #(model, _) = model.key(model, "tab")
-  assert model.editor == editor.Editor("@stats", 6)
+  assert model.editor == editor.Editor("@stats", 6, False)
   assert model.choices == []
+}
+
+fn keys(state, keys) {
+  list.fold(keys, state, fn(state, key) {
+    let #(model, commands) = state
+    let #(model, more) = model.key(model, key)
+    #(model, list.append(commands, more))
+  })
+}
+
+fn typed(state, text) {
+  keys(state, string.to_graphemes(text))
+}
+
+/// Run the evaluation a command asks for and complete it.
+fn evaluated(state: #(model.Model, List(model.Command))) {
+  let #(model, commands) = state
+  let assert Ok(model.Evaluate(id, code)) =
+    list.find(commands, fn(command) {
+      case command {
+        model.Evaluate(..) -> True
+        _ -> False
+      }
+    })
+  let assert Some(current) = model.shell
+  let effect = case code {
+    model.Text(source) -> shell.evaluate(current, source)
+    model.Ir(code) -> shell.evaluate_ir(current, code)
+  }
+  use #(_, progress) <- promise.map(advanced(effect))
+  let assert shell.Finished(evaluated) = progress
+  model.completed(model, id, evaluated, 0.0)
+}
+
+fn structure_text(model: model.Model) {
+  let assert Some(structure) = model.structure
+  model.projection_text(structure)
+}
+
+fn ready() {
+  #(model.started(model.new("."), started()), [])
+}
+
+pub fn structural_edits_undo_and_return_to_earlier_structures_test() {
+  let #(model, _) =
+    typed(ready(), "!int_add(20, 22)")
+    |> keys(["f2", "right", "right", "n"])
+  assert model.input(model) |> option.map(fn(input) { input.label })
+    == Some("insert integer")
+  assert model.editor == editor.Editor("20", 2, True)
+  let #(model, _) = typed(#(model, []), "40") |> keys(["enter"])
+  assert structure_text(model) == "!int_add(40, 22)"
+  let #(model, _) = keys(#(model, []), ["z"])
+  assert structure_text(model) == "!int_add(20, 22)"
+  let state = keys(#(model, []), ["Z", "enter"])
+  use #(model, _) <- promise.map(evaluated(state))
+  let assert Ok(entry) = model.find(model, 1)
+  assert entry.results == [Ok("62")]
+  assert structure_text(model) == "Vacant"
+  let #(model, _) = keys(#(model, []), ["up"])
+  assert structure_text(model) == "!int_add(40, 22)"
+  let #(model, _) = keys(#(model, []), ["down"])
+  assert structure_text(model) == "Vacant"
+}
+
+pub fn copied_binary_values_survive_and_are_typed_in_text_test() {
+  let #(model, commands) = keys(ready(), ["f2", "b", "y"])
+  let assert Ok(model.Copy(copied)) = list.last(commands)
+  assert string.contains(copied, "\"0\"")
+  let #(model, _) = keys(#(model, []), ["d", "Y", "e"])
+  let state = typed(#(model, []), "bytes") |> keys(["enter", "enter"])
+  use #(model, _) <- promise.await(evaluated(state))
+  let state =
+    keys(#(model, []), ["f2"]) |> typed("/type bytes") |> keys(["enter"])
+  use #(model, _) <- promise.map(evaluated(state))
+  let assert Ok(entry) = model.find(model, 2)
+  let assert [Ok(type_)] = entry.results
+  assert string.contains(type_, "Binary")
+}
+
+pub fn failed_runs_and_invalid_answers_keep_the_structure_test() {
+  let state = typed(ready(), "!int_add(20, \"wrong\")") |> keys(["f2", "enter"])
+  use #(model, _) <- promise.await(evaluated(state))
+  let assert Ok(model.Entry(results: [Error(_)], ..)) = model.find(model, 1)
+  assert structure_text(model) == "!int_add(20, \"wrong\")"
+  let #(model, _) = model.click(model, model.Focus([2]))
+  let #(model, _) =
+    keys(#(model, []), ["n"]) |> typed("invalid") |> keys(["enter"])
+  assert model.status == "Enter an integer"
+  let state =
+    keys(#(model, []), ["ctrl+u"]) |> typed("22") |> keys(["enter", "enter"])
+  use #(model, _) <- promise.map(evaluated(state))
+  let assert Ok(entry) = model.find(model, 2)
+  assert entry.results == [Ok("42")]
+}
+
+fn drawn(exp) {
+  projection.project(render.top(exp, [])) |> projection.text
+}
+
+/// A nested block is drawn as a block in braces, not as a function.
+pub fn nested_block_keeps_its_braces_test() {
+  let block = ir.block([#("a", ir.integer(1))], ir.variable("a"))
+  let exp =
+    ir.call(ir.variable("f"), [block, ir.integer(2)])
+    |> editable.from_annotated
+  assert drawn(exp) == "f({ ... }, 2)"
+  assert drawn(editable.open_all(exp))
+    == "f(\n  {\n    let a = 1\n    a\n  },\n  2,\n)"
 }

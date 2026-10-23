@@ -10,6 +10,8 @@ import etui/text
 import eyg/cli/tui/editor.{type Editor}
 import eyg/cli/tui/highlight as h
 import eyg/cli/tui/model.{type Entry, type Model}
+import eyg/cli/tui/projection
+import eyg/cli/tui/structural
 import gleam/float
 import gleam/int
 import gleam/list
@@ -41,7 +43,11 @@ pub fn empty() {
 
 const help =
   "Enter run · Alt+Enter newline · Tab complete · Ctrl+E effects · PgUp/PgDn scroll · F1 close help
-/scope bindings · /type expression · /help · /exit · Ctrl+C quit"
+/scope bindings · /type expression · /help · /exit · Ctrl+C quit
+F2 text/structure · arrows navigate · Space vacant · a select parent · i edit · d delete · z/Z undo/redo
+n integer · s string · b binary · v variable · f function · c/C/w call · e/E let · l/L list · r/R record
+g field · o overwrite · t tag · m match · p/h effects · j builtin · @/# reference · q/Q file · x spread
+y/Y copy/paste · k fold · </> insert before/after · Enter evaluate · Escape dismiss / text"
 
 /// `top` is the first history row shown, `None` follows the newest output.
 pub fn draw(
@@ -58,7 +64,20 @@ pub fn draw(
     False -> []
   }
   let choices = choices(model)
-  let assert [header, history, help_area, choices_area, input, footer] =
+  let structure = case model.structural, model.structure {
+    True, Some(structure) -> Some(structure_view(structure))
+    _, _ -> None
+  }
+  let label = label(model)
+  let assert [
+    header,
+    history,
+    help_area,
+    structure_area,
+    choices_area,
+    input,
+    footer,
+  ] =
     geometry.split(Vertical, inner, [
       Length(3),
       Fill,
@@ -66,18 +85,19 @@ pub fn draw(
         [] -> 0
         lines -> list.length(lines) + 2
       }),
+      Length(case structure {
+        Some(view) -> structure_height(view)
+        None -> 0
+      }),
       Length(case choices {
         [] -> 0
         choices -> list.length(choices) + 2
       }),
-      Length(
-        2
-        + editor_height(model.editor)
-        + case model.prompt {
-          Some(_) -> 1
-          None -> 0
-        },
-      ),
+      Length(case model.editing_text(model), label {
+        False, _ -> 0
+        True, None -> 2 + editor_height(model.editor)
+        True, Some(_) -> 3 + editor_height(model.editor)
+      }),
       Length(2),
     ])
   let heading = row(header, 1)
@@ -109,13 +129,31 @@ pub fn draw(
       panel(buf, choices_area)
       |> lines_at(inset(choices_area, 2, 1), choices)
   }
-  let #(buf, cursor) = draw_input(buf, input, model)
+  let #(buf, focus) = case structure {
+    Some(view) -> draw_structure(buf, structure_area, view)
+    None -> #(buf, [])
+  }
+  let #(buf, cursor) = case model.editing_text(model) {
+    True -> {
+      let #(buf, cursor) = draw_input(buf, input, model, label)
+      #(buf, Some(cursor))
+    }
+    False -> #(buf, None)
+  }
+  let mode = case model.structural {
+    True -> "f2 text"
+    False -> "f2 structure"
+  }
   let buf =
     buf
     |> line(row(footer, 1), [#(model.status, h.muted)])
-    |> right(row(footer, 1), "ctrl+e effects  ·  f1 help", h.muted)
+    |> right(row(footer, 1), mode <> "  ·  ctrl+e effects  ·  f1 help", h.muted)
   let frame = terminal.Frame(..frame, buffer: buf)
-  #(terminal.set_cursor(frame, cursor), drawn)
+  let frame = case cursor {
+    Some(cursor) -> terminal.set_cursor(frame, cursor)
+    None -> terminal.hide_cursor(frame)
+  }
+  #(frame, Drawn(..drawn, clicks: list.append(drawn.clicks, focus)))
 }
 
 // History
@@ -302,6 +340,135 @@ fn code_rows(source, width) {
   })
 }
 
+// Structure
+
+type StructureView {
+  StructureView(
+    lines: List(List(projection.Chunk)),
+    type_: String,
+    errors: List(String),
+  )
+}
+
+fn structure_view(structure: model.Structure) {
+  let #(type_, errors) = structural.type_info(structure.buffer)
+  let one_line = fn(text) {
+    string.split(text, "\n") |> list.map(string.trim) |> string.join(" ")
+  }
+  StructureView(
+    lines: projection.project([structural.view(structure.buffer)]),
+    type_: case type_ {
+      "" -> "n integer · s string · @ package · F1 all shortcuts"
+      type_ -> one_line(type_)
+    },
+    errors: list.take(errors, 2) |> list.map(one_line),
+  )
+}
+
+fn tree_height(view: StructureView) {
+  int.clamp(list.length(view.lines), 2, 12)
+}
+
+fn structure_height(view: StructureView) {
+  3 + tree_height(view) + list.length(view.errors)
+}
+
+/// The projection, scrolled to keep the selection in view, then its type and
+/// errors. Each chunk with a path focuses that expression when clicked.
+fn draw_structure(buf, area: Rect, view: StructureView) {
+  let buf = panel(buf, area)
+  let content = inset(area, 2, 1)
+  let height = tree_height(view)
+  let selected =
+    list.index_fold(view.lines, -1, fn(found, line, index) {
+      case found == -1 && list.any(line, fn(chunk) { chunk.selected }) {
+        True -> index
+        False -> found
+      }
+    })
+  let first = int.clamp(selected - height + 1, 0, int.max(0, selected))
+  let #(buf, clicks) =
+    view.lines
+    |> list.drop(first)
+    |> list.take(height)
+    |> list.index_fold(#(buf, []), fn(acc, chunks, index) {
+      let y = content.position.y + index
+      let #(buf, clicks, _) =
+        list.fold(chunks, #(acc.0, acc.1, content.position.x), fn(acc, chunk) {
+          let #(buf, clicks, x) = acc
+          let chunk_style = case chunk.selected {
+            True -> style.new(colour(h.bg), colour(h.accent), style.none())
+            False -> foreground(token_colour(chunk.token))
+          }
+          let chunk_style = case chunk.error {
+            True ->
+              style.with_modifier(
+                chunk_style,
+                style.add(chunk_style.modifier, style.underline()),
+              )
+            False -> chunk_style
+          }
+          let cells = text.cell_width(chunk.text)
+          let buf =
+            span.render_line(
+              buf,
+              geometry.Position(x:, y:),
+              span.line_new([span.span_styled(chunk.text, chunk_style)]),
+              content.position.x + content.size.width - x,
+            )
+          let clicks = case chunk.path {
+            Some(path) -> [
+              #(geometry.rect_new(x, y, cells, 1), model.Focus(path)),
+              ..clicks
+            ]
+            None -> clicks
+          }
+          #(buf, clicks, x + cells)
+        })
+      #(buf, clicks)
+    })
+  let below = content.position.y + height
+  let buf =
+    line(
+      buf,
+      geometry.rect_new(content.position.x, below, content.size.width, 1),
+      [#(view.type_, h.muted)],
+    )
+    |> lines_at(
+      geometry.rect_new(
+        content.position.x,
+        below + 1,
+        content.size.width,
+        list.length(view.errors),
+      ),
+      list.map(view.errors, plain(_, h.red)),
+    )
+  #(buf, clicks)
+}
+
+/// Morph's token classes in the colours of highlighted text.
+fn token_colour(token) {
+  case token {
+    "comment" -> h.muted
+    "string" | "char" -> h.accent
+    "reference" | "builtin" | "symbol" -> h.blue
+    "number" | "tag" | "class-name" -> h.orange
+    "keyword" -> h.purple
+    "important" -> h.red
+    _ -> h.text
+  }
+}
+
+/// What the editor is answering: a program's prompt or a structural edit.
+fn label(model: Model) {
+  case model.prompt, model.input(model) {
+    Some(#(prompt, _)), _ -> Some(#(prompt, h.orange))
+    None, Some(input) ->
+      Some(#(input.label <> " · Enter confirm · Escape cancel", h.blue))
+    None, None -> None
+  }
+}
+
 /// At most six completion choices around the selected one.
 fn choices(model: Model) {
   case model.busy {
@@ -316,7 +483,8 @@ fn choices(model: Model) {
           True -> #("› ", h.accent)
           False -> #("  ", h.muted)
         }
-        plain(marker <> choice.label <> "  " <> choice.detail, color)
+        let detail = string.replace(choice.detail, "\n", " ")
+        plain(marker <> choice.label <> "  " <> detail, color)
       })
     }
   }
@@ -329,7 +497,7 @@ fn editor_height(editor: Editor) {
   int.clamp(list.length(string.split(editor.text, "\n")) + 1, 2, 9)
 }
 
-fn draw_input(buf, area: Rect, model: Model) {
+fn draw_input(buf, area: Rect, model: Model, label) {
   let buf = panel(buf, area)
   let buf =
     list.repeat(Nil, area.size.height)
@@ -344,9 +512,9 @@ fn draw_input(buf, area: Rect, model: Model) {
   let x = area.position.x + 3
   let width = int.max(0, area.size.width - 5)
   let y = area.position.y + 1
-  let #(buf, y) = case model.prompt {
-    Some(#(prompt, _)) -> #(
-      line(buf, geometry.rect_new(x, y, width, 1), [#(prompt, h.orange)]),
+  let #(buf, y) = case label {
+    Some(label) -> #(
+      line(buf, geometry.rect_new(x, y, width, 1), [label]),
       y + 1,
     )
     None -> #(buf, y)
@@ -390,7 +558,10 @@ fn draw_editor(buf, area: Rect, edit: Editor, placeholder) {
       h.lines(source)
       |> list.flat_map(fn(parts) {
         list.map(parts, fn(part) {
-          span.span_styled(part.0, foreground(part.1))
+          span.span_styled(part.0, case edit.selected {
+            True -> style.new(colour(h.panel), colour(h.text), style.none())
+            False -> foreground(part.1)
+          })
         })
         |> span.line_new
         |> cut(width)

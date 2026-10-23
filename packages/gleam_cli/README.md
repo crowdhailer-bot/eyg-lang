@@ -77,6 +77,11 @@ and the hub requests it made, and a program reading input is answered in the
 editor. Tab completes packages after `@` and files in imports, Alt+Enter adds a
 line, F1 shows every key and Ctrl+C quits.
 
+F2 switches to Morph's structural editor, with the keys of the web workspace.
+The structure is evaluated as IR, so binary values and vacant nodes survive,
+clicking a node focuses it, y copies the selected expression to the system
+clipboard and up and down return to structures evaluated earlier.
+
 
 ### Evaluate an expression
 

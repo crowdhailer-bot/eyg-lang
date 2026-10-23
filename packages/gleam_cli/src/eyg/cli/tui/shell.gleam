@@ -4,8 +4,10 @@
 
 import eyg/cli/internal/config
 import eyg/cli/shell as repl
+import eyg/hub/cache
 import eyg/interpreter/simple_debug
 import eyg/ir/tree
+import gleam/dict
 import gleam/http/request
 import gleam/javascript/promise.{type Promise}
 import gleam/list
@@ -52,9 +54,23 @@ pub fn evaluate(shell: Shell, source) {
     "" -> source
     pending -> pending <> "\n" <> source
   }
-  use #(results, records, #(pending, scope, definitions, execution)) <- system.map(
-    repl.handle_recorded(code, shell.scope, shell.definitions, shell.execution),
+  repl.handle_recorded(code, shell.scope, shell.definitions, shell.execution)
+  |> system.map(evaluated)
+}
+
+/// Evaluate structural IR directly, keeping binary values and vacant nodes.
+pub fn evaluate_ir(shell: Shell, code) {
+  repl.handle_source_recorded(
+    code,
+    shell.scope,
+    shell.definitions,
+    shell.execution,
   )
+  |> system.map(evaluated)
+}
+
+fn evaluated(result) {
+  let #(results, records, #(pending, scope, definitions, execution)) = result
   let performed =
     list.map(records, fn(record) {
       let #(label, input, output) = record
@@ -69,6 +85,32 @@ pub fn evaluate(shell: Shell, source) {
     performed,
     Shell(scope:, definitions:, execution:, pending:),
   )
+}
+
+/// Keep whichever published package ledger was pulled further, so packages
+/// found in the background survive evaluations that started before them.
+pub fn with_ledger(shell: Shell, from: execute.State) -> Shell {
+  let current = shell.execution.cache
+  let other = from.cache
+  case other.cursor > current.cursor {
+    False -> shell
+    True -> {
+      let cache =
+        cache.Cache(
+          ..current,
+          packages: other.packages,
+          releases: dict.merge(current.releases, other.releases),
+          cursor: other.cursor,
+          cursor_status: other.cursor_status,
+        )
+      Shell(..shell, execution: execute.State(..shell.execution, cache:))
+    }
+  }
+}
+
+/// Published package names, sorted.
+pub fn packages(shell: Shell) {
+  dict.keys(shell.execution.cache.packages) |> list.sort(string.compare)
 }
 
 /// What happened while advancing, for the screen.

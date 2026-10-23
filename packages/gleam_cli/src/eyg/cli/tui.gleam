@@ -10,8 +10,10 @@ import eyg/cli/internal/config
 import eyg/cli/tui/completion
 import eyg/cli/tui/model.{type Model}
 import eyg/cli/tui/shell.{type Shell}
+import eyg/cli/tui/structural
 import eyg/cli/tui/view
-import gleam/dict
+import eyg/ir/tree
+import gleam/bit_array
 import gleam/int
 import gleam/io
 import gleam/javascript/promise.{type Promise}
@@ -40,11 +42,16 @@ type Work {
   Waiting(id: Int, started: Float, resume: fn(String) -> system.Effect(Outcome))
 }
 
+/// Work that changes the model when it finishes, such as finding packages.
+type Task =
+  Promise(fn(Model) -> #(Model, List(model.Command)))
+
 type State(backend) {
   State(
     model: Model,
     work: Work,
-    discovery: Option(Promise(List(String))),
+    background: List(#(Int, Task)),
+    tasks: Int,
     term: terminal.Terminal(backend),
     top: Option(Int),
     drawn: view.Drawn,
@@ -81,7 +88,8 @@ pub fn run(input) -> Promise(Nil) {
       State(
         model: model.new(directory),
         work: Idle,
-        discovery: None,
+        background: [],
+        tasks: 0,
         term:,
         top: None,
         drawn: view.empty(),
@@ -112,12 +120,9 @@ fn loop(state: State(_)) -> Promise(Nil) {
             ]
             Idle | Waiting(..) -> []
           },
-          case state.discovery {
-            Some(found) -> [
-              promise.map(found, fn(found) { discovered(_, found) }),
-            ]
-            None -> []
-          },
+          list.map(state.background, fn(task) {
+            promise.map(task.1, fn(update) { finish(_, task.0, update) })
+          }),
         ])
       case pending {
         [] -> poll(state, frame)
@@ -184,40 +189,43 @@ fn progress(state: State(_), id, started, progressed) {
         shell.Exited(status) ->
           failed(state, id, "Exited with status " <> int.to_string(status))
         shell.Finished(Started(Ok(shell))) ->
-          State(
-            ..state,
-            model: model.started(state.model, shell),
-            work: Idle,
-            discovery: Some(discover(shell)),
-          )
+          State(..state, model: model.started(state.model, shell), work: Idle)
+          |> spawn(discover(shell))
         shell.Finished(Started(Error(message))) -> failed(state, id, message)
         shell.Finished(Evaluated(evaluated)) -> {
           let duration = shell.now() -. started
-          State(
-            ..state,
-            model: model.completed(state.model, id, evaluated, duration),
-            work: Idle,
-          )
+          State(..state, work: Idle)
+          |> apply(model.completed(state.model, id, evaluated, duration))
         }
       }
     }
   }
 }
 
-/// Published package names, found without holding up evaluation.
-fn discover(shell: Shell) {
-  system.run(execute.pull(shell.execution))
-  |> promise.map(fn(execution) {
-    dict.keys(execution.cache.packages) |> list.sort(text.compare)
-  })
-  |> promise.rescue(fn(_) { [] })
+fn spawn(state: State(_), task) {
+  let background = [#(state.tasks, task), ..state.background]
+  State(..state, background:, tasks: state.tasks + 1)
 }
 
-fn discovered(state: State(_), packages) {
-  apply(
-    State(..state, discovery: None),
-    model.discovered(state.model, packages),
-  )
+fn finish(state: State(_), task, update) {
+  let background = list.filter(state.background, fn(entry) { entry.0 != task })
+  apply(State(..state, background:), update(state.model))
+}
+
+/// Published packages, found without holding up evaluation.
+fn discover(shell: Shell) -> Task {
+  system.run(execute.pull(shell.execution))
+  |> promise.map(fn(execution) { model.discovered(_, execution) })
+  |> promise.rescue(fn(_) { fn(model) { #(model, []) } })
+}
+
+/// The type of a referenced module, for structural editing.
+fn load(reference, shell: Shell) -> Task {
+  let failed = "Unable to load " <> tree.reference_to_string(reference)
+  system.run(structural.load_reference(reference, shell.execution))
+  |> promise.map(fn(loaded) { result.replace_error(loaded.0, failed) })
+  |> promise.rescue(fn(_) { Error(failed) })
+  |> promise.map(fn(type_) { model.loaded(_, reference, type_) })
 }
 
 fn failed(state: State(_), id, message) {
@@ -253,15 +261,21 @@ fn apply(state: State(_), result) {
 
 fn perform(state: State(_), command) {
   case command {
-    model.Evaluate(id, source) ->
-      case state.model.shell {
-        Some(current) ->
+    model.Evaluate(id, code) ->
+      case state.model.shell, code {
+        Some(current), model.Text(source) ->
           start(
             state,
             id,
             system.map(shell.evaluate(current, source), Evaluated),
           )
-        None -> failed(state, id, "The shell has not started")
+        Some(current), model.Ir(code) ->
+          start(
+            state,
+            id,
+            system.map(shell.evaluate_ir(current, code), Evaluated),
+          )
+        None, _ -> failed(state, id, "The shell has not started")
       }
     model.Answer(text) ->
       case state.work {
@@ -279,16 +293,37 @@ fn perform(state: State(_), command) {
     model.Scroll(delta) -> scroll(state, delta)
     model.Complete -> {
       let model = state.model
-      let choices =
-        completion.complete(
-          model.editor.text,
-          model.editor.cursor,
-          model.packages,
-          ".",
-        )
+      let text = model.editor.text
+      let choices = case model.input(model) {
+        Some(model.Input(kind: model.FileInput, ..)) ->
+          completion.files(text, text.length(text), ".")
+        Some(model.Input(kind: model.PackageInput, ..)) ->
+          list.map(model.packages, fn(name) { #(name, "hub package") })
+          |> completion.hints(text, _)
+        Some(model.Input(input:, ..)) ->
+          completion.hints(text, structural.input_details(input).1)
+        None ->
+          completion.complete(text, model.editor.cursor, model.packages, ".")
+      }
       State(..state, model: model.completed_choices(model, choices))
     }
+    model.Copy(text) -> {
+      io.print(osc52(text))
+      state
+    }
+    model.Load(reference) ->
+      case state.model.shell {
+        Some(shell) -> spawn(state, load(reference, shell))
+        None -> state
+      }
   }
+}
+
+/// Ask the terminal to put text on the system clipboard.
+fn osc52(text) {
+  "\u{1b}]52;c;"
+  <> bit_array.base64_encode(bit_array.from_string(text), True)
+  <> "\u{07}"
 }
 
 fn scroll(state: State(_), delta) {
