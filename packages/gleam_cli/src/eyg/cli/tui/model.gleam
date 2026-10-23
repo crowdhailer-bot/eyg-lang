@@ -2,6 +2,7 @@
 //// performs effects: changes that need the outside world are commands for the
 //// tui loop.
 
+import eyg/cli/tui/completion.{type Completion}
 import eyg/cli/tui/editor.{type Editor}
 import eyg/cli/tui/shell
 import gleam/int
@@ -34,6 +35,9 @@ pub type Model {
     help: Bool,
     sequence: Int,
     directory: String,
+    packages: List(String),
+    choices: List(Completion),
+    choice: Int,
   )
 }
 
@@ -49,6 +53,8 @@ pub type Command {
   FollowTail
   Reveal(String)
   Scroll(Int)
+  /// Find completions for the text being written.
+  Complete
 }
 
 pub fn new(directory) {
@@ -62,6 +68,9 @@ pub fn new(directory) {
     help: False,
     sequence: 0,
     directory:,
+    packages: [],
+    choices: [],
+    choice: 0,
   )
 }
 
@@ -76,9 +85,13 @@ pub fn key(model: Model, key: String) -> #(Model, List(Command)) {
       }
     "pageup" -> #(model, [Scroll(-12)])
     "pagedown" -> #(model, [Scroll(12)])
+    "tab" if model.choices != [] -> accept(model)
+    "up" if model.choices != [] -> #(choose(model, -1), [])
+    "down" if model.choices != [] -> #(choose(model, 1), [])
+    "esc" if model.choices != [] -> #(Model(..model, choices: []), [])
     _ ->
       case editor.key(model.editor, key) {
-        editor.Edited(editor) -> #(Model(..model, editor:), [])
+        editor.Edited(editor) -> edited(model, editor)
         editor.Submitted -> submit(model)
         editor.Ignored -> #(model, [])
       }
@@ -86,7 +99,40 @@ pub fn key(model: Model, key: String) -> #(Model, List(Command)) {
 }
 
 pub fn paste(model: Model, text) {
-  Model(..model, editor: editor.insert(model.editor, text))
+  edited(model, editor.insert(model.editor, text))
+}
+
+fn edited(model: Model, editor: Editor) {
+  case model.prompt {
+    None -> #(Model(..model, editor:), [Complete])
+    Some(_) -> #(Model(..model, editor:), [])
+  }
+}
+
+fn choose(model: Model, delta) {
+  let count = list.length(model.choices)
+  Model(..model, choice: { model.choice + delta + count } % count)
+}
+
+fn accept(model: Model) {
+  case list.drop(model.choices, model.choice) {
+    [] -> #(model, [])
+    [choice, ..] -> {
+      let #(text, prefix) = completion.apply(model.editor.text, choice)
+      let editor = editor.Editor(text, string.length(prefix))
+      #(Model(..model, editor:, choices: []), [])
+    }
+  }
+}
+
+/// Completions found for the text being written.
+pub fn completed_choices(model: Model, choices) {
+  Model(..model, choices:, choice: 0)
+}
+
+/// Published packages, to complete after `@`.
+pub fn discovered(model: Model, packages) {
+  #(Model(..model, packages:), [Complete])
 }
 
 pub fn click(model: Model, click: Click) -> #(Model, List(Command)) {
@@ -134,6 +180,7 @@ fn submit(model: Model) {
           busy: True,
           entries: list.append(model.entries, [entry]),
           editor: editor.new(),
+          choices: [],
           sequence: id,
           status: "Running…",
         ),
@@ -167,6 +214,7 @@ pub fn asked(model: Model, prompt) {
     ..model,
     prompt: Some(#(prompt, model.editor)),
     editor: editor.new(),
+    choices: [],
     status: "Waiting for input",
   )
 }

@@ -7,9 +7,11 @@ import etui/backend/default
 import etui/geometry
 import etui/terminal
 import eyg/cli/internal/config
+import eyg/cli/tui/completion
 import eyg/cli/tui/model.{type Model}
 import eyg/cli/tui/shell.{type Shell}
 import eyg/cli/tui/view
+import gleam/dict
 import gleam/int
 import gleam/io
 import gleam/javascript/promise.{type Promise}
@@ -17,6 +19,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string as text
+import loam/execute
 import loam/system
 import plinthx/javascript/string
 import simplifile
@@ -41,6 +44,7 @@ type State(backend) {
   State(
     model: Model,
     work: Work,
+    discovery: Option(Promise(List(String))),
     term: terminal.Terminal(backend),
     top: Option(Int),
     drawn: view.Drawn,
@@ -77,6 +81,7 @@ pub fn run(input) -> Promise(Nil) {
       State(
         model: model.new(directory),
         work: Idle,
+        discovery: None,
         term:,
         top: None,
         drawn: view.empty(),
@@ -96,18 +101,32 @@ fn loop(state: State(_)) -> Promise(Nil) {
     }
     False -> {
       let state = draw(state)
-      case state.work {
-        Working(id:, started:, next:) -> {
-          let progressed = promise.map(next, Some)
-          let waited = promise.map(promise.wait(frame), fn(_) { None })
-          use raced <- promise.await(promise.race_list([progressed, waited]))
-          let state = case raced {
-            Some(progressed) -> progress(state, id, started, progressed)
-            None -> state
-          }
-          poll(state, 0)
+      // Whatever settles first changes the state; keys are read in between.
+      let pending =
+        list.flatten([
+          case state.work {
+            Working(id:, started:, next:) -> [
+              promise.map(next, fn(progressed) {
+                progress(_, id, started, progressed)
+              }),
+            ]
+            Idle | Waiting(..) -> []
+          },
+          case state.discovery {
+            Some(found) -> [
+              promise.map(found, fn(found) { discovered(_, found) }),
+            ]
+            None -> []
+          },
+        ])
+      case pending {
+        [] -> poll(state, frame)
+        _ -> {
+          let waited =
+            promise.map(promise.wait(frame), fn(_) { fn(state) { state } })
+          use update <- promise.await(promise.race_list([waited, ..pending]))
+          poll(update(state), 0)
         }
-        Idle | Waiting(..) -> poll(state, frame)
       }
     }
   }
@@ -165,7 +184,12 @@ fn progress(state: State(_), id, started, progressed) {
         shell.Exited(status) ->
           failed(state, id, "Exited with status " <> int.to_string(status))
         shell.Finished(Started(Ok(shell))) ->
-          State(..state, model: model.started(state.model, shell), work: Idle)
+          State(
+            ..state,
+            model: model.started(state.model, shell),
+            work: Idle,
+            discovery: Some(discover(shell)),
+          )
         shell.Finished(Started(Error(message))) -> failed(state, id, message)
         shell.Finished(Evaluated(evaluated)) -> {
           let duration = shell.now() -. started
@@ -180,6 +204,22 @@ fn progress(state: State(_), id, started, progressed) {
   }
 }
 
+/// Published package names, found without holding up evaluation.
+fn discover(shell: Shell) {
+  system.run(execute.pull(shell.execution))
+  |> promise.map(fn(execution) {
+    dict.keys(execution.cache.packages) |> list.sort(text.compare)
+  })
+  |> promise.rescue(fn(_) { [] })
+}
+
+fn discovered(state: State(_), packages) {
+  apply(
+    State(..state, discovery: None),
+    model.discovered(state.model, packages),
+  )
+}
+
 fn failed(state: State(_), id, message) {
   State(..state, model: model.failed(state.model, id, message), work: Idle)
 }
@@ -187,7 +227,7 @@ fn failed(state: State(_), id, message) {
 fn input(state: State(_), event) {
   case event {
     backend.KeyPress(key) -> apply(state, model.key(state.model, key))
-    backend.Paste(text) -> State(..state, model: model.paste(state.model, text))
+    backend.Paste(text) -> apply(state, model.paste(state.model, text))
     backend.MousePress(x, y, backend.MouseLeft) ->
       case
         list.find(state.drawn.clicks, fn(hit) {
@@ -237,6 +277,17 @@ fn perform(state: State(_), command) {
         Error(Nil) -> state
       }
     model.Scroll(delta) -> scroll(state, delta)
+    model.Complete -> {
+      let model = state.model
+      let choices =
+        completion.complete(
+          model.editor.text,
+          model.editor.cursor,
+          model.packages,
+          ".",
+        )
+      State(..state, model: model.completed_choices(model, choices))
+    }
   }
 }
 

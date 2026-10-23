@@ -40,7 +40,7 @@ pub fn empty() {
 }
 
 const help =
-  "Enter run · Alt+Enter newline · Ctrl+E effects · PgUp/PgDn scroll · F1 close help
+  "Enter run · Alt+Enter newline · Tab complete · Ctrl+E effects · PgUp/PgDn scroll · F1 close help
 /scope bindings · /type expression · /help · /exit · Ctrl+C quit"
 
 /// `top` is the first history row shown, `None` follows the newest output.
@@ -57,13 +57,18 @@ pub fn draw(
     True -> wrap(help, width - 4)
     False -> []
   }
-  let assert [header, history, help_area, input, footer] =
+  let choices = choices(model)
+  let assert [header, history, help_area, choices_area, input, footer] =
     geometry.split(Vertical, inner, [
       Length(3),
       Fill,
       Length(case help {
         [] -> 0
         lines -> list.length(lines) + 2
+      }),
+      Length(case choices {
+        [] -> 0
+        choices -> list.length(choices) + 2
       }),
       Length(
         2
@@ -97,6 +102,12 @@ pub fn draw(
     lines ->
       panel(buf, help_area)
       |> lines_at(inset(help_area, 2, 1), list.map(lines, plain(_, h.muted)))
+  }
+  let buf = case choices {
+    [] -> buf
+    choices ->
+      panel(buf, choices_area)
+      |> lines_at(inset(choices_area, 2, 1), choices)
   }
   let #(buf, cursor) = draw_input(buf, input, model)
   let buf =
@@ -289,6 +300,26 @@ fn code_rows(source, width) {
   |> list.map(fn(line) {
     Row(span.line_new([span.span_plain("  "), ..line.spans]), True, None, None)
   })
+}
+
+/// At most six completion choices around the selected one.
+fn choices(model: Model) {
+  case model.busy {
+    True -> []
+    False -> {
+      let start = int.max(0, model.choice - 5)
+      model.choices
+      |> list.drop(start)
+      |> list.take(6)
+      |> list.index_map(fn(choice, index) {
+        let #(marker, color) = case start + index == model.choice {
+          True -> #("› ", h.accent)
+          False -> #("  ", h.muted)
+        }
+        plain(marker <> choice.label <> "  " <> choice.detail, color)
+      })
+    }
+  }
 }
 
 // Input

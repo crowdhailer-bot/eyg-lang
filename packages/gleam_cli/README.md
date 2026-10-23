@@ -74,7 +74,8 @@ eyg tui
 
 Each entry shows its output and result, Ctrl+E lists the effects it performed
 and the hub requests it made, and a program reading input is answered in the
-editor. Alt+Enter adds a line, F1 shows every key and Ctrl+C quits.
+editor. Tab completes packages after `@` and files in imports, Alt+Enter adds a
+line, F1 shows every key and Ctrl+C quits.
 
 
 ### Evaluate an expression

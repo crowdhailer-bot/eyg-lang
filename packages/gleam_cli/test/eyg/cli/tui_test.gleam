@@ -1,4 +1,5 @@
 import eyg/cli/helpers
+import eyg/cli/tui/completion
 import eyg/cli/tui/editor
 import eyg/cli/tui/highlight as h
 import eyg/cli/tui/model
@@ -104,4 +105,38 @@ pub fn highlighted_lines_split_tokens_at_newlines_test() {
     assert lines == ["let a = \"x", "y\"", "!int_add(1, 2)"]
   }
   assert h.lines("") == [[]]
+}
+
+pub fn unicode_completion_preserves_text_on_both_sides_test() {
+  let prefix = "let banner = \"🌱緑é\" "
+  let source = prefix <> "@sta.integer.add"
+  let cursor = string.length(prefix <> "@sta")
+  let assert [choice, ..] =
+    completion.complete(source, cursor, ["standard"], ".")
+  assert completion.apply(source, choice)
+    == #(prefix <> "@standard.integer.add", prefix <> "@standard")
+}
+
+pub fn file_completion_replaces_only_the_import_path_test() {
+  let source = "let a = import \"./src/eyg/cli/tui/compl"
+  let assert [choice] =
+    completion.complete(source, string.length(source), [], ".")
+  assert completion.apply(source, choice).0
+    == "let a = import \"./src/eyg/cli/tui/completion.gleam"
+}
+
+pub fn tab_accepts_the_chosen_completion_test() {
+  let #(model, commands) =
+    model.discovered(model.started(model.new("."), started()), [
+      "standard",
+      "stats",
+    ])
+  assert commands == [model.Complete]
+  let model = model.Model(..model, editor: editor.insert(model.editor, "@st"))
+  let choices = completion.complete("@st", 3, model.packages, ".")
+  let model = model.completed_choices(model, choices)
+  let #(model, _) = model.key(model, "down")
+  let #(model, _) = model.key(model, "tab")
+  assert model.editor == editor.Editor("@stats", 6)
+  assert model.choices == []
 }
