@@ -8,10 +8,11 @@ import lustre/attribute as a
 import lustre/element
 import lustre/element/html as h
 import lustre/event
-import morph/lustre/frame
-import morph/lustre/highlight
-import morph/lustre/render
+import morph/frame
+import morph/highlight
+import morph/lustre/view
 import morph/projection as p
+import morph/render
 import plinth/browser/element as pelement
 import plinth/browser/event as pevent
 
@@ -66,11 +67,13 @@ pub fn render_projection(
       frame.Statements(render.statements(e, errors))
       |> highlight.frame(highlight.focus())
       |> frame.to_fat_line
+      |> view.element
     _, _ -> {
       // This is NOT reversed because zoom works from inside out
       let frame = render.projection_frame(proj, render.Statements, errors)
       render.push_render(frame, zoom, render.Statements, errors)
       |> frame.to_fat_line
+      |> view.element
     }
   }
 }

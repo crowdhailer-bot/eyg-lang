@@ -4,12 +4,9 @@ import gleam/list
 import gleam/listx
 import gleam/option.{None, Some}
 import gleam/string
-import lustre/attribute as a
-import lustre/element.{text}
-import lustre/element/html as h
 import morph/editable as e
-import morph/lustre/frame
-import morph/lustre/highlight
+import morph/frame.{Class, Path, Span, Text, Title}
+import morph/highlight
 import morph/projection as t
 import multiformats/cid/v1
 
@@ -42,9 +39,9 @@ pub const reference = "token symbol"
 pub fn do_let(rev, pattern, value) {
   let assignment =
     list.flatten([
-      [h.span([exp_key(rev)], [text("let ")])],
+      [Span([exp_key(rev)], [Text("let ")])],
       pattern,
-      [h.span([exp_key(rev)], [text(" = ")])],
+      [Span([exp_key(rev)], [Text(" = ")])],
     ])
   frame.prepend_spans(assignment, value)
 }
@@ -93,7 +90,7 @@ fn assign_pair(kv, rev, errors) {
 
 pub fn pattern(p, rev) {
   case p {
-    e.Bind(x) -> [h.span([exp_key(rev)], [text(x)])]
+    e.Bind(x) -> [Span([exp_key(rev)], [Text(x)])]
     e.Destructure(fields) -> {
       list.index_map(fields, fn(f, i) { do_field(f, i, rev) })
       |> do_destructured(rev)
@@ -106,18 +103,18 @@ pub fn do_field(f, i, rev) {
   let j = i + 1
   let #(field, var) = f
   [
-    h.span([exp_key([i, ..rev])], [text(field)]),
-    h.span([], [text(": ")]),
-    h.span([exp_key([j, ..rev])], [text(var)]),
+    Span([exp_key([i, ..rev])], [Text(field)]),
+    Span([], [Text(": ")]),
+    Span([exp_key([j, ..rev])], [Text(var)]),
   ]
 }
 
 pub fn do_destructured(fields, rev) {
   fields
-  |> list.intersperse([h.span([], [text(", ")])])
+  |> list.intersperse([Span([], [Text(", ")])])
   |> list.flatten
-  |> list.append([h.span([exp_key(rev)], [text("}")])])
-  |> list.append([h.span([exp_key(rev)], [text("{")])], _)
+  |> list.append([Span([exp_key(rev)], [Text("}")])])
+  |> list.append([Span([exp_key(rev)], [Text("{")])], _)
 }
 
 pub fn patterns(ps, rev) {
@@ -127,10 +124,10 @@ pub fn patterns(ps, rev) {
 
 pub fn join_patterns(ps) {
   ps
-  |> list.intersperse([text(", ")])
+  |> list.intersperse([Text(", ")])
   |> list.flatten
-  |> list.append([text(")")])
-  |> list.append([text("(")], _)
+  |> list.append([Text(")")])
+  |> list.append([Text("(")], _)
 }
 
 fn render_args(args, rev, errors) {
@@ -151,12 +148,12 @@ fn render_args_rev(last, rest) {
     Ok(spanss) ->
       list.fold(spanss, last, fn(tail, spans) {
         tail
-        |> frame.prepend_spans([text(", ")], _)
+        |> frame.prepend_spans([Text(", ")], _)
         |> frame.prepend_spans(spans, _)
       })
     Error(Nil) -> {
       list.reverse([last, ..rest])
-      |> list.map(frame.append_spans(_, [text(",")]))
+      |> list.map(frame.append_spans(_, [Text(",")]))
       |> frame.to_fat_lines
       |> frame.Multiline([], _, [])
     }
@@ -166,13 +163,13 @@ fn render_args_rev(last, rest) {
 pub fn render_call(f, args) {
   let args =
     args
-    |> frame.prepend_spans([text("(")], _)
-    |> frame.append_spans([text(")")])
+    |> frame.prepend_spans([Text("(")], _)
+    |> frame.append_spans([Text(")")])
 
   case f {
     frame.Inline(fspans) -> frame.prepend_spans(fspans, args)
     frame.Statements(inner) -> {
-      let f = frame.Multiline([text("{")], inner, [text("}")])
+      let f = frame.Multiline([Text("{")], inner, [Text("}")])
       frame.join(f, args)
     }
     frame.Multiline(_, _, _) -> frame.join(f, args)
@@ -180,22 +177,22 @@ pub fn render_call(f, args) {
 }
 
 fn exp_key(rev) {
-  a.attribute("data-rev", string.join(list.map(rev, int.to_string), ","))
+  Path(list.reverse(rev))
 }
 
 fn continue_space(rev) {
-  frame.Inline([h.span([a.class(collapsed), exp_key(rev)], [text("...")])])
+  frame.Inline([Span([Class(collapsed), exp_key(rev)], [Text("...")])])
 }
 
 /// errors are identified by their reverse path
 pub fn expression(exp, rev, errors) {
   let frame = case exp {
-    e.Block(_, _, False) -> frame.Inline([text("{ ... }")])
+    e.Block(_, _, False) -> frame.Inline([Text("{ ... }")])
     e.Block(assigns, tail, True) ->
       frame.Multiline(
-        [h.span([], [text("{")])],
+        [Span([], [Text("{")])],
         frame.to_fat_lines(block_content(assigns, tail, rev, errors)),
-        [h.span([], [text("}")])],
+        [Span([], [Text("}")])],
       )
     e.Call(f, args) -> {
       let args = render_args(args, rev, errors)
@@ -218,24 +215,24 @@ pub fn expression(exp, rev, errors) {
       )
     }
     e.Vacant ->
-      frame.Inline([h.span([a.class(vacant), exp_key(rev)], [text("Vacant")])])
+      frame.Inline([Span([Class(vacant), exp_key(rev)], [Text("Vacant")])])
     e.Variable(x) ->
-      frame.Inline([h.span([a.class(variable), exp_key(rev)], [text(x)])])
+      frame.Inline([Span([Class(variable), exp_key(rev)], [Text(x)])])
     e.Integer(v) ->
       frame.Inline([
-        h.span([a.class(integer), exp_key(rev)], [text(int.to_string(v))]),
+        Span([Class(integer), exp_key(rev)], [Text(int.to_string(v))]),
       ])
     e.Binary(bytes) ->
       frame.Inline([
-        h.span([a.class(binary), exp_key(rev)], [text(string.inspect(bytes))]),
+        Span([Class(binary), exp_key(rev)], [Text(string.inspect(bytes))]),
       ])
 
     e.String(v) ->
       frame.Inline([
-        h.span([a.class(string), exp_key(rev)], [
-          text("\""),
-          text(v),
-          text("\""),
+        Span([Class(string), exp_key(rev)], [
+          Text("\""),
+          Text(v),
+          Text("\""),
         ]),
       ])
     e.List(items, tail) -> {
@@ -260,11 +257,11 @@ pub fn expression(exp, rev, errors) {
     e.Select(from, label) ->
       expression(from, [0, ..rev], errors)
       |> frame.append_spans([
-        text("."),
-        h.span([exp_key([1, ..rev])], [text(label)]),
+        Text("."),
+        Span([exp_key([1, ..rev])], [Text(label)]),
       ])
     e.Tag(label) ->
-      frame.Inline([h.span([a.class(tag), exp_key(rev)], [text(label)])])
+      frame.Inline([Span([Class(tag), exp_key(rev)], [Text(label)])])
     e.Case(top, matches, otherwise) -> {
       let top = expression(top, [0, ..rev], errors)
       let matches =
@@ -281,64 +278,64 @@ pub fn expression(exp, rev, errors) {
     }
     e.Perform(label) ->
       frame.Inline([
-        h.span([a.class(keyword)], [text("perform ")]),
-        h.span([a.class(effect), exp_key(rev)], [text(label)]),
+        Span([Class(keyword)], [Text("perform ")]),
+        Span([Class(effect), exp_key(rev)], [Text(label)]),
       ])
     e.Deep(label) ->
       frame.Inline([
-        h.span([a.class(keyword)], [text("handle ")]),
-        h.span([a.class(effect), exp_key(rev)], [text(label)]),
+        Span([Class(keyword)], [Text("handle ")]),
+        Span([Class(effect), exp_key(rev)], [Text(label)]),
       ])
     e.Builtin(identifier) ->
       frame.Inline([
-        h.span([a.class(builtin), exp_key(rev)], [text("!"), text(identifier)]),
+        Span([Class(builtin), exp_key(rev)], [Text("!"), Text(identifier)]),
       ])
     e.Reference(ir.Content(cid)) ->
       frame.Inline([
-        h.span([a.class(reference), exp_key(rev)], [
-          text(v1.to_string(cid)),
+        Span([Class(reference), exp_key(rev)], [
+          Text(v1.to_string(cid)),
         ]),
       ])
     e.Reference(ir.Relative(location)) ->
       frame.Inline([
-        h.span(
+        Span(
           [
-            a.class(reference),
+            Class(reference),
             exp_key(rev),
           ],
-          [text(location)],
+          [Text(location)],
         ),
       ])
     e.Reference(ir.Package(package:)) ->
       frame.Inline([
-        h.span(
+        Span(
           [
-            a.class(reference),
+            Class(reference),
             exp_key(rev),
           ],
-          [text("@" <> package)],
+          [Text("@" <> package)],
         ),
       ])
     e.Reference(ir.Version(package:, version:)) ->
       frame.Inline([
-        h.span(
+        Span(
           [
-            a.class(reference),
+            Class(reference),
             exp_key(rev),
-            a.title("release = " <> int.to_string(version)),
+            Title("release = " <> int.to_string(version)),
           ],
-          [text("@" <> package <> ":" <> int.to_string(version))],
+          [Text("@" <> package <> ":" <> int.to_string(version))],
         ),
       ])
     e.Reference(ir.Pinned(ir.Release(package:, version:, module:))) ->
       frame.Inline([
-        h.span(
+        Span(
           [
-            a.class(reference),
+            Class(reference),
             exp_key(rev),
-            a.title("module = " <> v1.to_string(module)),
+            Title("module = " <> v1.to_string(module)),
           ],
-          [text("@" <> package <> ":" <> int.to_string(version))],
+          [Text("@" <> package <> ":" <> int.to_string(version))],
         ),
       ])
   }
@@ -352,14 +349,14 @@ pub fn expression(exp, rev, errors) {
 pub fn render_function(args, body, rev) {
   body
   // TODO handle spaces on wrapping
-  |> frame.prepend_spans([h.span([exp_key(rev)], [text(" -> ")])], _)
+  |> frame.prepend_spans([Span([exp_key(rev)], [Text(" -> ")])], _)
   |> frame.prepend_spans(args, _)
   // |> frame.append_spans([text(" }")])
 }
 
 pub fn render_list(items, tail, rev) {
   let tail = case tail {
-    Some(tail) -> [frame.prepend_spans([text("..")], tail)]
+    Some(tail) -> [frame.prepend_spans([Text("..")], tail)]
     None -> []
   }
   let items = list.append(items, tail)
@@ -367,15 +364,15 @@ pub fn render_list(items, tail, rev) {
   case frame.all_inline(items) {
     Ok(spans) ->
       frame.Inline([
-        h.span(
+        Span(
           [exp_key(rev)],
-          list.flatten([[text("[")], list.flatten(spans), [text("]")]]),
+          list.flatten([[Text("[")], list.flatten(spans), [Text("]")]]),
         ),
       ])
     Error(Nil) -> {
       let inner = frame.to_fat_lines(items)
-      frame.Multiline([h.span([exp_key(rev)], [text("[")])], inner, [
-        h.span([exp_key(rev)], [text("]")]),
+      frame.Multiline([Span([exp_key(rev)], [Text("[")])], inner, [
+        Span([exp_key(rev)], [Text("]")]),
       ])
     }
   }
@@ -383,7 +380,7 @@ pub fn render_list(items, tail, rev) {
 
 pub fn render_record(fields, original, rev) {
   let original = case original {
-    Some(original) -> [frame.prepend_spans([text("..")], original)]
+    Some(original) -> [frame.prepend_spans([Text("..")], original)]
     None -> []
   }
   let fields = list.append(fields, original)
@@ -392,15 +389,15 @@ pub fn render_record(fields, original, rev) {
   case frame.all_inline(fields) {
     Ok(spans) ->
       frame.Inline([
-        h.span(
+        Span(
           [exp_key(rev)],
-          list.flatten([[text("{")], list.flatten(spans), [text("}")]]),
+          list.flatten([[Text("{")], list.flatten(spans), [Text("}")]]),
         ),
       ])
     Error(Nil) -> {
       let inner = frame.to_fat_lines(fields)
-      frame.Multiline([h.span([exp_key(rev)], [text("{")])], inner, [
-        h.span([exp_key(rev)], [text("}")]),
+      frame.Multiline([Span([exp_key(rev)], [Text("{")])], inner, [
+        Span([exp_key(rev)], [Text("}")]),
       ])
     }
   }
@@ -410,7 +407,7 @@ pub fn render_field(field, i, rev, errors) {
   let #(label, value) = field
   let value = expression(value, [i + 1, ..rev], errors)
   frame.prepend_spans(
-    [h.span([exp_key([i, ..rev])], [text(label), text(": ")])],
+    [Span([exp_key([i, ..rev])], [Text(label), Text(": ")])],
     value,
   )
 }
@@ -418,7 +415,7 @@ pub fn render_field(field, i, rev, errors) {
 pub fn do_render_field(field, rev) {
   let #(label, value) = field
   frame.prepend_spans(
-    [h.span([], [h.span([exp_key(rev)], [text(label)]), text(": ")])],
+    [Span([], [Span([exp_key(rev)], [Text(label)]), Text(": ")])],
     value,
   )
 }
@@ -427,7 +424,7 @@ pub fn render_case(top, branches, otherwise, rev) {
   let spans = case top {
     frame.Inline(spans) -> spans
     _ -> {
-      [text("some big case")]
+      [Text("some big case")]
     }
   }
   list.append(branches, case otherwise {
@@ -435,16 +432,16 @@ pub fn render_case(top, branches, otherwise, rev) {
     None -> []
   })
   |> frame.to_fat_lines
-  |> frame.Multiline([text(" {")], _, [text("}")])
+  |> frame.Multiline([Text(" {")], _, [Text("}")])
   |> frame.prepend_spans(spans, _)
-  |> frame.prepend_spans([h.span([exp_key(rev)], [text("match ")])], _)
+  |> frame.prepend_spans([Span([exp_key(rev)], [Text("match ")])], _)
 }
 
 pub fn render_branch(field, rev, errors) {
   let #(label, value) = field
   let value = expression(value, [0, ..rev], errors)
   frame.prepend_spans(
-    [h.span([a.class(tag), exp_key(rev)], [text(label), text(" ")])],
+    [Span([Class(tag), exp_key(rev)], [Text(label), Text(" ")])],
     value,
   )
 }
@@ -520,8 +517,8 @@ fn render_break(break, inner, rev, kind, errors) {
     t.SelectValue(label) ->
       inner
       |> frame.append_spans([
-        text("."),
-        h.span([exp_key([1, ..rev])], [text(label)]),
+        Text("."),
+        Span([exp_key([1, ..rev])], [Text(label)]),
       ])
     t.OverwriteTail(fields) -> {
       let fields =
@@ -586,9 +583,9 @@ fn render_break(break, inner, rev, kind, errors) {
       let branch =
         frame.prepend_spans(
           [
-            h.span([a.class(tag), exp_key([self, ..rev])], [
-              text(label),
-              text(" "),
+            Span([Class(tag), exp_key([self, ..rev])], [
+              Text(label),
+              Text(" "),
             ]),
           ],
           inner,
@@ -698,11 +695,11 @@ pub fn projection_frame(zip, kind, errors) {
           let self = list.length(pre) * 2
           let spans = [
             highlight.spans(
-              [h.span([exp_key([self, ..rev])], [text(label)])],
+              [Span([exp_key([self, ..rev])], [Text(label)])],
               highlight.focus(),
             ),
-            h.span([], [text(": ")]),
-            h.span([exp_key([self + 1, ..rev])], [text(var)]),
+            Span([], [Text(": ")]),
+            Span([exp_key([self + 1, ..rev])], [Text(var)]),
           ]
           let pre =
             list.index_map(pre, fn(f, i) { do_field(f, self - 2 - 2 * i, rev) })
@@ -720,10 +717,10 @@ pub fn projection_frame(zip, kind, errors) {
           let rev = [0, self, ..rev]
           let self = list.length(pre) * 2
           let spans = [
-            h.span([exp_key([self, ..rev])], [text(label)]),
-            h.span([], [text(": ")]),
+            Span([exp_key([self, ..rev])], [Text(label)]),
+            Span([], [Text(": ")]),
             highlight.spans(
-              [h.span([exp_key(rev)], [text(var)])],
+              [Span([exp_key(rev)], [Text(var)])],
               highlight.focus(),
             ),
           ]
@@ -774,11 +771,11 @@ pub fn projection_frame(zip, kind, errors) {
           let self = list.length(pre) * 2
           let spans = [
             highlight.spans(
-              [h.span([exp_key([self, ..rev])], [text(label)])],
+              [Span([exp_key([self, ..rev])], [Text(label)])],
               highlight.focus(),
             ),
-            h.span([], [text(": ")]),
-            h.span([exp_key([self + 1, ..rev])], [text(var)]),
+            Span([], [Text(": ")]),
+            Span([exp_key([self + 1, ..rev])], [Text(var)]),
           ]
           let pre =
             list.index_map(pre, fn(f, i) { do_field(f, self - 2 - 2 * i, rev) })
@@ -790,10 +787,10 @@ pub fn projection_frame(zip, kind, errors) {
           let rev = [self, ..rev]
           let self = list.length(pre) * 2
           let spans = [
-            h.span([exp_key([self, ..rev])], [text(label)]),
-            h.span([], [text(": ")]),
+            Span([exp_key([self, ..rev])], [Text(label)]),
+            Span([], [Text(": ")]),
             highlight.spans(
-              [h.span([exp_key(rev)], [text(var)])],
+              [Span([exp_key(rev)], [Text(var)])],
               highlight.focus(),
             ),
           ]
@@ -812,8 +809,8 @@ pub fn projection_frame(zip, kind, errors) {
       let self = list.length(pre) * 2
       let len = self + { list.length(post) + 1 } * 2
       let value = expression(value, [self + 1, ..rev], errors)
-      let label = highlight.spans([text(label)], highlight.focus())
-      let field = frame.prepend_spans([label, text(": ")], value)
+      let label = highlight.spans([Text(label)], highlight.focus())
+      let field = frame.prepend_spans([label, Text(": ")], value)
 
       let pre =
         list.index_map(pre, fn(field, i) {
@@ -842,7 +839,7 @@ pub fn projection_frame(zip, kind, errors) {
         from
         |> frame.append_spans([
           highlight.spans(
-            [text("."), h.span([exp_key(rev)], [text(label)])],
+            [Text("."), Span([exp_key(rev)], [Text(label)])],
             highlight.focus(),
           ),
         ])
@@ -859,10 +856,10 @@ pub fn projection_frame(zip, kind, errors) {
         frame.prepend_spans(
           [
             highlight.spans(
-              [h.span([a.class(tag)], [text(label)])],
+              [Span([Class(tag)], [Text(label)])],
               highlight.focus(),
             ),
-            text(" "),
+            Text(" "),
           ],
           value,
         )
