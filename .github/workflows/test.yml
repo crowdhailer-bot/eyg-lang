@@ -22,6 +22,7 @@ jobs:
         otp: ["28.4"]
         rebar3: ["3.25"]
         package: [
+          "eyg_tui",
           "gleam_analysis",
           # "gleam_cli",
           # "gleam_compiler",

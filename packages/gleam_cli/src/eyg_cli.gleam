@@ -1,4 +1,6 @@
+@target(javascript)
 import argv
+
 import eyg/cli/args
 import eyg/cli/check
 import eyg/cli/compile
@@ -20,13 +22,16 @@ import eyg/cli/script
 import eyg/cli/share
 import eyg/cli/shell
 import eyg/cli/signatory
+@target(javascript)
 import eyg/cli/tui
+
 import eyg/cli/upload
 import eyg/cli/version
 import gleam/option
 import gleam/result
 import loam/system
 
+@target(javascript)
 pub fn main() {
   let arguments = argv.load().arguments
   case args.parse(arguments) {

@@ -1,0 +1,32 @@
+
+  eyg / tui                                ~/mono/repos/eyg-lang-tui/packages/tracing/fixtures/tui
+
+    1
+
+
+    match perform StandardIn({}) { Ok(bytes) -> { !string_from_binary(bytes) } Error(e) -> {
+    Error(e) } }
+
+
+    Ok("Corin 🌱")
+
+    ▸ 1 effects  308 ms
+
+
+    Enter run · Alt+Enter newline · Tab complete · Ctrl+E effects · PgUp/PgDn scroll · F1 close
+    help
+    /scope bindings · /type expression · /help · /exit · Ctrl+C quit
+    F2 text/structure · arrows navigate · Space vacant · a select parent · i edit · d delete ·
+    z/Z undo/redo
+    n integer · s string · b binary · v variable · f function · c/C/w call · e/E let · l/L list
+    · r/R record
+    g field · o overwrite · t tag · m match · p/h effects · j builtin · @/# reference · q/Q file
+    · x spread
+    y/Y copy/paste · k fold · </> insert before/after · Enter evaluate · Escape dismiss / text
+
+  │
+  │  Write EYG…
+  │
+  │
+
+  Ready                                                f2 structure  ·  ctrl+e effects  ·  f1 help

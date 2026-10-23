@@ -1,10 +1,15 @@
 //// Styling for terminal output, plain text when output is not a terminal or NO_COLOR is set.
 
+@target(javascript)
 import gleam/list
+
 import javascript/mutable_reference as cell
 import plinthx/node/process
+
+@target(javascript)
 import plinthx/node/tty
 
+@target(javascript)
 /// According to specification NO_COLOR only disables colors however it's often useful to remove all ansi codes in that case.
 pub fn styled() -> Bool {
   case process.get() {
@@ -14,6 +19,13 @@ pub fn styled() -> Bool {
   }
 }
 
+@target(erlang)
+/// On the BEAM the CLI only runs `eyg tui`, which draws its own screen.
+pub fn styled() -> Bool {
+  False
+}
+
+@target(javascript)
 fn no_color(process) {
   case list.key_find(process.env(process), "NO_COLOR") {
     Ok("") | Error(Nil) -> False

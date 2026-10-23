@@ -79,6 +79,7 @@ packages = [
 [requirements]
 argv = { version = ">= 1.0.2 and < 2.0.0" }
 birdie = { version = ">= 2.0.0 and < 3.0.0" }
+envoy = { version = ">= 1.0.0 and < 2.0.0" }
 etui = { version = ">= 2.0.0 and < 3.0.0" }
 eyg_analysis = { path = "../gleam_analysis" }
 eyg_compiler = { path = "../gleam_compiler" }

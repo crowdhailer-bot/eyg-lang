@@ -3,11 +3,13 @@
 //// asciinema cast of the session are kept as evidence.
 ////
 //// Build the CLI first: `gleam build` in packages/gleam_cli. Then
-//// `gleam run -m tracing/tui_check -- shell|overlay` here. Packages come from a
-//// local hub and Overlay replies from a scripted model.
+//// `gleam run -m tracing/tui_check -- shell|overlay|beam` here. Packages come
+//// from a local hub and Overlay replies from a scripted model. For `beam`,
+//// export packages/eyg_tui first: `gleam export erlang-shipment`.
 
 import argv
 import filepath
+import gleam/bool
 import gleam/int
 import gleam/io
 import gleam/javascript/promise
@@ -45,7 +47,7 @@ pub fn main() {
   })
   let assert Ok(model) = terminal_fixture.start()
   let names = case argv.load().arguments {
-    [] -> ["shell", "overlay"]
+    [] -> ["shell", "overlay", "beam"]
     names -> names
   }
   use failures <- promise.await(sequence(names, run(root, _)))
@@ -70,6 +72,9 @@ fn normal(path) {
 
 /// `eyg tui` from the CLI's build, so it starts in the fixture directory.
 fn command(root, name) {
+  use <- bool.lazy_guard(name == "beam", fn() {
+    root <> "/packages/eyg_tui/build/erlang-shipment/entrypoint.sh run"
+  })
   let module =
     root <> "/packages/gleam_cli/build/dev/javascript/eyg_cli/eyg_cli.mjs"
   "bun -e \"import('"
@@ -84,6 +89,7 @@ fn command(root, name) {
 pub fn script(name) -> List(Step) {
   case name {
     "overlay" -> overlay()
+    "beam" -> without_packages(shell())
     _ -> shell()
   }
 }
@@ -104,6 +110,17 @@ fn overlay() {
     Type("/exit"),
     Key("Enter"),
   ]
+}
+
+/// The BEAM has no network, so the steps that use hub packages are left out.
+fn without_packages(steps) {
+  let #(before, rest) =
+    list.split_while(steps, fn(step) { step != Type("@sta") })
+  let after =
+    list.drop_while(rest, fn(step) {
+      step != Check("package used", "hub requests")
+    })
+  list.append(before, list.drop(after, 1))
 }
 
 fn shell() {
@@ -211,6 +228,7 @@ fn run(root, name) {
     <> "/packages/tracing/recordings/tui"
     <> case name {
       "overlay" -> "-overlay"
+      "beam" -> "-beam"
       _ -> ""
     }
   let _ = simplifile.delete(out)

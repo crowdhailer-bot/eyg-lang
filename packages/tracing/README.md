@@ -16,11 +16,13 @@ in [presentation](./presentation/index.html).
 - `gleam run -m tracing/terminal_demo`: record and check `eyg tui` using Xvfb,
   xterm, tmux and ffmpeg. Checks archive closure, token usage and offline
   replay; records into `recordings/terminal-*`.
-- `gleam run -m tracing/tui_check -- shell|overlay`: use `eyg tui` in tmux,
-  typing keys and waiting at each check for text on the screen. Build
-  packages/gleam_cli first. Packages come from a local hub on port 7207 and
-  Overlay replies from a scripted model on 7206. Each checked screen and an
-  asciinema cast are in `recordings/tui` and `recordings/tui-overlay`.
+- `gleam run -m tracing/tui_check -- shell|overlay|beam`: use `eyg tui` in
+  tmux, typing keys and waiting at each check for text on the screen. Build
+  packages/gleam_cli first, and export packages/eyg_tui as an Erlang shipment
+  for `beam`. Packages come from a local hub on port 7207 and Overlay replies
+  from a scripted model on 7206; the BEAM script leaves out hub packages. Each
+  checked screen and an asciinema cast are in `recordings/tui`,
+  `recordings/tui-overlay` and `recordings/tui-beam`.
 - `gleam run -m tracing/model_fixture`: scripted Ollama and built debugger on 7201.
 - `gleam run -m tracing/artifact_check`: run both real artifact browser workflows
   against a caller-owned PostgreSQL database. Starts and stops the hub on 7812,

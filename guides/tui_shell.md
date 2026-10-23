@@ -33,6 +33,10 @@ Enter `perform StandardOut("Hello from Gleam")`, then press Ctrl+E to inspect
 the request and reply. Interactive `StandardIn` prompts resume the same
 evaluation; your draft remains available afterward.
 
+The same tui runs on the BEAM from `packages/eyg_tui` with `gleam run`. There
+it has no network access, so hub packages and Overlay are unavailable; quit
+with `/exit`, as Ctrl+C is the VM's break signal.
+
 ## Edit the structure
 
 Type `!int_add(20, 22)` without submitting, then press F2. Press Right twice to

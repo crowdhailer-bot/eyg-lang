@@ -94,6 +94,8 @@ text streams in as it is generated; each tool call shows its code behind Ctrl+O,
 its result with long output collapsed, and the effects it performed with the
 policy's decision on each. The trajectory is saved after every turn.
 
+[eyg_tui](../eyg_tui/) runs the same tui on the BEAM, without network access.
+
 
 ### Evaluate an expression
 

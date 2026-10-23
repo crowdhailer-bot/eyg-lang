@@ -3,7 +3,9 @@
 //// reaches the entry being generated.
 
 import eyg/cli/internal/config
+@target(javascript)
 import eyg/cli/internal/traces
+
 import eyg/cli/overlay as cli
 import eyg/cli/tui/shell
 import gleam/json
@@ -27,6 +29,7 @@ pub type Agent {
   )
 }
 
+@target(javascript)
 pub fn start(input, config: config.Config) {
   use started <- system.then(cli.initialize(input, config))
   case started {
@@ -38,10 +41,20 @@ pub fn start(input, config: config.Config) {
   }
 }
 
+@target(erlang)
+/// Overlay's model providers need the JavaScript runtime.
+pub fn start(_input, _config: config.Config) {
+  system.Done(Error(unavailable))
+}
+
+@target(erlang)
+const unavailable = "Overlay needs the JavaScript runtime"
+
 pub fn model_name(agent: Agent) {
   agent.session.llm.model
 }
 
+@target(javascript)
 /// Add the person's message, then generate a reply.
 pub fn ask(agent: Agent, text) {
   use at <- system.then(system.now())
@@ -53,6 +66,7 @@ pub fn ask(agent: Agent, text) {
   |> generate
 }
 
+@target(javascript)
 /// The model's next reply, streaming its text as standard output.
 pub fn generate(agent: Agent) {
   use #(completion, recorded) <- system.map(cli.streamed_generation(
@@ -72,6 +86,16 @@ pub fn generate(agent: Agent) {
     )
     Error(reason) -> #(Error(reason), agent)
   }
+}
+
+@target(erlang)
+pub fn ask(agent: Agent, _text) {
+  system.Done(#(Error(unavailable), agent))
+}
+
+@target(erlang)
+pub fn generate(agent: Agent) {
+  system.Done(#(Error(unavailable), agent))
 }
 
 /// The code a tool call runs, or its arguments.
