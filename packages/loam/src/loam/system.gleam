@@ -346,6 +346,50 @@ pub fn run(effect: Effect(a)) -> Promise(a) {
   }
 }
 
+/// Perform only the first operation of an effect, returning what follows it.
+/// A frontend that owns the terminal handles output and input itself and steps
+/// every other operation. A finished effect or an exit is returned unchanged.
+pub fn step(effect: Effect(a)) -> Promise(Effect(a)) {
+  case effect {
+    Done(_) | Exit(_) -> promise.resolve(effect)
+    AppendFileBits(path, bytes, resume) ->
+      once(AppendFileBits(path, bytes, Done), resume)
+    CreateDirectory(path, resume) -> once(CreateDirectory(path, Done), resume)
+    Cwd(resume) -> once(Cwd(Done), resume)
+    DeleteFile(path, resume) -> once(DeleteFile(path, Done), resume)
+    Env(name, resume) -> once(Env(name, Done), resume)
+    FileInfo(path, resume) -> once(FileInfo(path, Done), resume)
+    Fetch(request, resume) -> once(Fetch(request, Done), resume)
+    GenerateKey(resume) -> once(GenerateKey(Done), resume)
+    Hash(algorithm, bytes, resume) -> once(Hash(algorithm, bytes, Done), resume)
+    Now(resume) -> once(Now(Done), resume)
+    Prompt(text, resume) -> once(Prompt(text, Done), resume)
+    Random(max, resume) -> once(Random(max, Done), resume)
+    ReadDirectory(path, resume) -> once(ReadDirectory(path, Done), resume)
+    ReadFile(path, resume) -> once(ReadFile(path, Done), resume)
+    ReadFileRange(path, offset, limit, resume) ->
+      once(ReadFileRange(path, offset, limit, Done), resume)
+    SetPermissions(path, permissions, resume) ->
+      once(SetPermissions(path, permissions, Done), resume)
+    Stdin(resume) -> once(Stdin(Done), resume)
+    Stdout(text, resume) -> once(Stdout(text, Done), resume)
+    Wait(duration, resume) -> once(Wait(duration, Done), resume)
+    WriteFile(path, contents, resume) ->
+      once(WriteFile(path, contents, Done), resume)
+    WriteFileBits(path, bytes, resume) ->
+      once(WriteFileBits(path, bytes, Done), resume)
+    WriteStderr(text, resume) -> once(WriteStderr(text, Done), resume)
+    WriteStdout(text, resume) -> once(WriteStdout(text, Done), resume)
+  }
+}
+
+fn once(
+  operation: Effect(b),
+  resume: fn(b) -> Effect(a),
+) -> Promise(Effect(a)) {
+  promise.map(run(operation), resume)
+}
+
 fn do_create_directory(path) {
   simplifile.create_directory_all(path)
   |> result.map_error(simplifile.describe_error)
