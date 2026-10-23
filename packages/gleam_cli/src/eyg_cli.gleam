@@ -13,13 +13,17 @@ import eyg/cli/script
 import eyg/cli/share
 import eyg/cli/shell
 import eyg/cli/signatory
+import eyg/cli/tui
 import eyg/cli/version
 import gleam/result
 import loam/system
 
 pub fn main() {
-  start(argv.load().arguments)
-  |> system.run
+  let arguments = argv.load().arguments
+  case args.parse(arguments) {
+    args.Tui(input) -> tui.run(input)
+    _ -> system.run(start(arguments))
+  }
 }
 
 /// Run CLI arguments, including output and process exit, through system effects.
@@ -63,6 +67,7 @@ fn with_config(parsed) {
     args.Help | args.Version | args.InvalidArguments(_) ->
       panic as "handled above"
     args.Shell(input) -> shell.execute(input, config)
+    args.Tui(_) -> system.Done(Error("the tui runs from the eyg command"))
     args.Run(input:) -> run.execute(input, config)
     args.Script(input:, arguments:) -> script.execute(input, arguments, config)
     args.Eval(input:) -> eval.execute(input, config)

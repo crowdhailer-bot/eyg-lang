@@ -63,6 +63,19 @@ Lines beginning with `/` are shell commands rather than EYG source:
 | `/scope` | list the variables in scope and their values |
 | `/type <expr>`, `/t <expr>` | infer and show the type of an expression |
 
+### Start the terminal UI
+
+`eyg tui` runs the same shell full screen, drawn with [étui](https://hexdocs.pm/etui).
+It takes the same shell config as `eyg shell`.
+
+```sh
+eyg tui
+```
+
+Each entry shows its output and result, Ctrl+E lists the effects it performed
+and the hub requests it made, and a program reading input is answered in the
+editor. Alt+Enter adds a line, F1 shows every key and Ctrl+C quits.
+
 
 ### Evaluate an expression
 
