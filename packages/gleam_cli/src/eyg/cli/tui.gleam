@@ -7,6 +7,7 @@ import etui/backend/default
 import etui/geometry
 import etui/terminal
 import eyg/cli/internal/config
+import eyg/cli/tui/agent.{type Agent}
 import eyg/cli/tui/completion
 import eyg/cli/tui/model.{type Model}
 import eyg/cli/tui/shell.{type Shell}
@@ -23,6 +24,7 @@ import gleam/result
 import gleam/string as text
 import loam/execute
 import loam/system
+import overlay/llm/tool
 import plinthx/javascript/string
 import simplifile
 
@@ -30,6 +32,11 @@ import simplifile
 type Outcome {
   Started(Result(Shell, String))
   Evaluated(shell.Evaluated)
+  AgentStarted(Result(Agent, String))
+  Generated(Result(List(tool.Call), String), Agent)
+  Called(Result(String, String), List(shell.Performed), Agent)
+  Saved(Result(String, String))
+  Exported
 }
 
 type Work {
@@ -62,7 +69,17 @@ type State(backend) {
 /// Milliseconds between frames, and of work between polls for input.
 const frame = 16
 
+/// `eyg tui`, the shell.
 pub fn run(input) -> Promise(Nil) {
+  open(False, fn(config) { system.map(shell.start(input, config), Started) })
+}
+
+/// `eyg tui overlay`, an Overlay agent.
+pub fn overlay(input) -> Promise(Nil) {
+  open(True, fn(config) { system.map(agent.start(input, config), AgentStarted) })
+}
+
+fn open(overlay, starting) -> Promise(Nil) {
   use loaded <- promise.await(system.run(config.load()))
   use home <- promise.await(system.run(system.env("HOME")))
   case loaded {
@@ -86,7 +103,7 @@ pub fn run(input) -> Promise(Nil) {
           default.new_with_options(backend.Options(mouse: True, paste: True)),
         )
       State(
-        model: model.new(directory),
+        model: model.new(directory, overlay),
         work: Idle,
         background: [],
         tasks: 0,
@@ -95,7 +112,7 @@ pub fn run(input) -> Promise(Nil) {
         drawn: view.empty(),
         quit: False,
       )
-      |> start(0, system.map(shell.start(input, config), Started))
+      |> start(0, starting(config))
       |> loop
     }
   }
@@ -192,6 +209,33 @@ fn progress(state: State(_), id, started, progressed) {
           State(..state, model: model.started(state.model, shell), work: Idle)
           |> spawn(discover(shell))
         shell.Finished(Started(Error(message))) -> failed(state, id, message)
+        shell.Finished(AgentStarted(Ok(agent))) ->
+          State(
+            ..state,
+            model: model.agent_started(state.model, agent),
+            work: Idle,
+          )
+        shell.Finished(AgentStarted(Error(message))) ->
+          failed(state, id, message)
+        shell.Finished(Generated(result, agent)) ->
+          State(..state, work: Idle)
+          |> apply(model.generated(state.model, id, result, agent))
+        shell.Finished(Called(result, performed, agent)) -> {
+          let duration = shell.now() -. started
+          State(..state, work: Idle)
+          |> apply(model.called(
+            state.model,
+            id,
+            result,
+            performed,
+            agent,
+            duration,
+          ))
+        }
+        shell.Finished(Saved(result)) ->
+          State(..state, model: model.saved(state.model, result), work: Idle)
+        shell.Finished(Exported) ->
+          State(..state, work: Idle) |> apply(#(state.model, [model.Save(id)]))
         shell.Finished(Evaluated(evaluated)) -> {
           let duration = shell.now() -. started
           State(..state, work: Idle)
@@ -311,6 +355,31 @@ fn perform(state: State(_), command) {
       io.print(osc52(text))
       state
     }
+    model.Ask(id, text) ->
+      with_agent(state, id, fn(agent) {
+        use #(result, agent) <- system.map(agent.ask(agent, text))
+        Generated(result, agent)
+      })
+    model.Generate(id) ->
+      with_agent(state, id, fn(agent) {
+        use #(result, agent) <- system.map(agent.generate(agent))
+        Generated(result, agent)
+      })
+    model.Call(id, call, index) ->
+      with_agent(state, id, fn(agent) {
+        use #(result, performed, agent) <- system.map(agent.call(
+          agent,
+          call,
+          index,
+        ))
+        Called(result, performed, agent)
+      })
+    model.Save(id) ->
+      with_agent(state, id, fn(agent) { system.map(agent.save(agent), Saved) })
+    model.Export(id, path) ->
+      with_agent(state, id, fn(agent) {
+        system.map(agent.export(agent, path), fn(_) { Exported })
+      })
     model.Load(reference) ->
       case state.model.shell {
         Some(shell) -> spawn(state, load(reference, shell))
@@ -324,6 +393,14 @@ fn osc52(text) {
   "\u{1b}]52;c;"
   <> bit_array.base64_encode(bit_array.from_string(text), True)
   <> "\u{07}"
+}
+
+/// Start work on the agent, for the entry `id`.
+fn with_agent(state: State(_), id, work) {
+  case state.model.agent {
+    Some(agent) -> start(state, id, work(agent))
+    None -> failed(state, id, "The agent has not started")
+  }
 }
 
 fn scroll(state: State(_), delta) {

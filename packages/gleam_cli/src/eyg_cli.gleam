@@ -31,6 +31,7 @@ pub fn main() {
   let arguments = argv.load().arguments
   case args.parse(arguments) {
     args.Tui(input) -> tui.run(input)
+    args.TuiOverlay(input) -> tui.overlay(input)
     _ -> system.run(start(arguments))
   }
 }
@@ -76,7 +77,8 @@ fn with_config(parsed) {
     args.Help | args.Version | args.InvalidArguments(_) ->
       panic as "handled above"
     args.Shell(input) -> shell.execute(input, config)
-    args.Tui(_) -> system.Done(Error("the tui runs from the eyg command"))
+    args.Tui(_) | args.TuiOverlay(_) ->
+      system.Done(Error("the tui runs from the eyg command"))
     args.Run(input:) -> run.execute(input, config)
     args.Profile(input:) -> profile.execute(input, config)
     args.Script(input:, arguments:) -> script.execute(input, arguments, config)

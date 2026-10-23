@@ -3,6 +3,7 @@
 //// tui loop.
 
 import eyg/analysis/type_/binding
+import eyg/cli/tui/agent.{type Agent}
 import eyg/cli/tui/completion.{type Completion}
 import eyg/cli/tui/editor.{type Editor}
 import eyg/cli/tui/shell
@@ -16,6 +17,7 @@ import gleam/string
 import loam/source
 import morph/buffer
 import morph/manipulation as m
+import overlay/llm/tool
 
 pub type Entry {
   Entry(
@@ -29,7 +31,19 @@ pub type Entry {
     expanded: Bool,
     busy: Bool,
     structural: Bool,
+    role: Role,
+    name: String,
+    code_expanded: Bool,
+    output_expanded: Bool,
   )
+}
+
+/// Who an entry in the history is from.
+pub type Role {
+  Repl
+  User
+  Assistant
+  Tool
 }
 
 /// An expression edited structurally, with the earlier expressions that were
@@ -74,12 +88,18 @@ pub type Model {
     references: List(#(tree.Reference, binding.Poly)),
     loading: List(tree.Reference),
     clipboard: String,
+    overlay: Bool,
+    agent: Option(Agent),
+    calls: List(#(tool.Call, Int)),
+    turn: Int,
   )
 }
 
 /// Something a click on the screen does.
 pub type Click {
   ToggleEffects(Int)
+  ToggleCode(Int)
+  ToggleOutput(Int)
   Focus(List(Int))
 }
 
@@ -101,9 +121,16 @@ pub type Command {
   Copy(String)
   /// Find the type of a referenced module.
   Load(tree.Reference)
+  /// Send the person's message to the agent, its reply streaming into the entry.
+  Ask(id: Int, text: String)
+  Generate(id: Int)
+  Call(id: Int, call: tool.Call, index: Int)
+  /// Save the trajectory of the turn that started with the entry.
+  Save(id: Int)
+  Export(id: Int, path: String)
 }
 
-pub fn new(directory) {
+pub fn new(directory, overlay) {
   Model(
     shell: None,
     busy: True,
@@ -122,6 +149,10 @@ pub fn new(directory) {
     references: [],
     loading: [],
     clipboard: "",
+    overlay:,
+    agent: None,
+    calls: [],
+    turn: 0,
   )
 }
 
@@ -146,6 +177,13 @@ pub fn key(model: Model, key: String) -> #(Model, List(Command)) {
     "ctrl+e", _ ->
       case list.find(list.reverse(model.entries), has_effects) {
         Ok(entry) -> click(model, ToggleEffects(entry.id))
+        Error(Nil) -> #(model, [])
+      }
+    "ctrl+o", _ ->
+      case
+        list.find(list.reverse(model.entries), fn(entry) { entry.role == Tool })
+      {
+        Ok(entry) -> click(model, ToggleCode(entry.id))
         Error(Nil) -> #(model, [])
       }
     "pageup", _ -> #(model, [Scroll(-12)])
@@ -241,6 +279,18 @@ pub fn click(model: Model, click: Click) -> #(Model, List(Command)) {
       }
       #(model, [Reveal(anchor <> int.to_string(id))])
     }
+    ToggleCode(id) -> #(
+      change(model, id, fn(entry) {
+        Entry(..entry, code_expanded: !entry.code_expanded)
+      }),
+      [Reveal("code-" <> int.to_string(id))],
+    )
+    ToggleOutput(id) -> #(
+      change(model, id, fn(entry) {
+        Entry(..entry, output_expanded: !entry.output_expanded)
+      }),
+      [Reveal("code-" <> int.to_string(id))],
+    )
     Focus(path) ->
       case model.structure {
         Some(structure) ->
@@ -271,6 +321,7 @@ fn submit(model: Model) {
         "" -> #(model, [])
         "/exit" -> #(model, [Quit])
         _ if model.busy -> #(model, [])
+        _ if model.overlay -> ask(Model(..model, editor: editor.new()), source)
         _ -> run(Model(..model, editor: editor.new()), source, Text(source))
       }
   }
@@ -280,37 +331,149 @@ fn submit(model: Model) {
 fn run(model: Model, source, code) {
   case model.shell, model.busy {
     Some(_), False -> {
-      let id = model.sequence + 1
-      let entry =
-        Entry(
-          id:,
-          source:,
-          output: "",
-          results: [],
-          performed: [],
-          fetches: [],
-          duration: None,
-          expanded: False,
-          busy: True,
-          structural: case code {
-            Text(_) -> False
-            Ir(_) -> True
-          },
-        )
-      #(
-        Model(
-          ..model,
-          busy: True,
-          entries: list.append(model.entries, [entry]),
-          choices: [],
-          sequence: id,
-          status: "Running…",
-        ),
-        [FollowTail, Evaluate(id, code)],
-      )
+      let structural = case code {
+        Text(_) -> False
+        Ir(_) -> True
+      }
+      let #(model, id) = append(model, source, Repl)
+      let model = change(model, id, fn(entry) { Entry(..entry, structural:) })
+      #(Model(..model, busy: True, choices: [], status: "Running…"), [
+        FollowTail,
+        Evaluate(id, code),
+      ])
     }
     _, _ -> #(model, [])
   }
+}
+
+/// Add a busy entry to the history.
+fn append(model: Model, source, role) {
+  let id = model.sequence + 1
+  let entry =
+    Entry(
+      id:,
+      source:,
+      output: "",
+      results: [],
+      performed: [],
+      fetches: [],
+      duration: None,
+      expanded: False,
+      busy: True,
+      structural: False,
+      role:,
+      name: "",
+      code_expanded: False,
+      output_expanded: False,
+    )
+  #(
+    Model(..model, entries: list.append(model.entries, [entry]), sequence: id),
+    id,
+  )
+}
+
+// Overlay
+
+pub fn agent_started(model: Model, agent) {
+  Model(..model, agent: Some(agent), busy: False, status: "Ready")
+}
+
+/// A message for the agent starts a turn: the reply streams into a new entry,
+/// then each tool it calls runs in turn until it replies without calls.
+fn ask(model: Model, text) {
+  case model.agent {
+    None -> #(model, [])
+    Some(_) -> {
+      let #(model, turn) = append(model, text, User)
+      let model = change(model, turn, fn(entry) { Entry(..entry, busy: False) })
+      let model =
+        Model(..model, busy: True, turn:, choices: [], status: "Running…")
+      case text {
+        "/export" -> #(model, [FollowTail, Export(turn, "")])
+        "/export " <> path -> #(model, [
+          FollowTail,
+          Export(turn, string.trim(path)),
+        ])
+        _ -> {
+          let #(model, id) = append(model, "", Assistant)
+          #(model, [FollowTail, Ask(id, text)])
+        }
+      }
+    }
+  }
+}
+
+/// The agent finished replying in the entry.
+pub fn generated(model: Model, id, result, agent) {
+  let model = Model(..model, agent: Some(agent))
+  let model = case result {
+    Error(reason) ->
+      change(model, id, fn(entry) {
+        Entry(..entry, results: [Error(reason)], busy: False)
+      })
+    Ok(_) -> change(model, id, fn(entry) { Entry(..entry, busy: False) })
+  }
+  // A reply that only calls tools has no text to show.
+  let model = case find(model, id) {
+    Ok(Entry(output: "", results: [], ..)) ->
+      Model(
+        ..model,
+        entries: list.filter(model.entries, fn(entry) { entry.id != id }),
+      )
+    _ -> model
+  }
+  case result {
+    Ok([_, ..] as calls) ->
+      next_call(
+        Model(
+          ..model,
+          calls: list.index_map(calls, fn(call, index) { #(call, index) }),
+        ),
+      )
+    _ -> #(model, [Save(model.turn)])
+  }
+}
+
+fn next_call(model: Model) {
+  case model.calls {
+    [] -> {
+      let #(model, id) = append(model, "", Assistant)
+      #(model, [Generate(id)])
+    }
+    [#(call, index), ..calls] -> {
+      let #(model, id) = append(model, agent.code(call), Tool)
+      let model =
+        change(model, id, fn(entry) { Entry(..entry, name: call.function.name) })
+      #(Model(..model, calls:), [Call(id, call, index)])
+    }
+  }
+}
+
+/// A tool call finished; the next one runs, or the agent replies again.
+pub fn called(model: Model, id, result, performed, agent, duration) {
+  change(model, id, fn(entry) {
+    Entry(
+      ..entry,
+      results: [result],
+      performed:,
+      duration: Some(duration),
+      busy: False,
+    )
+  })
+  |> fn(model) { Model(..model, agent: Some(agent)) }
+  |> next_call
+}
+
+/// The turn's trajectory was saved, or could not be.
+pub fn saved(model: Model, result) {
+  let line = case result {
+    Ok(path) -> "trace saved to " <> path <> "\n"
+    Error(reason) -> "Unable to save trace: " <> reason <> "\n"
+  }
+  change(model, model.turn, fn(entry) {
+    Entry(..entry, output: entry.output <> line)
+  })
+  |> fn(model) { Model(..model, busy: False, status: "Ready") }
 }
 
 // Structural editing
@@ -318,7 +481,11 @@ fn run(model: Model, source, code) {
 /// F2 moves between text and structure. Text that was not changed since it
 /// became a structure returns to that structure.
 fn switch(model: Model) {
-  case model.busy || model.prompt != None, model.structural, model.shell {
+  case
+    model.overlay || model.busy || model.prompt != None,
+    model.structural,
+    model.shell
+  {
     True, _, _ | _, _, None -> #(model, [])
     False, True, _ -> {
       let imported = case model.structure {
@@ -505,6 +672,8 @@ pub fn received(model: Model, id, event) {
   change(model, id, fn(entry) {
     case event {
       shell.Output(text, _) -> Entry(..entry, output: entry.output <> text)
+      // An assistant's requests are to its model, not the hub.
+      shell.Fetched(_) if entry.role == Assistant -> entry
       shell.Fetched(url) ->
         Entry(..entry, fetches: list.append(entry.fetches, [url]))
     }

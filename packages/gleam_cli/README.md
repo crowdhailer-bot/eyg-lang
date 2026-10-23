@@ -86,6 +86,11 @@ The structure is evaluated as IR, so binary values and vacant nodes survive,
 clicking a node focuses it, y copies the selected expression to the system
 clipboard and up and down return to structures evaluated earlier.
 
+`eyg tui overlay <config>` runs an Overlay session in the same screen. Assistant
+text streams in as it is generated; each tool call shows its code behind Ctrl+O,
+its result with long output collapsed, and the effects it performed with the
+policy's decision on each. The trajectory is saved after every turn.
+
 
 ### Evaluate an expression
 

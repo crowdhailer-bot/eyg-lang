@@ -11,7 +11,7 @@ import gleam/dict
 import gleam/http/request
 import gleam/javascript/promise.{type Promise}
 import gleam/list
-import gleam/option.{None}
+import gleam/option.{type Option, None}
 import gleam/result
 import gleam/string
 import gleam/uri
@@ -29,9 +29,14 @@ pub type Shell {
   )
 }
 
-/// An EYG effect performed by an evaluation, as text.
+/// An EYG effect performed by an evaluation, as text, and what a policy decided.
 pub type Performed {
-  Performed(label: String, input: String, output: String)
+  Performed(
+    label: String,
+    input: String,
+    output: String,
+    decision: Option(String),
+  )
 }
 
 pub type Evaluated {
@@ -78,6 +83,7 @@ fn evaluated(result) {
         label,
         simple_debug.inspect(input),
         simple_debug.inspect(output),
+        None,
       )
     })
   Evaluated(

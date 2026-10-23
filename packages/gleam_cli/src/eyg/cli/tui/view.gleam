@@ -7,6 +7,7 @@ import etui/span
 import etui/style
 import etui/terminal
 import etui/text
+import eyg/cli/tui/agent
 import eyg/cli/tui/editor.{type Editor}
 import eyg/cli/tui/highlight as h
 import eyg/cli/tui/model.{type Entry, type Model}
@@ -41,6 +42,10 @@ pub fn empty() {
   Drawn([], [], geometry.rect_new(0, 0, 0, 0), 0, 0)
 }
 
+const overlay_help =
+  "Enter send · Alt+Enter newline · Ctrl+E effects · Ctrl+O code · PgUp/PgDn scroll · F1 close help
+/export <file> chat · /exit · Ctrl+C quit"
+
 const help =
   "Enter run · Alt+Enter newline · Tab complete · Ctrl+E effects · PgUp/PgDn scroll · F1 close help
 /scope bindings · /type expression · /help · /exit · Ctrl+C quit
@@ -59,9 +64,10 @@ pub fn draw(
   let buf = buffer.set_style(frame.buffer, area, background(h.bg))
   let inner = pad_x(area, 2)
   let width = inner.size.width
-  let help = case model.help {
-    True -> wrap(help, width - 4)
-    False -> []
+  let help = case model.help, model.overlay {
+    True, True -> wrap(overlay_help, width - 4)
+    True, False -> wrap(help, width - 4)
+    False, _ -> []
   }
   let choices = choices(model)
   let structure = case model.structural, model.structure {
@@ -101,7 +107,14 @@ pub fn draw(
       Length(2),
     ])
   let heading = row(header, 1)
-  let title = "eyg / tui"
+  let #(title, context) = case model.overlay, model.agent {
+    True, Some(running) -> #(
+      "eyg / overlay",
+      model.directory <> "  ·  " <> agent.model_name(running),
+    )
+    True, None -> #("eyg / overlay", model.directory)
+    False, _ -> #("eyg / tui", model.directory)
+  }
   let after = text.cell_width(title) + 2
   let buf =
     buf
@@ -113,7 +126,7 @@ pub fn draw(
         int.max(0, heading.size.width - after),
         1,
       ),
-      model.directory,
+      context,
       h.muted,
     )
   let #(buf, drawn) = draw_history(buf, history, model, top)
@@ -140,9 +153,10 @@ pub fn draw(
     }
     False -> #(buf, None)
   }
-  let mode = case model.structural {
-    True -> "f2 text"
-    False -> "f2 structure"
+  let mode = case model.overlay, model.structural {
+    True, _ -> "ctrl+o code"
+    False, True -> "f2 text"
+    False, False -> "f2 structure"
   }
   let buf =
     buf
@@ -164,8 +178,17 @@ fn draw_history(buf, area: Rect, model: Model, top) {
     [] ->
       [
         #("Eat Your Greens", h.text),
-        #("An expression. A useful result.", h.muted),
-        #("Try @standard.integer.add(20, 22)", h.muted),
+        case model.overlay {
+          True -> #("An agent with tools you can inspect.", h.muted)
+          False -> #("An expression. A useful result.", h.muted)
+        },
+        case model.overlay {
+          True -> #(
+            "Ask a question or describe a task to get started.",
+            h.muted,
+          )
+          False -> #("Try @standard.integer.add(20, 22)", h.muted)
+        },
       ]
       |> list.map(fn(intro) { wrapped(intro.0, intro.1, width - 4, False) })
       |> list.intersperse([blank(False)])
@@ -211,16 +234,61 @@ fn draw_history(buf, area: Rect, model: Model, top) {
 
 fn entry(entry: Entry, width) -> List(Row) {
   let id = int.to_string(entry.id)
-  let source = [blank(True), ..code_rows(entry.source, width - 4)]
-  let output = case string.trim_end(entry.output) {
-    "" -> []
-    output -> [wrapped(output, h.muted, width - 4, False)]
+  let source = case entry.role, entry.code_expanded {
+    model.Assistant, _ -> []
+    model.User, _ -> wrapped(entry.source, h.text, width - 4, True)
+    model.Repl, _ -> code_rows(entry.source, width - 4)
+    model.Tool, expanded -> [
+      Row(
+        ..text_row(tool_title(entry), h.blue, 2, True),
+        click: Some(model.ToggleCode(entry.id)),
+        anchor: Some("code-" <> id),
+      ),
+      ..case expanded {
+        True -> code_rows(entry.source, width - 4)
+        False -> []
+      }
+    ]
+  }
+  let source = case source {
+    [] -> []
+    rows -> list.flatten([[blank(True)], rows, [blank(True), blank(False)]])
+  }
+  // A tool reports its output with its result.
+  let output = case entry.role, string.trim_end(entry.output) {
+    _, "" -> []
+    model.Tool, _ if entry.results != [] -> []
+    model.Assistant, text -> [wrapped(text, h.text, width - 4, False)]
+    _, text -> [wrapped(text, h.muted, width - 4, False)]
   }
   let results =
     list.map(entry.results, fn(result) {
-      case result {
-        Ok(text) -> wrapped(text, h.accent, width - 4, False)
-        Error(text) -> wrapped(text, h.red, width - 4, False)
+      let #(text, color) = case result {
+        Ok(text) -> #(text, h.accent)
+        Error(text) -> #(text, h.red)
+      }
+      let lines = string.split(text, "\n")
+      let long = entry.role == model.Tool && list.length(lines) > 8
+      case long, entry.output_expanded {
+        False, _ -> wrapped(text, color, width - 4, False)
+        True, True ->
+          list.append(wrapped(text, color, width - 4, False), [
+            Row(
+              ..text_row("▾ Collapse output", h.muted, 2, False),
+              click: Some(model.ToggleOutput(entry.id)),
+            ),
+          ])
+        True, False -> {
+          let shown = list.take(lines, 8) |> string.join("\n")
+          let toggle =
+            "▸ Show all " <> int.to_string(list.length(lines)) <> " lines"
+          list.append(wrapped(shown, color, width - 4, False), [
+            Row(
+              ..text_row(toggle, h.muted, 2, False),
+              click: Some(model.ToggleOutput(entry.id)),
+            ),
+          ])
+        }
       }
     })
   let running = case entry.busy {
@@ -254,7 +322,17 @@ fn entry(entry: Entry, width) -> List(Row) {
               width - 6,
               4,
             ),
-            wrapped_at("↳ " <> effect.output, h.muted, width - 6, 4),
+            wrapped_at(
+              "↳ "
+                <> case effect.decision {
+                Some(decision) -> decision <> " · "
+                None -> ""
+              }
+                <> effect.output,
+              h.muted,
+              width - 6,
+              4,
+            ),
           )
         }),
       ])
@@ -266,7 +344,21 @@ fn entry(entry: Entry, width) -> List(Row) {
     |> list.flatten
     |> list.intersperse([blank(False)])
     |> list.flatten
-  list.flatten([source, [blank(True), blank(False)], body, [blank(False)]])
+  list.flatten([source, body, [blank(False)]])
+}
+
+fn tool_title(entry: Entry) {
+  case entry.code_expanded {
+    True -> "▾ "
+    False -> "▸ "
+  }
+  <> entry.name
+  <> "  "
+  <> case entry.duration {
+    None -> "running"
+    Some(duration) -> int.to_string(float.round(duration)) <> " ms"
+  }
+  <> " · code"
 }
 
 fn effects_summary(entry: Entry) {
@@ -520,9 +612,10 @@ fn draw_input(buf, area: Rect, model: Model, label) {
     None -> #(buf, y)
   }
   let height = editor_height(model.editor)
-  let placeholder = case model.busy, model.prompt {
-    True, None -> "You can draft while this runs…"
-    _, _ -> "Write EYG…"
+  let placeholder = case model.busy, model.prompt, model.overlay {
+    True, None, _ -> "You can draft while this runs…"
+    _, None, True -> "Ask anything…"
+    _, _, _ -> "Write EYG…"
   }
   let #(buf, cursor) =
     draw_editor(
@@ -530,11 +623,12 @@ fn draw_input(buf, area: Rect, model: Model, label) {
       geometry.rect_new(x, y, width, height),
       model.editor,
       placeholder,
+      !model.overlay,
     )
   #(buf, cursor)
 }
 
-fn draw_editor(buf, area: Rect, edit: Editor, placeholder) {
+fn draw_editor(buf, area: Rect, edit: Editor, placeholder, highlight) {
   let width = int.max(1, area.size.width)
   let #(line_index, column) = editor.position(edit)
   let source_lines = string.split(edit.text, "\n")
@@ -555,7 +649,11 @@ fn draw_editor(buf, area: Rect, edit: Editor, placeholder) {
   let rows = case edit.text {
     "" -> [plain(placeholder, h.muted)]
     source ->
-      h.lines(source)
+      case highlight {
+        True -> h.lines(source)
+        False ->
+          string.split(source, "\n") |> list.map(fn(line) { [#(line, h.text)] })
+      }
       |> list.flat_map(fn(parts) {
         list.map(parts, fn(part) {
           span.span_styled(part.0, case edit.selected {

@@ -1410,7 +1410,6 @@ pub fn call_recorded(
   state: execute.State,
   trace: Trace,
   index: Int,
-  observe: fn(String, String, String, String) -> Nil,
 ) {
   let tool.Call(function: tool.FunctionCall(name:, arguments:), ..) = call
   let id = call_id("g" <> int.to_string(trace.generations), index)
@@ -1424,23 +1423,25 @@ pub fn call_recorded(
         id,
       ))
       let Executed(result:, state:, output:, run:, recorder:) = executed
-      list.each(run.journal, fn(entry) {
-        let store = recorder.store(recorder)
-        let decision = case entry.answer {
-          journal.Performed -> "performed"
-          journal.Gated -> "passed"
-          journal.Altered(_) -> "altered"
-          journal.Mocked -> "mocked"
-          journal.Cached -> "cached"
-          journal.Simulated -> "simulated"
-        }
-        observe(
-          entry.label,
-          recorded.summary(entry.lift, store, 160),
-          decision,
-          recorded.summary(entry.reply, store, 160),
-        )
-      })
+      // Each effect of the run, its input, the policy decision and its reply.
+      let store = recorder.store(recorder)
+      let effects =
+        list.map(run.journal, fn(entry) {
+          let decision = case entry.answer {
+            journal.Performed -> "performed"
+            journal.Gated -> "passed"
+            journal.Altered(_) -> "altered"
+            journal.Mocked -> "mocked"
+            journal.Cached -> "cached"
+            journal.Simulated -> "simulated"
+          }
+          #(
+            entry.label,
+            recorded.summary(entry.lift, store, 160),
+            decision,
+            recorded.summary(entry.reply, store, 160),
+          )
+        })
       let returned = case result {
         Ok(Some(value)) ->
           Ok(
@@ -1461,11 +1462,12 @@ pub fn call_recorded(
           call_id: id,
           text: chat.text(result_to_message(call.id, returned)),
         ))
-      #(returned, state, trace)
+      #(returned, effects, state, trace)
     }
     Error(reason) ->
       system.Done(#(
         Error(agent.describe_failure(reason, name, arguments)),
+        [],
         state,
         trace,
       ))

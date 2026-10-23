@@ -43,7 +43,7 @@ pub fn evaluation_reports_output_results_and_effects_test() {
   let assert shell.Finished(evaluated) = progress
   assert evaluated.results == [Ok("{}")]
   assert evaluated.performed
-    == [shell.Performed("StandardOut", "\"hello\"", "{}")]
+    == [shell.Performed("StandardOut", "\"hello\"", "{}", None)]
 }
 
 pub fn standard_input_asks_and_resumes_the_evaluation_test() {
@@ -76,7 +76,7 @@ pub fn a_prompt_keeps_the_draft_and_answers_only_the_reply_test() {
     string.to_graphemes(text)
     |> list.fold(model, fn(model, key) { model.key(model, key).0 })
   }
-  let ready = model.started(model.new("."), started())
+  let ready = model.started(model.new(".", False), started())
   let drafted = typed(ready, "next")
   let asked = model.asked(drafted, "Name?")
   assert asked.prompt == Some(#("Name?", drafted.editor))
@@ -130,7 +130,7 @@ pub fn file_completion_replaces_only_the_import_path_test() {
 }
 
 pub fn tab_accepts_the_chosen_completion_test() {
-  let model = model.started(model.new("."), started())
+  let model = model.started(model.new(".", False), started())
   let model =
     model.Model(
       ..model,
@@ -183,7 +183,7 @@ fn structure_text(model: model.Model) {
 }
 
 fn ready() {
-  #(model.started(model.new("."), started()), [])
+  #(model.started(model.new(".", False), started()), [])
 }
 
 pub fn structural_edits_undo_and_return_to_earlier_structures_test() {
